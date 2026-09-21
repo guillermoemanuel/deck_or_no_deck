@@ -1,93 +1,121 @@
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
-import { DeckCelebrationEffect } from './DeckCelebrationEffect';
+import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
 
 /**
- * Estrategia del mazo OVNI: "abducción" — flash inicial, la pantalla se
- * oscurece, y un rayo grueso blanco/celeste desciende desde arriba hacia
- * el centro de la pantalla (el clásico "haz de tractor"), con unas motas
- * de luz ascendiendo dentro del haz para reforzar la sensación de algo
- * siendo levantado hacia la nave.
- *
- * Vive en su propio archivo (GRASP Polymorphism / Strategy) para que
- * pueda crecer o afinarse sin tocar GameScene.ts ni las estrategias de
- * otros mazos.
+ * Estrategia del mazo OVNI: "abducción" —
+ * 1. Flash inicial y oscurecimiento de fondo.
+ * 2. El rayo abductor final (haz exterior celeste + núcleo brillante) enfoca e ilumina
+ *    la columna exacta donde se encuentra la carta de mayor valor (25,000).
+ * 3. En la base del rayo, la carta queda envuelta en un óvalo de luz tractora con
+ *    partículas y anillos de energía ascendiendo hacia la nave.
  */
 export class OvniAbductionEffect implements DeckCelebrationEffect {
-  play(scene: Phaser.Scene, _card: Card): void {
+  play(scene: Phaser.Scene, card: Card): void {
     const { width, height } = scene.cameras.main;
-    const centerX = width / 2;
     const container = scene.add.container(0, 0);
 
-    // Flash inicial, como el instante del "rapto".
-    const flash = scene.add.rectangle(centerX, height / 2, width, height, 0xffffff, 0.7);
+    // Posición global de la carta objetivo de mayor valor (columna X y altura Y)
+    const target = getCelebrationTargetPosition(scene, card);
+
+    // Flash inicial, como el destello de teleportación / inicio del rapto
+    const flash = scene.add.rectangle(target.x, height / 2, width, height, 0xffffff, 0.7);
     container.add(flash);
     scene.tweens.add({ targets: flash, alpha: 0, duration: 300, ease: 'Cubic.easeOut' });
 
-    // Oscurecimiento: entra rápido y se mantiene; se desvanece al final
-    // junto con todo lo demás.
-    const darken = scene.add.rectangle(centerX, height / 2, width, height, 0x000000, 0).setAlpha(0);
+    // Oscurecimiento de la pantalla
+    const darken = scene.add.rectangle(width / 2, height / 2, width, height, 0x010810, 0).setAlpha(0);
     container.add(darken);
-    scene.tweens.add({ targets: darken, alpha: 0.7, duration: 300, delay: 100, ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: darken, alpha: 0.72, duration: 300, delay: 100, ease: 'Cubic.easeOut' });
 
-    // Rayo exterior (celeste, más ancho, de glow) + rayo interior (blanco,
-    // más angosto, núcleo brillante) — el clásico "haz de tractor" ovni.
-    // Ambos se dibujan ANCLADOS ARRIBA y se revelan escalando `scaleY` de
-    // 0 a 1, para que el haz literalmente "descienda" desde arriba hacia
-    // abajo, en vez de aparecer entero de golpe.
-    const outerBeam = this.createBeam(scene, centerX, width * 0.22, 0x8fe3ff, 0.35);
-    const innerBeam = this.createBeam(scene, centerX, width * 0.09, 0xffffff, 0.55);
+    // Rayo tractor enfocado exactamente en la columna de la carta de mayor valor
+    const outerBeam = this.createBeam(scene, target.x, 170, 0x8fe3ff, 0.4);
+    const innerBeam = this.createBeam(scene, target.x, 80, 0xffffff, 0.65);
     container.add([outerBeam, innerBeam]);
 
     [outerBeam, innerBeam].forEach((beam, i) => {
       scene.tweens.add({
         targets: beam,
         scaleY: 1,
-        duration: 750,
+        duration: 680,
         delay: 150 + i * 80,
         ease: 'Cubic.easeIn'
       });
     });
 
-    // Pulso sutil de intensidad mientras el haz está activo, para que se
-    // sienta como energía viva y no una imagen estática.
+    // Pulso de energía viva en el haz
     scene.tweens.add({
       targets: [outerBeam, innerBeam],
       alpha: { from: 0.7, to: 1 },
-      duration: 260,
-      delay: 900,
+      duration: 240,
+      delay: 850,
       yoyo: true,
-      repeat: 2,
+      repeat: 3,
       ease: 'Sine.easeInOut'
     });
 
-    // Motas de luz ascendiendo dentro del haz, como si algo fuera
-    // "levantado" hacia la nave.
-    for (let i = 0; i < 8; i++) {
+    // Halo tractor / elipse de luz iluminando directamente sobre la carta
+    scene.time.delayedCall(450, () => {
+      const puddle = scene.add
+        .ellipse(target.x, target.y + 10, 130, 48, 0x90f0ff, 0.65)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setScale(0);
+      container.add(puddle);
+
+      scene.tweens.add({
+        targets: puddle,
+        scale: 1,
+        duration: 350,
+        ease: 'Back.easeOut'
+      });
+
+      // Anillos de abducción que se elevan desde la carta
+      for (let r = 0; r < 3; r++) {
+        const ring = scene.add
+          .ellipse(target.x, target.y + 10, 110, 36, 0x000000, 0)
+          .setStrokeStyle(2, 0xffffff, 0.85)
+          .setBlendMode(Phaser.BlendModes.ADD);
+        container.add(ring);
+
+        scene.tweens.add({
+          targets: ring,
+          y: -50,
+          scaleX: 0.5,
+          scaleY: 0.5,
+          alpha: 0,
+          duration: 1100,
+          delay: 700 + r * 280,
+          ease: 'Cubic.easeIn',
+          onComplete: () => ring.destroy()
+        });
+      }
+    });
+
+    // Motas de luz y energía ascendiendo desde la carta hacia la nave
+    for (let i = 0; i < 12; i++) {
       const speck = scene.add.circle(
-        centerX + (Math.random() - 0.5) * width * 0.16,
-        height * 0.85,
-        2 + Math.random() * 2,
-        0xffffff,
-        0.9
+        target.x + (Math.random() - 0.5) * 80,
+        target.y + 20 + Math.random() * 40,
+        2 + Math.random() * 2.5,
+        0xe8faff,
+        0.95
       );
+      speck.setBlendMode(Phaser.BlendModes.ADD);
       container.add(speck);
 
       scene.tweens.add({
         targets: speck,
-        y: -20,
+        y: -30,
         alpha: 0,
-        duration: 1100 + Math.random() * 500,
+        duration: 1000 + Math.random() * 450,
         delay: 500 + i * 90,
-        ease: 'Cubic.easeIn'
+        ease: 'Cubic.easeIn',
+        onComplete: () => speck.destroy()
       });
     }
 
-    // Restauración suave: todo se desvanece junto y se destruye. Sin
-    // `setDepth()` explícito, mismo criterio que el resto de los efectos
-    // — ver el comentario correspondiente en SpotlightSweepEffect (evita
-    // taparle el modal a una oferta del banquero que coincida).
-    scene.time.delayedCall(2500, () => {
+    // Restauración y limpieza
+    scene.time.delayedCall(2700, () => {
       scene.tweens.add({
         targets: container,
         alpha: 0,
@@ -99,14 +127,11 @@ export class OvniAbductionEffect implements DeckCelebrationEffect {
   }
 
   /**
-   * Dibuja un haz vertical anclado en la parte superior de la pantalla
-   * (el rectángulo se dibuja desde y=0 hacia abajo, en coordenadas
-   * locales), listo para revelarse animando su `scaleY` de 0 a 1 — así
-   * el haz "desciende" en vez de aparecer entero de una.
+   * Dibuja un haz vertical centrado en la columna `targetX`, anclado arriba (y=0)
    */
   private createBeam(
     scene: Phaser.Scene,
-    centerX: number,
+    targetX: number,
     beamWidth: number,
     color: number,
     alpha: number
@@ -115,7 +140,7 @@ export class OvniAbductionEffect implements DeckCelebrationEffect {
     const beam = scene.add.graphics().setBlendMode(Phaser.BlendModes.ADD);
     beam.fillStyle(color, alpha);
     beam.fillRect(-beamWidth / 2, 0, beamWidth, height);
-    beam.setPosition(centerX, 0);
+    beam.setPosition(targetX, 0);
     beam.setScale(1, 0);
     return beam;
   }

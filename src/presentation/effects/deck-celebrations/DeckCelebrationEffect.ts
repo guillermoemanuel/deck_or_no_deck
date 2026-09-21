@@ -57,5 +57,81 @@ export interface CardPositionSource {
  * segura si es así.
  */
 export function hasCardPositionSource(scene: Phaser.Scene): scene is Phaser.Scene & CardPositionSource {
-  return typeof (scene as Partial<CardPositionSource>).getCardScreenPosition === 'function';
+  return Boolean(scene && typeof (scene as Partial<CardPositionSource>).getCardScreenPosition === 'function');
 }
+
+/**
+ * Calcula las coordenadas globales reales en el canvas de Phaser 3 para cualquier GameObject.
+ * Usa prioritariamente getWorldTransformMatrix() (matriz de transformación real en el mundo/canvas)
+ * y como fallback getBounds() (bounding box global calculado) o las coordenadas locales x/y.
+ */
+export function getGameObjectGlobalPosition(
+  gameObject: Phaser.GameObjects.GameObject
+): { x: number; y: number } {
+  const transformObj = gameObject as unknown as Phaser.GameObjects.Components.Transform;
+  if (typeof transformObj.getWorldTransformMatrix === 'function') {
+    const matrix = transformObj.getWorldTransformMatrix();
+    if (
+      typeof matrix.tx === 'number' &&
+      typeof matrix.ty === 'number' &&
+      !Number.isNaN(matrix.tx) &&
+      !Number.isNaN(matrix.ty)
+    ) {
+      return { x: matrix.tx, y: matrix.ty };
+    }
+  }
+
+  const boundsObj = gameObject as unknown as Phaser.GameObjects.Components.GetBounds;
+  if (typeof boundsObj.getBounds === 'function') {
+    const bounds = boundsObj.getBounds();
+    if (
+      typeof bounds.centerX === 'number' &&
+      typeof bounds.centerY === 'number' &&
+      !Number.isNaN(bounds.centerX) &&
+      !Number.isNaN(bounds.centerY)
+    ) {
+      return { x: bounds.centerX, y: bounds.centerY };
+    }
+  }
+
+  const pos = gameObject as unknown as { x?: number; y?: number };
+  return { x: pos.x ?? 0, y: pos.y ?? 0 };
+}
+
+/**
+ * Resuelve la posición en pantalla de la carta objetivo de mayor valor (25,000 puntos).
+ * - Si la escena implementa CardPositionSource, la consulta.
+ * - Si la partida terminó y ResultScene está activa (victoria conservando la carta secreta),
+ *   se redirige a la posición de la Carta Secreta en la pantalla de resultado/victoria.
+ * - Si no se halla, devuelve como fallback seguro el centro de la pantalla.
+ */
+export function getCelebrationTargetPosition(
+  scene: Phaser.Scene,
+  card: Card
+): { x: number; y: number } {
+  // 1. Si ResultScene está activa en el scene manager y la carta es secreta o la partida terminó:
+  if (scene.scene) {
+    try {
+      if (scene.scene.isActive('ResultScene')) {
+        const resultScene = scene.scene.get('ResultScene');
+        if (resultScene && hasCardPositionSource(resultScene)) {
+          const resultPos = resultScene.getCardScreenPosition(card.id);
+          if (resultPos) return resultPos;
+        }
+      }
+    } catch {
+      // Ignorar si el scene manager no está listo o en tests unitarios
+    }
+  }
+
+  // 2. Consultar la escena actual si implementa CardPositionSource
+  if (hasCardPositionSource(scene)) {
+    const pos = scene.getCardScreenPosition(card.id);
+    if (pos) return pos;
+  }
+
+  // 3. Fallback seguro: centro de la pantalla
+  const width = scene.cameras?.main?.width ?? 1280;
+  const height = scene.cameras?.main?.height ?? 720;
+  return { x: width / 2, y: height / 2 };
+}

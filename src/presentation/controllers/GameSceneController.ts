@@ -586,4 +586,23 @@ export class GameSceneController {
   private lockAllCards(locked: boolean): void {
     this.cardViews.forEach(view => view.setLocked(locked));
   }
+
+  getCardView(cardId: string): CardView | undefined {
+    return this.cardViews.get(cardId);
+  }
+
+  getSecretCardView(): CardView {
+    return this.secretCardView;
+  }
+
+  hasBoardCard(cardId: string): boolean {
+    return this.cardViews.has(cardId);
+  }
+
+  isSecretCard(cardId: string): boolean {
+    return (
+      this.secretCardView.getCardId() === cardId ||
+      this.session.getSecretCard().id === cardId
+    );
+  }
 }

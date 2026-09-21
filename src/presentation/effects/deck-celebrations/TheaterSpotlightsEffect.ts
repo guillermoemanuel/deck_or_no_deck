@@ -1,63 +1,57 @@
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
-import { DeckCelebrationEffect, hasCardPositionSource } from './DeckCelebrationEffect';
+import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
 
 /**
  * Estrategia del mazo Basic: la pantalla baja de tono, como una sala de
  * teatro apagando las luces, y dos grandes reflectores blanco-amarillentos
- * "barren" la pantalla con movimientos aleatorios hasta converger sobre
- * la carta que disparó la celebración — sea que esté en el tablero o sea
- * la carta secreta del pedestal.
- *
- * Necesita la posición REAL en pantalla de esa carta (no una posición
- * fija), así que resuelve `card.id` vía `hasCardPositionSource` — ver
- * ese type guard en DeckCelebrationEffect.ts para el porqué no hace
- * falta ningún cast a `any` ni un import circular a GameScene.
- *
- * Vive en su propio archivo (GRASP Polymorphism / Strategy) para que
- * pueda crecer o afinarse sin tocar GameScene.ts ni las estrategias de
- * otros mazos.
+ * barren la pantalla hasta terminar posicionados y enfocando directamente
+ * la carta de mayor valor (25,000) — sea que esté en el tablero o sea
+ * la carta secreta del pedestal / victoria.
  */
 export class TheaterSpotlightsEffect implements DeckCelebrationEffect {
   play(scene: Phaser.Scene, card: Card): void {
     const { width, height } = scene.cameras.main;
     const container = scene.add.container(0, 0);
 
-    // Oscurecimiento: apaga la escena para que los reflectores resalten,
-    // como las luces de una sala bajando antes del número principal.
+    // Oscurecimiento de la escena
     const darken = scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0).setAlpha(0);
     container.add(darken);
-    scene.tweens.add({ targets: darken, alpha: 0.62, duration: 350, ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: darken, alpha: 0.65, duration: 350, ease: 'Cubic.easeOut' });
 
-    // Posición real de la carta que disparó el festejo — sea del tablero
-    // o la secreta. Si por algún motivo no está disponible (defensivo),
-    // cae al centro de la pantalla como resultado seguro.
-    const target = (hasCardPositionSource(scene) ? scene.getCardScreenPosition(card.id) : null) ?? {
-      x: width / 2,
-      y: height / 2
-    };
+    // Posición exacta de la carta objetivo de 25k
+    const target = getCelebrationTargetPosition(scene, card);
 
-    const spotlightRadius = Math.min(width, height) * 0.51;
+    const spotlightRadius = Math.min(width, height) * 0.48;
     const spotlightA = this.createSpotlight(scene, spotlightRadius);
     const spotlightB = this.createSpotlight(scene, spotlightRadius);
     container.add([spotlightA, spotlightB]);
 
-    // Arrancan en esquinas opuestas, como si "peinaran" la sala buscando.
-    spotlightA.setPosition(width * 0.18, height * 0.22);
-    spotlightB.setPosition(width * 0.82, height * 0.78);
+    // Arrancan en esquinas opuestas peinando la escena
+    spotlightA.setPosition(width * 0.15, height * 0.2);
+    spotlightB.setPosition(width * 0.85, height * 0.8);
 
     let settledCount = 0;
     const onOneSettled = () => {
       settledCount++;
       if (settledCount === 2) {
-        // Ambos reflectores "encontraron" la carta — remate visual.
+        // Ambos reflectores enfocaron con precisión la carta — remate visual
         this.spawnFoundFlash(scene, container, target.x, target.y);
+
+        // Pulso conjunto de los reflectores enfocados sobre la carta
+        scene.tweens.add({
+          targets: [spotlightA, spotlightB],
+          scale: { from: 1, to: 1.06 },
+          alpha: { from: 0.85, to: 1 },
+          duration: 350,
+          yoyo: true,
+          repeat: 2,
+          ease: 'Sine.easeInOut'
+        });
       }
     };
 
-    // Cantidad de saltos aleatorios distinta para cada uno, así no se
-    // sienten sincronizados — cada reflector "busca" a su propio ritmo
-    // antes de converger.
+    // Convergen hacia la carta objetivo
     this.wanderThenSettle(scene, spotlightA, width, height, 4, target, onOneSettled);
     this.wanderThenSettle(scene, spotlightB, width, height, 5, target, onOneSettled);
 
@@ -160,5 +154,25 @@ export class TheaterSpotlightsEffect implements DeckCelebrationEffect {
       ease: 'Cubic.easeOut',
       onComplete: () => ring.destroy()
     });
+
+    // Destellos dorados teatrales sobre la carta iluminada
+    for (let i = 0; i < 10; i++) {
+      const angle = (i / 10) * Math.PI * 2;
+      const dist = 40 + Math.random() * 35;
+      const star = scene.add.circle(x, y, 2.5 + Math.random() * 2, 0xfff0b3, 0.95);
+      star.setBlendMode(Phaser.BlendModes.ADD);
+      container.add(star);
+
+      scene.tweens.add({
+        targets: star,
+        x: x + Math.cos(angle) * dist,
+        y: y + Math.sin(angle) * dist,
+        alpha: 0,
+        scale: 0.2,
+        duration: 400 + Math.random() * 250,
+        ease: 'Cubic.easeOut',
+        onComplete: () => star.destroy()
+      });
+    }
   }
 }

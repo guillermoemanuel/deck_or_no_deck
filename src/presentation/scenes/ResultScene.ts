@@ -6,6 +6,10 @@ import { ParticleManager } from '../components/ParticleManager';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
+import {
+  CardPositionSource,
+  getGameObjectGlobalPosition
+} from '../effects/deck-celebrations/DeckCelebrationEffect';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts — mismos valores hex, para que la pantalla final se
@@ -24,7 +28,7 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
  * Se superpone a GameScene con efectos visuales y soporte para Rewarded
  * Ads de CrazyGames.
  */
-export class ResultScene extends Phaser.Scene {
+export class ResultScene extends Phaser.Scene implements CardPositionSource {
   private multiplyUseCase: MultiplyRewardUseCase | null = null;
   private statusText!: Phaser.GameObjects.Text;
   private particleManager!: ParticleManager;
@@ -40,6 +44,18 @@ export class ResultScene extends Phaser.Scene {
 
   constructor() {
     super({ key: 'ResultScene' });
+  }
+
+  /**
+   * Implementación de CardPositionSource para la pantalla de victoria/resultado:
+   * Retorna la ubicación precisa de la Carta Secreta en el modal.
+   */
+  getCardScreenPosition(_cardId: string): { x: number; y: number } | null {
+    if (this.statusText && this.statusText.active) {
+      return getGameObjectGlobalPosition(this.statusText);
+    }
+    const { width, height } = this.cameras.main;
+    return { x: width / 2, y: height / 2 - 48 };
   }
 
   create(data: ResultSceneData): void {

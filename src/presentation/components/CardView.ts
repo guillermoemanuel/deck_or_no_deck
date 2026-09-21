@@ -146,6 +146,11 @@ export class CardView extends Phaser.GameObjects.Container {
     this.particleManager = pm;
   }
 
+  /** Obtiene el id de la carta asociada a esta vista. */
+  getCardId(): string {
+    return this.cardId;
+  }
+
   /** Expone si la carta ya fue revelada — usado para evitar reabrir/reintercambiar una carta ya resuelta. */
   isCardOpen(): boolean {
     return this.isRevealed;

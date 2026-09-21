@@ -1,46 +1,40 @@
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
-import { DeckCelebrationEffect } from './DeckCelebrationEffect';
+import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
 
 /**
- * Estrategia del mazo Glacier: la pantalla se congela de golpe (escarcha)
- * y se resquebraja desde el centro — una red de grietas que se expande
- * rápido, seguida de un estallido en fragmentos de hielo que salen
- * volando en todas direcciones, rotando y desvaneciéndose.
- *
- * Vive en su propio archivo (GRASP Polymorphism / Strategy) para que
- * pueda crecer o afinarse sin tocar GameScene.ts ni las estrategias de
- * otros mazos.
+ * Estrategia del mazo Glacier:
+ * 1. Congelación súbita de pantalla y red de grietas general con fragmentos de hielo dispersos.
+ * 2. Un segundo efecto localizado de hielo roto/grieta sobre la carta de mayor valor (25,000)
+ *    con una fractura cristalina concéntrica y fragmentos gélidos desprendiéndose de ella.
  */
 export class GlacierShatterEffect implements DeckCelebrationEffect {
-  play(scene: Phaser.Scene, _card: Card): void {
+  play(scene: Phaser.Scene, card: Card): void {
     const { width, height } = scene.cameras.main;
     const centerX = width / 2;
     const centerY = height / 2;
     const container = scene.add.container(0, 0);
 
-    // Flash inicial, el instante del "impacto" que origina la grieta.
+    // Posición global de la carta objetivo de 25k
+    const target = getCelebrationTargetPosition(scene, card);
+
+    // Flash inicial general
     const flash = scene.add.rectangle(centerX, centerY, width, height, 0xeaffff, 0.6);
     container.add(flash);
     scene.tweens.add({ targets: flash, alpha: 0, duration: 220, ease: 'Cubic.easeOut' });
 
-    // Escarcha: un tinte helado cubre la pantalla de golpe, como si se
-    // congelara instantáneamente antes de resquebrajarse.
+    // Escarcha general
     const frost = scene.add.rectangle(centerX, centerY, width, height, 0xbdeeff, 0).setAlpha(0);
     container.add(frost);
     scene.tweens.add({ targets: frost, alpha: 0.28, duration: 180, ease: 'Cubic.easeOut' });
 
-    // Red de grietas: líneas irregulares que irradian desde el centro
-    // hacia los bordes, más un par de anillos quebrados — se "expande"
-    // rápido escalando desde un tamaño chico.
+    // Red de grietas principal en pantalla
     const cracks = this.drawCrackWeb(scene, centerX, centerY, width, height);
     container.add(cracks);
     cracks.setScale(0.15);
     scene.tweens.add({ targets: cracks, scale: 1, duration: 260, ease: 'Cubic.easeOut' });
 
-    // Estallido: la pantalla se divide en una grilla de fragmentos de
-    // hielo (4 triángulos irregulares por celda, como vidrio roto) que
-    // salen volando desde el centro, rotando y desvaneciéndose.
+    // Estallido principal de fragmentos de hielo
     const shards = this.createIceShards(scene, width, height);
     shards.forEach(shard => container.add(shard));
 
@@ -64,16 +58,114 @@ export class GlacierShatterEffect implements DeckCelebrationEffect {
       });
     });
 
-    // Restauración: la escarcha y la grieta se desvanecen, devolviendo
-    // la escena a su estado normal. Sin `setDepth()` explícito, mismo
-    // criterio que el resto de los efectos — ver el comentario
-    // correspondiente en SpotlightSweepEffect (evita taparle el modal a
-    // una oferta del banquero que coincida).
-    scene.time.delayedCall(1500, () => {
+    // --- Segundo efecto: grieta y estallido localizado sobre la carta de 25,000 ---
+    scene.time.delayedCall(550, () => {
+      this.spawnLocalizedIceShatter(scene, container, target.x, target.y);
+    });
+
+    // Restauración y limpieza
+    scene.time.delayedCall(1900, () => {
       scene.tweens.add({ targets: [frost, cracks], alpha: 0, duration: 400, ease: 'Cubic.easeIn' });
     });
 
-    scene.time.delayedCall(2000, () => container.destroy());
+    scene.time.delayedCall(2500, () => container.destroy());
+  }
+
+  /** Genera la segunda grieta y fragmentación localizada sobre la carta objetivo */
+  private spawnLocalizedIceShatter(
+    scene: Phaser.Scene,
+    container: Phaser.GameObjects.Container,
+    tx: number,
+    ty: number
+  ): void {
+    // Destello de escarcha concentrado
+    const pinFlash = scene.add
+      .circle(tx, ty, 50, 0xffffff, 0.9)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setScale(0.2);
+    container.add(pinFlash);
+
+    scene.tweens.add({
+      targets: pinFlash,
+      scale: 1.2,
+      alpha: 0,
+      duration: 250,
+      ease: 'Cubic.easeOut',
+      onComplete: () => pinFlash.destroy()
+    });
+
+    // Grieta localizada a la escala de la carta
+    const localCrack = scene.add.graphics();
+    localCrack.lineStyle(2.5, 0xffffff, 0.95);
+    const rayCount = 8;
+    const crackRadius = 65;
+
+    for (let i = 0; i < rayCount; i++) {
+      const angle = (i / rayCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      localCrack.beginPath();
+      localCrack.moveTo(0, 0);
+      const midDist = crackRadius * 0.55;
+      const midX = Math.cos(angle + (Math.random() - 0.5) * 0.3) * midDist;
+      const midY = Math.sin(angle + (Math.random() - 0.5) * 0.3) * midDist;
+      localCrack.lineTo(midX, midY);
+      const endX = Math.cos(angle) * crackRadius;
+      const endY = Math.sin(angle) * crackRadius;
+      localCrack.lineTo(endX, endY);
+      localCrack.strokePath();
+    }
+
+    // Anillo de hielo fracturado alrededor de la carta
+    localCrack.lineStyle(1.5, 0xd0f4ff, 0.8);
+    localCrack.strokeCircle(0, 0, crackRadius * 0.65);
+    localCrack.setPosition(tx, ty);
+    localCrack.setScale(0.1);
+    container.add(localCrack);
+
+    scene.tweens.add({
+      targets: localCrack,
+      scale: 1,
+      duration: 180,
+      ease: 'Back.easeOut'
+    });
+
+    // Microfragmentos de hielo desprendiéndose de la carta
+    const shardCount = 8;
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.3;
+      const dist = 35 + Math.random() * 45;
+      const shard = scene.add.graphics();
+      shard.fillStyle(0xd5f6ff, 0.85);
+      shard.lineStyle(1, 0xffffff, 0.9);
+      shard.fillTriangle(-4, -6, 5, -2, 0, 7);
+      shard.strokeTriangle(-4, -6, 5, -2, 0, 7);
+      shard.setPosition(tx, ty);
+      container.add(shard);
+
+      scene.tweens.add({
+        targets: shard,
+        x: tx + Math.cos(angle) * dist,
+        y: ty + Math.sin(angle) * dist,
+        angle: (Math.random() - 0.5) * 180,
+        alpha: 0,
+        scale: 0.3,
+        duration: 400 + Math.random() * 200,
+        ease: 'Cubic.easeOut',
+        onComplete: () => shard.destroy()
+      });
+    }
+
+    // Desvanecimiento de la grieta localizada
+    scene.time.delayedCall(1200, () => {
+      scene.tweens.add({
+        targets: localCrack,
+        alpha: 0,
+        duration: 350,
+        ease: 'Cubic.easeIn',
+        onComplete: () => localCrack.destroy()
+      });
+    });
+
+    scene.cameras.main.shake(140, 0.006);
   }
 
   /** Dibuja la red de grietas irradiando desde el punto de impacto (el centro). */

@@ -23,6 +23,11 @@ import { getDeckSetup } from '../../domain/value-objects/DeckSetups';
 import { Card } from '../../domain/entities/Card';
 import { SpotlightSweepEffect } from '../effects/deck-celebrations/SpotlightSweepEffect';
 import { getDeckCelebrationEffect } from '../effects/deck-celebrations/DeckCelebrationEffectRegistry';
+import {
+  CardPositionSource,
+  hasCardPositionSource,
+  getGameObjectGlobalPosition
+} from '../effects/deck-celebrations/DeckCelebrationEffect';
 
 /**
  * GameScene: Escena principal del juego.
@@ -33,7 +38,7 @@ import { getDeckCelebrationEffect } from '../effects/deck-celebrations/DeckCeleb
  * 3. Layout responsivo sin solapamiento con la barra de energía HUD.
  * 4. Gestión de clímax final y eventos de mitad de juego secuenciados.
  */
-export class GameScene extends Phaser.Scene {
+export class GameScene extends Phaser.Scene implements CardPositionSource {
   private controller: GameSceneController | null = null;
   private particleManager!: ParticleManager;
   private selectionBanner: Phaser.GameObjects.Container | null = null;
@@ -54,6 +59,43 @@ export class GameScene extends Phaser.Scene {
 
   getController(): GameSceneController | null {
     return this.controller;
+  }
+
+  /**
+   * Implementación de CardPositionSource: calcula la posición real en pantalla
+   * de una carta (coordenadas globales del canvas), sea del tablero general o
+   * la Carta Secreta en el pedestal. Si la partida finalizó y ResultScene está
+   * activa, redirige a la posición de la Carta Secreta en la pantalla de victoria.
+   */
+  getCardScreenPosition(cardId: string): { x: number; y: number } | null {
+    if (this.scene.isActive('ResultScene')) {
+      const resultScene = this.scene.get('ResultScene');
+      if (resultScene && hasCardPositionSource(resultScene)) {
+        const resultPos = resultScene.getCardScreenPosition(cardId);
+        if (resultPos) return resultPos;
+      }
+    }
+
+    if (!this.controller) {
+      return null;
+    }
+
+    const boardCard = this.controller.getCardView(cardId);
+    if (boardCard) {
+      return getGameObjectGlobalPosition(boardCard);
+    }
+
+    const secretCard = this.controller.getSecretCardView();
+    if (
+      secretCard &&
+      (secretCard.getCardId() === cardId ||
+        this.controller.isSecretCard(cardId) ||
+        !this.controller.hasBoardCard(cardId))
+    ) {
+      return getGameObjectGlobalPosition(secretCard);
+    }
+
+    return null;
   }
 
   create(): void {

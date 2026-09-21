@@ -40,6 +40,7 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 const game = new Phaser.Game(config);
+(window as unknown as { __PHASER_GAME__?: Phaser.Game }).__PHASER_GAME__ = game;
 
 // AUDITORÍA DE AUDIO: AudioService requiere la instancia de Phaser.Game
 // (no de una Scene puntual) para poder vivir más allá del ciclo de vida

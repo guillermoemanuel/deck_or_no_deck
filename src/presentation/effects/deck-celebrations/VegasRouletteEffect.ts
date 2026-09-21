@@ -1,39 +1,36 @@
+
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
-import { DeckCelebrationEffect } from './DeckCelebrationEffect';
+import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
 
 type SuitType = 'heart' | 'spade' | 'club' | 'diamond';
 
 /**
- * Estrategia del mazo Vegas: una ruleta de casino gira y frena hasta
- * detenerse en una pinta (corazón, pica, trébol o diamante), mientras
- * más pintas van apareciendo al azar por la pantalla — pop-in con rebote
- * y desvanecimiento, como confeti de cartas.
- *
- * Las 4 pintas se dibujan a mano con Graphics (círculos + triángulos),
- * sin depender de ningún asset — mismo criterio que el resto de los
- * efectos de esta carpeta.
- *
- * Vive en su propio archivo (GRASP Polymorphism / Strategy) para que
- * pueda crecer o afinarse sin tocar GameScene.ts ni las estrategias de
- * otros mazos.
+ * Estrategia del mazo Vegas:
+ * 1. Flash y ruleta de casino girando a alta velocidad con gajos y pintas.
+ * 2. Al detenerse el giro, una ficha dorada de casino de alta denominación ($25,000)
+ *    sale proyectada y se posiciona directamente sobre la carta de mayor valor (25,000),
+ *    impactando con un estallido de confeti de pintas y destellos dorados.
  */
 export class VegasRouletteEffect implements DeckCelebrationEffect {
-  play(scene: Phaser.Scene, _card: Card): void {
+  play(scene: Phaser.Scene, card: Card): void {
     const { width, height } = scene.cameras.main;
     const centerX = width / 2;
-    const centerY = height / 2 - 20;
+    const centerY = height / 2 - 30;
     const container = scene.add.container(0, 0);
 
-    // Flash inicial dorado, como las luces de un casino encendiéndose.
+    // Posición global de la carta objetivo de 25k
+    const target = getCelebrationTargetPosition(scene, card);
+
+    // Flash inicial dorado
     const flash = scene.add.rectangle(width / 2, height / 2, width, height, 0xfff3c4, 0.5);
     container.add(flash);
     scene.tweens.add({ targets: flash, alpha: 0, duration: 280, ease: 'Cubic.easeOut' });
 
-    // Oscurecimiento leve, para que la ruleta y las pintas resalten.
+    // Oscurecimiento de la escena
     const darken = scene.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0).setAlpha(0);
     container.add(darken);
-    scene.tweens.add({ targets: darken, alpha: 0.5, duration: 250, ease: 'Cubic.easeOut' });
+    scene.tweens.add({ targets: darken, alpha: 0.55, duration: 250, ease: 'Cubic.easeOut' });
 
     // --- La ruleta ---
     const suits: SuitType[] = ['heart', 'spade', 'club', 'diamond'];
@@ -41,15 +38,11 @@ export class VegasRouletteEffect implements DeckCelebrationEffect {
     const segmentAngleDeg = 360 / segmentCount;
     const segmentSuits: SuitType[] = Array.from({ length: segmentCount }, (_, i) => suits[i % suits.length]);
 
-    // Se elige la pinta ganadora ANTES de girar, y se calcula el ángulo
-    // final necesario para que ese segmento termine exactamente bajo el
-    // puntero fijo (arriba) — así el resultado visual de la ruleta y el
-    // festejo final siempre coinciden.
     const winningIndex = Math.floor(Math.random() * segmentCount);
     const winningSuit = segmentSuits[winningIndex];
     const winningSegmentCenterAngle = winningIndex * segmentAngleDeg + segmentAngleDeg / 2;
     const restAngle = ((-winningSegmentCenterAngle % 360) + 360) % 360;
-    const totalSpins = 4 + Math.floor(Math.random() * 2);
+    const totalSpins = 4;
     const finalAngle = totalSpins * 360 + restAngle;
 
     const wheelRadius = Math.min(width, height) * 0.16;
@@ -58,7 +51,7 @@ export class VegasRouletteEffect implements DeckCelebrationEffect {
     wheelPivot.add(wheel);
     container.add(wheelPivot);
 
-    // Puntero fijo — NO rota junto con la ruleta, marca el resultado.
+    // Puntero fijo superior
     const pointer = scene.add.graphics();
     pointer.fillStyle(0xffd76a, 1);
     pointer.fillTriangle(-10, -wheelRadius - 26, 10, -wheelRadius - 26, 0, -wheelRadius - 6);
@@ -68,43 +61,180 @@ export class VegasRouletteEffect implements DeckCelebrationEffect {
     wheelPivot.setScale(0.4).setAlpha(0);
     scene.tweens.add({ targets: wheelPivot, scale: 1, alpha: 1, duration: 300, ease: 'Back.easeOut' });
 
+    // Giro acelerado y frenado de la ruleta
     scene.tweens.add({
       targets: wheel,
       angle: finalAngle,
-      duration: 2000,
+      duration: 1700,
       delay: 200,
       ease: 'Cubic.easeOut',
       onComplete: () => {
-        // Estalla la pinta ganadora en el centro, como resultado final.
+        // Estallido de la pinta ganadora en el centro de la ruleta
         this.spawnSuitBurst(scene, container, centerX, centerY, winningSuit, true);
+
+        // --- Ficha final de casino proyectándose y posicionándose sobre la carta de 25k ---
+        scene.time.delayedCall(250, () => {
+          this.launchFinalChipToCard(scene, container, centerX, centerY, target.x, target.y);
+        });
       }
     });
 
-    // --- Pintas apareciendo al azar por la pantalla, mientras gira ---
-    const randomBurstCount = 10;
+    // Pintas ambientales apareciendo como confeti de cartas mientras gira la ruleta
+    const randomBurstCount = 8;
     for (let i = 0; i < randomBurstCount; i++) {
       const x = 60 + Math.random() * (width - 120);
       const y = 60 + Math.random() * (height - 120);
       const suit = suits[Math.floor(Math.random() * suits.length)];
 
-      scene.time.delayedCall(300 + Math.random() * 1800, () => {
+      scene.time.delayedCall(300 + Math.random() * 1500, () => {
         this.spawnSuitBurst(scene, container, x, y, suit, false);
       });
     }
 
-    // Restauración suave: todo se desvanece junto y se destruye. Sin
-    // `setDepth()` explícito, mismo criterio que el resto de los
-    // efectos — ver el comentario correspondiente en SpotlightSweepEffect
-    // (evita taparle el modal a una oferta del banquero que coincida).
-    scene.time.delayedCall(3500, () => {
+    // Restauración y limpieza
+    scene.time.delayedCall(3800, () => {
       scene.tweens.add({
         targets: container,
         alpha: 0,
-        duration: 450,
+        duration: 500,
         ease: 'Cubic.easeIn',
         onComplete: () => container.destroy()
       });
     });
+  }
+
+  /** Proyecta y posiciona la ficha dorada de $25,000 sobre la carta objetivo */
+  private launchFinalChipToCard(
+    scene: Phaser.Scene,
+    container: Phaser.GameObjects.Container,
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number
+  ): void {
+    const chip = this.createCasinoChip(scene, '$25K');
+    chip.setPosition(startX, startY);
+    chip.setScale(0.3);
+    chip.setAlpha(0.9);
+    container.add(chip);
+
+    // Vuelo con arco hacia la carta
+    scene.tweens.add({
+      targets: chip,
+      x: targetX,
+      y: targetY,
+      scale: 1,
+      angle: 720,
+      duration: 620,
+      ease: 'Back.easeOut',
+      onComplete: () => {
+        // Impacto de la ficha sobre la carta
+        this.spawnChipImpact(scene, container, targetX, targetY);
+      }
+    });
+  }
+
+  /** Dibuja una ficha de casino detallada de alta denominación */
+  private createCasinoChip(scene: Phaser.Scene, label: string): Phaser.GameObjects.Container {
+    const chipContainer = scene.add.container(0, 0);
+    const radius = 34;
+
+    const g = scene.add.graphics();
+    // Borde exterior dorado
+    g.fillStyle(0xd4af37, 1);
+    g.fillCircle(0, 0, radius);
+
+    // Muescas radiales de ficha
+    g.fillStyle(0xffffff, 0.9);
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const nx = Math.cos(angle) * (radius - 4);
+      const ny = Math.sin(angle) * (radius - 4);
+      g.fillRect(nx - 3, ny - 3, 6, 6);
+    }
+
+    // Anillo interior
+    g.fillStyle(0x1a1a24, 1);
+    g.fillCircle(0, 0, radius - 8);
+    g.lineStyle(2, 0xffd76a, 0.9);
+    g.strokeCircle(0, 0, radius - 8);
+
+    chipContainer.add(g);
+
+    // Texto de denominación ($25K)
+    const text = scene.add
+      .text(0, 0, label, {
+        fontSize: '15px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#ffd76a',
+        align: 'center'
+      })
+      .setOrigin(0.5);
+    chipContainer.add(text);
+
+    return chipContainer;
+  }
+
+  private spawnChipImpact(
+    scene: Phaser.Scene,
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number
+  ): void {
+    // Destello de impacto
+    const flash = scene.add.circle(x, y, 55, 0xffe082, 0.9).setScale(0.1);
+    container.add(flash);
+    scene.tweens.add({
+      targets: flash,
+      scale: 1.4,
+      alpha: 0,
+      duration: 320,
+      ease: 'Cubic.easeOut',
+      onComplete: () => flash.destroy()
+    });
+
+    // Anillo expansivo dorado
+    const ring = scene.add
+      .circle(x, y, 70, 0x000000, 0)
+      .setStrokeStyle(3, 0xffd700, 0.9)
+      .setScale(0.2);
+    container.add(ring);
+    scene.tweens.add({
+      targets: ring,
+      scale: 1.1,
+      alpha: 0,
+      duration: 400,
+      ease: 'Cubic.easeOut',
+      onComplete: () => ring.destroy()
+    });
+
+    // Confeti de pintas saliendo de la carta
+    const suits: SuitType[] = ['heart', 'diamond', 'club', 'spade'];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const dist = 40 + Math.random() * 35;
+      const suit = suits[i % suits.length];
+      const icon = scene.add.graphics();
+      const color = suit === 'heart' || suit === 'diamond' ? 0xff4d6d : 0xffffff;
+      this.drawSuit(icon, suit, 14, color);
+      icon.setPosition(x, y);
+      icon.setScale(0);
+      container.add(icon);
+
+      scene.tweens.add({
+        targets: icon,
+        x: x + Math.cos(angle) * dist,
+        y: y + Math.sin(angle) * dist,
+        scale: 1,
+        alpha: 0,
+        duration: 500 + Math.random() * 200,
+        ease: 'Cubic.easeOut',
+        onComplete: () => icon.destroy()
+      });
+    }
+
+    scene.cameras.main.shake(170, 0.007);
   }
 
   /** Arma la ruleta: gajos alternados + pinta al medio de cada uno + aro y centro dorados. */

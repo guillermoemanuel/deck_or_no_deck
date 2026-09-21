@@ -1,23 +1,12 @@
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
-import { DeckCelebrationEffect, hasCardPositionSource } from './DeckCelebrationEffect';
+import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
 
 /**
  * Estrategia del mazo Medieval: una lluvia de flechas en llamas cruza la
  * pantalla horizontalmente, y al final una espada cae en vertical desde
- * arriba, clavándose sobre la COLUMNA (posición X) de la carta que
- * disparó la celebración — sea que esté en el tablero o sea la carta
- * secreta del pedestal.
- *
- * Igual que TheaterSpotlightsEffect (mazo Basic), necesita la posición
- * REAL en pantalla de esa carta, así que resuelve `card.id` vía
- * `hasCardPositionSource` — ver ese type guard en DeckCelebrationEffect.ts
- * para el porqué no hace falta ningún cast a `any` ni un import circular
- * a GameScene.
- *
- * Vive en su propio archivo (GRASP Polymorphism / Strategy) para que
- * pueda crecer o afinarse sin tocar GameScene.ts ni las estrategias de
- * otros mazos.
+ * arriba, clavándose directamente sobre la carta de mayor valor (25,000)
+ * — sea que esté en el tablero o sea la carta secreta del pedestal / victoria.
  */
 export class MedievalSiegeEffect implements DeckCelebrationEffect {
   play(scene: Phaser.Scene, card: Card): void {
@@ -29,13 +18,8 @@ export class MedievalSiegeEffect implements DeckCelebrationEffect {
     container.add(tint);
     scene.tweens.add({ targets: tint, alpha: 0.28, duration: 300, ease: 'Cubic.easeOut' });
 
-    // Posición real de la carta que disparó el festejo — sea del tablero
-    // o la secreta. Si por algún motivo no está disponible (defensivo),
-    // cae al centro de la pantalla como resultado seguro.
-    const target = (hasCardPositionSource(scene) ? scene.getCardScreenPosition(card.id) : null) ?? {
-      x: width / 2,
-      y: height / 2
-    };
+    // Posición real y exacta de la carta objetivo de 25k
+    const target = getCelebrationTargetPosition(scene, card);
 
     // --- Lluvia de flechas en llamas ---
     const arrowCount = 10;
@@ -52,7 +36,7 @@ export class MedievalSiegeEffect implements DeckCelebrationEffect {
       this.spawnColumnWarning(scene, container, target.x, height);
     });
 
-    // --- La espada cae en vertical sobre esa columna ---
+    // --- La espada cae en vertical y se clava exactamente sobre la carta ---
     scene.time.delayedCall(1650, () => {
       this.spawnFallingSword(scene, container, target.x, target.y);
     });
@@ -193,17 +177,28 @@ export class MedievalSiegeEffect implements DeckCelebrationEffect {
     sword.fillCircle(0, -hiltLength - 6, 6);
 
     const startY = -bladeLength - hiltLength - 40;
+    const finalSwordY = y - bladeLength;
     sword.setPosition(x, startY);
     container.add(sword);
 
     scene.tweens.add({
       targets: sword,
-      y,
+      y: finalSwordY,
       duration: 380,
       ease: 'Cubic.easeIn',
       onComplete: () => {
+        // Vibración / rebote de clavado de la hoja
+        scene.tweens.add({
+          targets: sword,
+          y: finalSwordY - 4,
+          duration: 45,
+          yoyo: true,
+          repeat: 2,
+          ease: 'Sine.easeInOut'
+        });
+
         this.spawnImpact(scene, container, x, y);
-        scene.cameras.main.shake(200, 0.01);
+        scene.cameras.main.shake(220, 0.012);
       }
     });
   }
