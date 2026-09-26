@@ -4,6 +4,7 @@ import { getDeckSetup, DeckSetupId } from '../../domain/value-objects/DeckSetups
 import { PreloadSceneData } from './PreloadScene';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
+import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts — mismos valores hex,
  * para que ambas escenas se sientan parte del mismo producto. */
@@ -44,6 +45,10 @@ export class DeckSelectionScene extends Phaser.Scene {
   private previewContainer!: Phaser.GameObjects.Container;
   private gridButtons = new Map<DeckSetupId, Phaser.GameObjects.Rectangle>();
   private gridThumbs = new Map<DeckSetupId, Phaser.GameObjects.Image>();
+  // Controles persistentes de Sonido/Pantalla Completa (mismo componente
+  // que UIScene/GameScene/MainMenuScene/HowToPlayScene, ver
+  // SoundFullscreenControls.ts).
+  private hudControls!: SoundFullscreenControls;
 
   // BUGFIX (superposición grilla/botón "Aceptar"): antes `baseY` se
   // calculaba por separado en renderDeckGrid() y en applyPreviewFocus()
@@ -154,6 +159,13 @@ export class DeckSelectionScene extends Phaser.Scene {
     this.renderAcceptButton(services);
 
     this.applyPreviewFocus(this.previewDeckId, true);
+
+    // Sonido/Pantalla Completa — esquina inferior derecha, igual que en
+    // GameScene (ver UIScene.ts), MainMenuScene y HowToPlayScene: el
+    // botón "Aceptar" queda centrado (width/2, height-30), así que no
+    // compite con esta esquina.
+    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hudControls.destroy());
   }
 
   /**

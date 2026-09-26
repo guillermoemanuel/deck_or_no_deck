@@ -9,16 +9,63 @@ import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
 
+/**
+ * Paleta y "chrome" de botones — MISMA convención "Casino de Lujo" que el
+ * resto del juego (ver createCasinoButton en MainMenuScene.ts y el panel
+ * de HudIconButton.ts): panel carbón + borde de acento + filo dorado
+ * interior + halo que se enciende en hover, con el mismo timing de tweens.
+ * Antes esta escena usaba Rectangle planos sin borde ni hover — quedaba
+ * visualmente desconectada del resto de la UI.
+ */
+const PANEL_FILL = 0x121218;
+const PANEL_FILL_ALPHA = 0.95;
+const COLOR_GOLD = 0xffd76a;
+const COLOR_GOLD_HEX = '#ffd76a';
+const ACCENT_COLOR = 0x00e5ff; // cian — mismo acento que HowToPlayScene/UIScene
+const COLOR_BUY = 0x2ecc71; // esmeralda "acción disponible" — mismo tono que el botón DEAL del tutorial
+const COLOR_OWNED = 0x3d4450; // slate apagado "ya adquirido/deshabilitado" — mismo tono que HowToPlayScene
+const COLOR_DANGER = 0xff4d6d;
+const HOVER_SCALE = 1.05;
+const PRESS_SCALE = 1.1;
+const HOVER_TWEEN_MS = 120;
+const PRESS_TWEEN_MS = 70;
+
+const TAB_WIDTH = 160;
+const TAB_HEIGHT = 34;
+const ACTION_BUTTON_WIDTH = 150;
+const ACTION_BUTTON_HEIGHT = 34;
+
+/** Refs de un botón-panel genérico (chrome + hitZone), reutilizado por
+ * los botones de acción de cada fila (Comprar/Adquirido). El texto es un
+ * Text plano porque combina una clave i18n con estado dinámico (precio,
+ * nivel) resuelto en refreshUpgradeRow()/refreshDeckRow() — no encaja en
+ * LocalizedText, que solo resuelve una clave fija. */
+interface ActionButtonRefs {
+  readonly container: Phaser.GameObjects.Container;
+  readonly bg: Phaser.GameObjects.Graphics;
+  readonly glow: Phaser.GameObjects.Graphics;
+  readonly text: Phaser.GameObjects.Text;
+  readonly hitZone: Phaser.GameObjects.Zone;
+}
+
+/** Refs de un botón de pestaña — mismo chrome que ActionButtonRefs, pero
+ * con LocalizedText (la etiqueta es una clave i18n fija, "Mejoras"/
+ * "Mazos", sin estado dinámico) en vez de Text plano. */
+interface TabButtonRefs {
+  readonly container: Phaser.GameObjects.Container;
+  readonly bg: Phaser.GameObjects.Graphics;
+  readonly glow: Phaser.GameObjects.Graphics;
+  readonly label: LocalizedText;
+}
+
 interface UpgradeRowRefs {
   readonly levelOrOwnedText: Phaser.GameObjects.Text;
-  readonly button: Phaser.GameObjects.Rectangle;
-  readonly buttonText: Phaser.GameObjects.Text;
+  readonly actionButton: ActionButtonRefs;
 }
 
 interface DeckRowRefs {
   readonly statusText: Phaser.GameObjects.Text;
-  readonly button: Phaser.GameObjects.Rectangle;
-  readonly buttonText: Phaser.GameObjects.Text;
+  readonly actionButton: ActionButtonRefs;
 }
 
 type ShopTab = 'upgrades' | 'decks';
@@ -33,7 +80,7 @@ const COLUMN_OFFSETS = [
   { textX: 20, buttonX: 380 }
 ] as const;
 
-// Layout de mazos: 2 columnas x 3 filas (6 mazos en el catálogo actual).
+// Layout de mazos: 2 columnas x 5 filas (10 mazos en el catálogo actual).
 const DECK_ROWS_PER_COLUMN = 5;
 const DECK_ROW_SPACING_Y = 90;
 const DECK_FIRST_ROW_OFFSET_Y = -170;
@@ -48,7 +95,9 @@ const DECK_FIRST_ROW_OFFSET_Y = -170;
  * - "Mazos": colección de mazos temáticos COLECCIONABLES — persistente
  *   (ProgressionManager/localStorage), disponible con o sin partida
  *   activa (se puede comprar desde el menú principal). La SELECCIÓN de
- *   cuál usar vive en DeckSelectionScene; acá solo se compran.
+ *   cuál usar vive en DeckSelectionScene; acá solo se compran. Incluye un
+ *   contador "obtenidos X/Y" (ver deckCounterText) para que el jugador
+ *   vea de un vistazo cuántos de los mazos del catálogo ya tiene.
  *
  * i18n EN VIVO (ejemplo de escena secundaria pedido explícitamente): esta
  * escena se abre con `scene.launch()` SOBRE MainMenuScene, que sigue
@@ -69,10 +118,13 @@ export class ShopScene extends Phaser.Scene {
   private sessionUpgrades: SessionUpgrades | null = null;
   private purchaseUpgradeUseCase: PurchaseSessionUpgradeUseCase | null = null;
 
-  private upgradesTabBtn!: Phaser.GameObjects.Container;
-  private decksTabBtn!: Phaser.GameObjects.Container;
-  private upgradesTabLabel!: Phaser.GameObjects.Text;
-  private decksTabLabel!: Phaser.GameObjects.Text;
+  private upgradesTabRefs!: TabButtonRefs;
+  private decksTabRefs!: TabButtonRefs;
+
+  /** Badge "Obtenidos X/Y" del tab "Mazos" — null mientras el tab activo
+   * es "Mejoras" (destruido junto con el resto de tabContainer al
+   * cambiar de pestaña, ver renderActiveTab()). */
+  private deckCounterText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super({ key: 'ShopScene' });
@@ -98,9 +150,19 @@ export class ShopScene extends Phaser.Scene {
     this.activeTab = bridge ? 'upgrades' : 'decks';
 
     const { width, height } = this.cameras.main;
-    this.add
-      .rectangle(width / 2, height / 2, 940, 600, 0x0d1117, 0.97)
-      .setStrokeStyle(2, 0x30363d);
+
+    // Panel principal — mismo tratamiento "Casino de Lujo" que el modal
+    // de HowToPlayScene (panel carbón + borde de acento + resplandor
+    // exterior sutil) en vez del Rectangle plano de un solo color/borde
+    // que tenía antes.
+    const modalX = width / 2 - 470;
+    const modalY = height / 2 - 300;
+    const modalBg = this.add.graphics();
+    modalBg.fillStyle(PANEL_FILL, 0.97).fillRoundedRect(modalX, modalY, 940, 600, 18);
+    modalBg.lineStyle(3, ACCENT_COLOR, 0.9).strokeRoundedRect(modalX, modalY, 940, 600, 18);
+    modalBg.lineStyle(8, ACCENT_COLOR, 0.15).strokeRoundedRect(modalX - 4, modalY - 4, 948, 608, 20);
+    // Filo dorado interior muy fino, misma convención "premium" que createCasinoButton().
+    modalBg.lineStyle(1, COLOR_GOLD, 0.2).strokeRoundedRect(modalX + 5, modalY + 5, 930, 590, 14);
 
     new LocalizedText(this, width / 2, height / 2 - 270, 'SHOP_TITLE', {
       fontSize: '20px',
@@ -109,10 +171,7 @@ export class ShopScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    this.add
-      .text(width / 2 + 440, height / 2 - 270, '✕', { fontSize: '24px', color: '#ffffff' })
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.scene.stop());
+    this.createCloseButton(width / 2 + 440, height / 2 - 270);
 
     this.renderTabButtons();
 
@@ -128,34 +187,100 @@ export class ShopScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribe);
   }
 
+  // ------------------------------------------------------------------
+  // Chrome de botones compartido ("Casino de Lujo": panel + borde +
+  // filo dorado + halo en hover) — ver createCasinoButton en
+  // MainMenuScene.ts, mismo lenguaje visual aplicado acá a las pestañas
+  // y a los botones de acción de cada fila.
+  // ------------------------------------------------------------------
+
+  /** (Re)dibuja el panel + halo de un botón con el color de acento dado — separado de la creación para poder repintar en caliente (cambio de estado Comprar -> Adquirido, o tab activo/inactivo) sin recrear el GameObject. */
+  private paintButtonChrome(bg: Phaser.GameObjects.Graphics, glow: Phaser.GameObjects.Graphics, width: number, height: number, accentColor: number): void {
+    const radius = Math.min(10, height / 2);
+
+    bg.clear();
+    bg.fillStyle(PANEL_FILL, PANEL_FILL_ALPHA).fillRoundedRect(-width / 2, -height / 2, width, height, radius);
+    bg.lineStyle(2, accentColor, 0.85).strokeRoundedRect(-width / 2, -height / 2, width, height, radius);
+    bg.lineStyle(1, COLOR_GOLD, 0.25).strokeRoundedRect(-width / 2 + 3, -height / 2 + 3, width - 6, height - 6, Math.max(radius - 2, 0));
+
+    glow.clear();
+    glow.fillStyle(accentColor, 0.35).fillRoundedRect(-width / 2 - 6, -height / 2 - 6, width + 12, height + 12, radius + 2);
+  }
+
+  /** Zona interactiva + tweens de hover/press/click — misma "sensación táctil" que createCasinoButton()/HudIconButton en el resto del juego. */
+  private attachButtonInteractions(container: Phaser.GameObjects.Container, glow: Phaser.GameObjects.Graphics, width: number, height: number, onClick: () => void): Phaser.GameObjects.Zone {
+    const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    container.add(hitZone);
+
+    hitZone.on('pointerover', () => {
+      this.tweens.add({ targets: container, scale: HOVER_SCALE, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: glow, alpha: 1, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+    });
+    hitZone.on('pointerout', () => {
+      this.tweens.add({ targets: container, scale: 1, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: glow, alpha: 0, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+    });
+    hitZone.on('pointerup', () => {
+      this.tweens.add({ targets: container, scale: PRESS_SCALE, duration: PRESS_TWEEN_MS, yoyo: true, ease: 'Quad.easeOut', onComplete: onClick });
+    });
+
+    return hitZone;
+  }
+
+  /** Botón de acción de fila (Comprar $X / Adquirido) — texto plano, ver ActionButtonRefs. */
+  private createActionButton(x: number, y: number, initialLabel: string, onClick: () => void): ActionButtonRefs {
+    const container = this.add.container(x, y);
+    const glow = this.add.graphics().setAlpha(0);
+    const bg = this.add.graphics();
+    const text = this.add
+      .text(0, 0, initialLabel, { fontSize: '13px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff' })
+      .setOrigin(0.5);
+    container.add([glow, bg, text]);
+
+    const hitZone = this.attachButtonInteractions(container, glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, onClick);
+
+    return { container, bg, glow, text, hitZone };
+  }
+
+  private createCloseButton(x: number, y: number): void {
+    const bg = this.add.circle(0, 0, 16, PANEL_FILL, 0.95).setStrokeStyle(2, COLOR_DANGER, 0.8).setInteractive({ useHandCursor: true });
+    const label = this.add.text(0, 0, '✕', { fontSize: '16px', fontFamily: 'Arial, sans-serif', color: '#ffffff' }).setOrigin(0.5);
+
+    bg.on('pointerover', () => bg.setFillStyle(0x6e2a2a, 0.95));
+    bg.on('pointerout', () => bg.setFillStyle(PANEL_FILL, 0.95));
+    bg.on('pointerup', () => this.scene.stop());
+
+    this.add.container(x, y, [bg, label]);
+  }
+
+  // ------------------------------------------------------------------
+  // Pestañas
+  // ------------------------------------------------------------------
+
   private renderTabButtons(): void {
     const cx = this.cameras.main.centerX;
     const y = this.cameras.main.centerY - 232;
 
-    const upgrades = this.createTabButton(cx - 100, y, 'SHOP_TAB_UPGRADES', () => this.switchTab('upgrades'));
-    const decks = this.createTabButton(cx + 100, y, 'SHOP_TAB_DECKS', () => this.switchTab('decks'));
-    this.upgradesTabBtn = upgrades.container;
-    this.decksTabBtn = decks.container;
-    this.upgradesTabLabel = upgrades.label;
-    this.decksTabLabel = decks.label;
+    this.upgradesTabRefs = this.createTabButton(cx - 100, y, 'SHOP_TAB_UPGRADES', () => this.switchTab('upgrades'));
+    this.decksTabRefs = this.createTabButton(cx + 100, y, 'SHOP_TAB_DECKS', () => this.switchTab('decks'));
     this.highlightActiveTabButton();
   }
 
-  private createTabButton(
-    x: number,
-    y: number,
-    labelKey: TranslationKey,
-    onClick: () => void
-  ): { container: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text } {
-    const bg = this.add.rectangle(0, 0, 160, 34, 0x21262d).setStrokeStyle(1, 0x30363d).setInteractive({ useHandCursor: true });
+  private createTabButton(x: number, y: number, labelKey: TranslationKey, onClick: () => void): TabButtonRefs {
+    const container = this.add.container(x, y);
+    const glow = this.add.graphics().setAlpha(0);
+    const bg = this.add.graphics();
     const label = new LocalizedText(this, 0, 0, labelKey, {
       fontSize: '13px',
       fontFamily: 'Arial, sans-serif',
+      fontStyle: 'bold',
       color: '#8b949e'
     }).setOrigin(0.5);
-    bg.on('pointerup', onClick);
-    const container = this.add.container(x, y, [bg, label]);
-    return { container, label };
+    container.add([glow, bg, label]);
+
+    this.attachButtonInteractions(container, glow, TAB_WIDTH, TAB_HEIGHT, onClick);
+
+    return { container, bg, glow, label };
   }
 
   private switchTab(tab: ShopTab): void {
@@ -167,13 +292,13 @@ export class ShopScene extends Phaser.Scene {
 
   private highlightActiveTabButton(): void {
     [
-      { btn: this.upgradesTabBtn, label: this.upgradesTabLabel, active: this.activeTab === 'upgrades' },
-      { btn: this.decksTabBtn, label: this.decksTabLabel, active: this.activeTab === 'decks' }
-    ].forEach(({ btn, label, active }) => {
-      if (!btn) return;
-      const bg = btn.list[0] as Phaser.GameObjects.Rectangle;
-      bg.setFillStyle(active ? 0x30363d : 0x21262d);
-      label.setColor(active ? '#ffffff' : '#8b949e');
+      { refs: this.upgradesTabRefs, active: this.activeTab === 'upgrades' },
+      { refs: this.decksTabRefs, active: this.activeTab === 'decks' }
+    ].forEach(({ refs, active }) => {
+      if (!refs) return;
+      this.paintButtonChrome(refs.bg, refs.glow, TAB_WIDTH, TAB_HEIGHT, active ? ACCENT_COLOR : COLOR_OWNED);
+      refs.label.setColor(active ? '#ffffff' : '#8b949e');
+      refs.container.setAlpha(active ? 1 : 0.85);
     });
   }
 
@@ -181,6 +306,11 @@ export class ShopScene extends Phaser.Scene {
     this.tabContainer.removeAll(true); // destruye el contenido del tab anterior
     this.upgradeRowRefs.clear();
     this.deckRowRefs.clear();
+    // El badge de contador vive dentro de tabContainer — removeAll(true)
+    // ya lo destruyó si el tab anterior era "Mazos"; se limpia la
+    // referencia acá para no dejar un puntero a un GameObject destruido
+    // (se recrea en renderDecksTab() si corresponde).
+    this.deckCounterText = null;
 
     if (this.activeTab === 'upgrades') {
       this.renderUpgradesTab();
@@ -263,16 +393,10 @@ export class ShopScene extends Phaser.Scene {
     });
     this.tabContainer.add(levelOrOwnedText);
 
-    const button = this.add.rectangle(buttonX, y + 18, 150, 34, 0x238636).setInteractive({ useHandCursor: true });
-    const buttonText = this.add
-      .text(buttonX, y + 18, '', { fontSize: '12px', fontFamily: 'Arial, sans-serif' })
-      .setOrigin(0.5);
-    this.tabContainer.add(button);
-    this.tabContainer.add(buttonText);
+    const actionButton = this.createActionButton(buttonX, y + 18, '', () => this.attemptPurchaseUpgrade(upgradeId, actionButton.text));
+    this.tabContainer.add(actionButton.container);
 
-    button.on('pointerup', () => this.attemptPurchaseUpgrade(upgradeId, buttonText));
-
-    this.upgradeRowRefs.set(upgradeId, { levelOrOwnedText, button, buttonText });
+    this.upgradeRowRefs.set(upgradeId, { levelOrOwnedText, actionButton });
     this.refreshUpgradeRow(upgradeId);
   }
 
@@ -296,13 +420,13 @@ export class ShopScene extends Phaser.Scene {
     const status = this.upgradeStatusFor(upgradeId, this.sessionUpgrades);
 
     refs.levelOrOwnedText.setText(status.statusLabel);
-    refs.buttonText.setText(status.buttonLabel);
-    refs.button.setFillStyle(status.owned ? 0x30363d : 0x238636);
+    refs.actionButton.text.setText(status.buttonLabel);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, status.owned ? COLOR_OWNED : COLOR_BUY);
 
     if (status.owned) {
-      refs.button.disableInteractive();
+      refs.actionButton.hitZone.disableInteractive();
     } else {
-      refs.button.setInteractive({ useHandCursor: true });
+      refs.actionButton.hitZone.setInteractive({ useHandCursor: true });
     }
   }
 
@@ -385,12 +509,30 @@ export class ShopScene extends Phaser.Scene {
     const { width, height } = this.cameras.main;
 
     this.tabContainer.add(
-      new LocalizedText(this, width / 2, height / 2 - 200, 'SHOP_DECKS_CAPTION', {
+      new LocalizedText(this, width / 2, height / 2 - 199, 'SHOP_DECKS_CAPTION', {
         fontSize: '12px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e'
       }).setOrigin(0.5)
     );
+
+    // Badge "Obtenidos X/Y" — de un vistazo, cuántos de los N mazos del
+    // catálogo ya tiene el jugador. Mismo chrome dorado que el filo
+    // interior de los botones, para que se lea como parte de la misma
+    // familia visual y no como un elemento suelto.
+    const counterY = height / 2 + 275;
+    const counterWidth = 130;
+    const counterHeight = 26;
+    const counterBg = this.add.graphics();
+    counterBg.fillStyle(PANEL_FILL, 0.9).fillRoundedRect(width / 2 - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
+    counterBg.lineStyle(2, COLOR_GOLD, 0.7).strokeRoundedRect(width / 2 - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
+    this.tabContainer.add(counterBg);
+
+    this.deckCounterText = this.add
+      .text(width / 2, counterY, '', { fontSize: '12px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: COLOR_GOLD_HEX })
+      .setOrigin(0.5);
+    this.tabContainer.add(this.deckCounterText);
+    this.updateDeckCounter();
 
     DECK_SETUP_IDS.forEach((deckId, index) => {
       const column = Math.floor(index / DECK_ROWS_PER_COLUMN);
@@ -399,6 +541,14 @@ export class ShopScene extends Phaser.Scene {
       const { textX, buttonX } = COLUMN_OFFSETS[column];
       this.renderDeckRow(deckId, textX, buttonX, y);
     });
+  }
+
+  /** Actualiza el badge "Obtenidos X/Y" — llamado al pintar el tab y cada vez que una fila se refresca (compra exitosa o cambio de idioma), así nunca queda desactualizado tras comprar un mazo. No-op si el tab activo no es "Mazos" (badge destruido, ver renderActiveTab()). */
+  private updateDeckCounter(): void {
+    if (!this.deckCounterText) return;
+    const services = getServices(this);
+    const ownedCount = services.progressionManager.getOwnedDeckIds().length;
+    this.deckCounterText.setText(languageManager.getText('SHOP_DECKS_OWNED_COUNTER', { owned: ownedCount, total: DECK_SETUP_IDS.length }));
   }
 
   private renderDeckRow(deckId: DeckSetupId, textOffsetX: number, buttonOffsetX: number, y: number): void {
@@ -433,14 +583,10 @@ export class ShopScene extends Phaser.Scene {
     });
     this.tabContainer.add(statusText);
 
-    const button = this.add.rectangle(buttonX, y, 150, 34, 0x238636).setInteractive({ useHandCursor: true });
-    const buttonText = this.add.text(buttonX, y, '', { fontSize: '12px', fontFamily: 'Arial, sans-serif' }).setOrigin(0.5);
-    this.tabContainer.add(button);
-    this.tabContainer.add(buttonText);
+    const actionButton = this.createActionButton(buttonX, y, '', () => this.attemptPurchaseDeck(deckId, actionButton.text));
+    this.tabContainer.add(actionButton.container);
 
-    button.on('pointerup', () => this.attemptPurchaseDeck(deckId, buttonText));
-
-    this.deckRowRefs.set(deckId, { statusText, button, buttonText });
+    this.deckRowRefs.set(deckId, { statusText, actionButton });
     this.refreshDeckRow(deckId);
   }
 
@@ -467,14 +613,16 @@ export class ShopScene extends Phaser.Scene {
     const priceText = `$${definition.price.toLocaleString()}`;
 
     refs.statusText.setText(owned ? ownedLabel : priceText);
-    refs.buttonText.setText(owned ? ownedLabel : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText }));
-    refs.button.setFillStyle(owned ? 0x30363d : 0x238636);
+    refs.actionButton.text.setText(owned ? ownedLabel : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText }));
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, owned ? COLOR_OWNED : COLOR_BUY);
 
     if (owned) {
-      refs.button.disableInteractive();
+      refs.actionButton.hitZone.disableInteractive();
     } else {
-      refs.button.setInteractive({ useHandCursor: true });
+      refs.actionButton.hitZone.setInteractive({ useHandCursor: true });
     }
+
+    this.updateDeckCounter();
   }
 
   private flashError(buttonText: Phaser.GameObjects.Text): void {

@@ -47,6 +47,10 @@ export const TRANSLATIONS = {
     BANKER_OFFER_AMOUNT: '${amount}',
     BANKER_DEAL_BUTTON: 'DEAL',
     BANKER_NO_DEAL_BUTTON: 'NO DEAL',
+    BANKER_OFFER_COUNTDOWN_SINGULAR: "Banker's offer in {count} card",
+    BANKER_OFFER_COUNTDOWN_PLURAL: "Banker's offer in {count} cards",
+    BANKER_OFFER_READY: 'Banker offer ready!',
+    BANKER_OFFER_COUNTDOWN_ZERO: 'No more offers',
 
     // --- Evento de Mitad de Juego ---
     MIDGAME_SWAP_PROMPT: 'Want to swap your Secret Card for one of the remaining ones?',
@@ -63,6 +67,7 @@ export const TRANSLATIONS = {
     SHOP_NO_ACTIVE_SESSION: 'No active game.\nStart playing to access upgrades.',
     SHOP_UPGRADES_CAPTION: 'Consumables: applied to the CURRENT game and lost when it ends.',
     SHOP_DECKS_CAPTION: 'Collectible decks — permanent unlock for all your future games.',
+    SHOP_DECKS_OWNED_COUNTER: 'Owned {owned}/{total}',
     SHOP_UPGRADE_NOT_PURCHASED: 'Not purchased',
     SHOP_UPGRADE_ACTIVE_THIS_GAME: 'Active this game',
     SHOP_UPGRADE_LEVEL_1_ACTIVE: 'Level 1 active',
@@ -120,10 +125,19 @@ export const TRANSLATIONS = {
     TUTORIAL_STEP_5_BODY:
       'Turn your winnings into persistent coins for the Main Menu shop. Buy permanent upgrades like "Energy Shield" or "Master Negotiator" to grow stronger.',
     TUTORIAL_SHOP_UPGRADES_LABEL: '🛒 PERMANENT UPGRADES',
+    TUTORIAL_STEP_6_TITLE: '6. The 12-Hour Bonus',
+    TUTORIAL_STEP_6_BODY:
+      'Every 12 hours you get a free bonus: tap the Bonus icon on the HUD, pick a face-down card and instantly add coins to your balance. Miss the window and the cooldown resets — you\u2019ll have to wait a full 12 hours again.',
+    TUTORIAL_BONUS_CAPTION: 'Every 12 hours',
+    TUTORIAL_STEP_7_TITLE: '7. Shop: 10 Themed Decks',
+    TUTORIAL_STEP_7_BODY:
+      'The shop offers 10 collectible decks. Each one completely reskins the board, the cards and the Banker — and triggers a unique special effect when you reveal the top-value card (25,000 points).',
+    TUTORIAL_DECKS_CAPTION: '10 collectible decks',
+    TUTORIAL_DECKS_EFFECT_CAPTION: 'Special effect on the 25,000 card!',
 
     // --- Cambio de carta final --- //
     FINAL_CHANGE_SECRET_CARD: '👉 CLICK ON A FACE-DOWN CARD ON THE BOARD.',
-    FINAL_CHANGE_PREVIEW_SECRET_CARD: '⚡ PREVIUS SECRET CARD REVEALED ⚡',
+    FINAL_CHANGE_PREVIEW_SECRET_CARD: '⚡ PREVIOUS SECRET CARD REVEALED ⚡',
     FINAL_CHANGE_PREVIEW_SECRET_CARD_VALUE: 'Your discarded secret card contained:',
     FINAL_CHANGE_NEW_SECRET_CARD: 'Your new secret card is placed face down on the pedestal.',
     FINAL_CHANGE_FINAL_CARD: '🔄 FINAL CARD — Swap your Secret Card for it?',
@@ -134,7 +148,23 @@ export const TRANSLATIONS = {
     GAME_ABANDON_SUBTITLE_PENALIZATION: 'You will lose {amount} points from your balance for abandoning\n the match in progress.',
     GAME_ABANDON_SUBTITLE_GO: 'You will return to the main menu.',
     GAME_ABANDON_CANCEL: 'Cancel',
-    GAME_ABANDON_GO: 'Go to Menu'
+    GAME_ABANDON_GO: 'Go to Menu',
+
+    //Rewarded Ads
+    RESULT_AD_LOADING: 'loading ad...',
+    RESULT_AD_FAILED: 'The ad was not completed. Try again.',
+    RESULT_AD_UNAVAILABLE: 'Ads are not available at this time.',
+    RESULT_AD_BONUS: '¡BONUS!\n+${amount}',
+    RESULT_AD_ALREADY_CLAIMED: 'You have already claimed your bonus.',
+
+    // --- HUD (renglones de botones-ícono: Bono/Tienda/Salir arriba, Sonido/Pantalla Completa abajo) ---
+    HUD_BONUS: 'Bonus',
+    HUD_SHOP: 'Shop',
+    HUD_EXIT: 'Exit',
+    HUD_FULLSCREEN: 'Full Screen',
+    HUD_WINDOWED: 'Windowed',
+    HUD_SOUND_ON: 'Sound On',
+    HUD_SOUND_OFF: 'Sound Off',
   },
 
   es: {
@@ -164,6 +194,10 @@ export const TRANSLATIONS = {
     BANKER_OFFER_AMOUNT: '${amount}',
     BANKER_DEAL_BUTTON: 'TRATO',
     BANKER_NO_DEAL_BUTTON: 'NO TRATO',
+    BANKER_OFFER_COUNTDOWN_SINGULAR: 'Oferta del banquero en {count} carta',
+    BANKER_OFFER_COUNTDOWN_PLURAL: 'Oferta del banquero en {count} cartas',
+    BANKER_OFFER_READY: '¡Oferta del banquero lista!',
+    BANKER_OFFER_COUNTDOWN_ZERO: 'No hay más ofertas',
 
     // --- Evento de Mitad de Juego ---
     MIDGAME_SWAP_PROMPT: '¿Querés cambiar tu Carta Secreta por una de las restantes?',
@@ -180,6 +214,7 @@ export const TRANSLATIONS = {
     SHOP_NO_ACTIVE_SESSION: 'No hay una partida activa.\nEmpezá a jugar para acceder a las mejoras.',
     SHOP_UPGRADES_CAPTION: 'Consumibles: se aplican YA en la partida actual y se pierden al terminarla.',
     SHOP_DECKS_CAPTION: 'Mazos coleccionables — desbloqueo permanente para todas tus partidas.',
+    SHOP_DECKS_OWNED_COUNTER: 'Obtenidos {owned}/{total}',
     SHOP_UPGRADE_NOT_PURCHASED: 'No comprado',
     SHOP_UPGRADE_ACTIVE_THIS_GAME: 'Activo esta partida',
     SHOP_UPGRADE_LEVEL_1_ACTIVE: 'Nivel 1 activo',
@@ -237,6 +272,15 @@ export const TRANSLATIONS = {
     TUTORIAL_STEP_5_BODY:
       'Convierte tus ganancias en monedas persistentes para la tienda del Menú Principal. Compra mejoras permanentes como "Blindaje de energía" o "Negociador maestro" para volverte más fuerte.',
     TUTORIAL_SHOP_UPGRADES_LABEL: '🛒 MEJORAS PERMANENTES',
+    TUTORIAL_STEP_6_TITLE: '6. El Bono de 12 Horas',
+    TUTORIAL_STEP_6_BODY:
+      'Cada 12 horas tenés un bono gratuito disponible: tocá el ícono de Bono en el HUD, elegí una carta boca abajo y sumá monedas al instante a tu saldo. Si dejás vencer la ventana sin reclamarlo, el ciclo se reinicia y tenés que esperar otras 12 horas completas.',
+    TUTORIAL_BONUS_CAPTION: 'Cada 12 horas',
+    TUTORIAL_STEP_7_TITLE: '7. Tienda: 10 Mazos Temáticos',
+    TUTORIAL_STEP_7_BODY:
+      'La tienda ofrece 10 mazos coleccionables. Cada uno cambia por completo la estética del tablero, las cartas y el Banquero — y dispara un efecto especial único al revelar la carta de mayor valor (25.000 puntos).',
+    TUTORIAL_DECKS_CAPTION: '10 mazos coleccionables',
+    TUTORIAL_DECKS_EFFECT_CAPTION: '¡Efecto especial en la carta de 25.000!',
 
     // --- Cambio de carta final --- //
     FINAL_CHANGE_SECRET_CARD: '👉 HAZ CLIC EN UNA CARTA CERRADA DEL TABLERO',
@@ -251,7 +295,23 @@ export const TRANSLATIONS = {
     GAME_ABANDON_SUBTITLE_PENALIZATION: 'Perderás {amount} puntos de tu saldo por abandonar la partida en curso.',
     GAME_ABANDON_SUBTITLE_GO: 'Volverás al menú principal.',
     GAME_ABANDON_CANCEL: 'Cancelar',
-    GAME_ABANDON_GO: 'Ir al Menú'
+    GAME_ABANDON_GO: 'Ir al Menú',
+
+    // Flujo de Rewarded Ads
+    RESULT_AD_LOADING: 'cargando anuncio...',
+    RESULT_AD_FAILED: 'El anuncio no se completó. Intentá de nuevo.',
+    RESULT_AD_UNAVAILABLE: 'Los anuncios no están disponibles en este momento.',
+    RESULT_AD_BONUS: '¡BONO!\n+${amount}',
+    RESULT_AD_ALREADY_CLAIMED: 'Ya reclamaste tu bono.',
+
+    // --- HUD (renglones de botones-ícono: Bono/Tienda/Salir arriba, Sonido/Pantalla Completa abajo) ---
+    HUD_BONUS: 'Bono',
+    HUD_SHOP: 'Tienda',
+    HUD_EXIT: 'Salir',
+    HUD_FULLSCREEN: 'Completa',
+    HUD_WINDOWED: 'Ventana',
+    HUD_SOUND_ON: 'Sonido On',
+    HUD_SOUND_OFF: 'Sonido Off',
   }
   // Para agregar un idioma nuevo (ej. 'pt'): copiar un bloque completo de
   // arriba, traducir cada valor, y listo — SUPPORTED_LANGUAGES y

@@ -21,6 +21,20 @@ export class Banker {
     return cardsOpenedCount > 0 && cardsOpenedCount % Banker.OFFER_INTERVAL === 0;
   }
 
+  /**
+   * Cuántas cartas faltan por abrir para la PRÓXIMA oferta, a partir de
+   * `cardsOpenedCount` actual. 
+   */
+  cardsUntilNextOffer(cardsOpenedCount: number, totalBoardCards: number): number  {
+    const remaining = Banker.OFFER_INTERVAL - (cardsOpenedCount % Banker.OFFER_INTERVAL);
+    const nextCheckpoint = cardsOpenedCount + remaining;
+ 
+    if (nextCheckpoint >= totalBoardCards) {
+      return 0;
+    }
+    return remaining;
+  }
+
   makeOffer(closedCards: Card[], secretCard: Card, negotiatorBonusPercentage = 0): BankerOffer {
     this.offersGiven += 1;
     return {

@@ -18,6 +18,12 @@ import { ABANDON_PENALTY_AMOUNT, isGameAbandonGuardActive, deactivateGameAbandon
 
 // --- Composition Root: unica zona del proyecto donde se instancian concretos ---
 const crazyGamesService = new CrazyGamesService();
+// BUGFIX (SDK v3 "not initialized yet" / Uncaught GeneralError): dispara
+// SDK.init() lo antes posible. No hace falta esperar esta llamada acá —
+// reportGameplayStart()/showRewardedAd()/etc. esperan internamente esta
+// misma Promise antes de tocar `SDK.ad`/`SDK.game` (ver CrazyGamesService.ts).
+crazyGamesService.init();
+
 const progressionRepository = new LocalStorageProgressionRepository();
 const randomProvider = new CryptoRandomProvider();
 // ProgressionManager ahora también depende de IRandomProvider (baraja los
@@ -34,13 +40,27 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: '#0d1117',
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // BUGFIX (ads invisibles en pantalla completa): sin esto, el
+    // ScaleManager pone en fullscreen SOLO `#game-container` (su
+    // `parent` por default). El overlay de anuncios del SDK de
+    // CrazyGames (incluido el placeholder "Midgame ad appears here" en
+    // modo QA) se inyecta directo en `document.body`, como HERMANO de
+    // `#game-container`, no como hijo — y la Fullscreen API nativa solo
+    // renderiza el elemento fullscreen y sus descendientes. Resultado:
+    // en pantalla completa, el overlay queda técnicamente en el DOM
+    // pero visualmente invisible, así que ni el anuncio real ni el
+    // placeholder de QA se ven (aunque `showMidgameAd()` sí se resuelva
+    // con éxito del lado del SDK). Al apuntar el fullscreen al `<html>`
+    // entero, tanto `#game-container` como el overlay de CrazyGames
+    // (inyectado en `<body>`) quedan dentro del subárbol que SÍ se
+    // muestra.
+    fullscreenTarget: document.documentElement
   },
   scene: [BootScene, PreloadScene, MainMenuScene, HowToPlayScene, DeckSelectionScene, GameScene, UIScene, ShopScene, ResultScene]
 };
 
 const game = new Phaser.Game(config);
-(window as unknown as { __PHASER_GAME__?: Phaser.Game }).__PHASER_GAME__ = game;
 
 // AUDITORÍA DE AUDIO: AudioService requiere la instancia de Phaser.Game
 // (no de una Scene puntual) para poder vivir más allá del ciclo de vida

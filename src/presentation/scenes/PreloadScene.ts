@@ -59,6 +59,22 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('energy-bar-bg', `assets/ui/energy-bar/${activeSetup.energyBarBg}.png`);
     this.load.image('energy-bar-fill', `assets/ui/energy-bar/${activeSetup.energyBarFill}.png`);
     this.load.image('banker-portrait', `assets/ui/portrait/${activeSetup.portrait}.png`);
+
+    // Íconos del HUD (Tienda/Salir/Bono/Sonido/Pantalla Completa) — NO
+    // dependen del mazo activo, así que se cargan una sola vez y no
+    // pasan por removeTextureIfExists(): a diferencia de card-back/
+    // card-front/backdrop/etc., estos assets nunca cambian entre
+    // recargas de PreloadScene (selección de mazo), por lo que dejar la
+    // textura ya cacheada de una carga anterior es exactamente lo que
+    // queremos (evita una descarga de red redundante en cada partida).
+    this.load.image('hud-shop', 'assets/ui/hud/shop.png');
+    this.load.image('hud-exit', 'assets/ui/hud/exit.png');
+    this.load.image('hud-bonus', 'assets/ui/hud/bonus.png');
+    this.load.image('hud-fullscreen', 'assets/ui/hud/fullscreen.png');
+    this.load.image('hud-windows', 'assets/ui/hud/window.png');
+    this.load.image('hud-soundon', 'assets/ui/hud/soundon.png');
+    this.load.image('hud-soundoff', 'assets/ui/hud/soundoff.png');
+
     this.load.audio('music_gameplay','assets/audio/music/clasic_gameplay.mp3');
     this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');
     this.load.audio('sfx-offer', 'assets/audio/sfx/offer.mp3');

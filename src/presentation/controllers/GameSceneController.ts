@@ -287,6 +287,11 @@ export class GameSceneController {
           value: event.card.value
         });
         this.energyBar.setPercentage(event.energyRemaining);
+        // REQ (transparencia de mecánicas): mismo evento que ya actualiza
+        // la energía en cada carta abierta — se le suma el contador de
+        // turnos hasta la próxima oferta del Banquero, sin ningún evento
+        // nuevo ni disparo aparte.
+        this.energyBar.setBankerOfferCountdown(event.cardsUntilNextOffer);
         this.payoutBoard?.markValueRevealed(event.card.value);
         break;
 
@@ -300,6 +305,12 @@ export class GameSceneController {
         // muestra el panel de oferta del banquero.
         this.lockAllCards(true);
         this.payoutBoard?.pulseRemainingValues();
+         // REQ (transparencia de mecánicas): durante esta pausa de 1.8s el
+        // contador ya no tiene sentido mostrando "en 3 cartas" (el
+        // CardOpened previo ya reinició el ciclo para la PRÓXIMA oferta) —
+        // se reemplaza por un estado "lista" mientras el jugador espera a
+        // que aparezca el modal.
+        this.energyBar.setBankerOfferReady();
 
         this.scene.time.delayedCall(1800, () => {
           this.activeOfferPanel = new BankerOfferPanel(this.scene, event.offer, this.audioService);

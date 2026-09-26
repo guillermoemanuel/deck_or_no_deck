@@ -23,7 +23,8 @@ export class OpenCardUseCase {
     this.eventBus.emit({
       type: 'CardOpened',
       card: result.card,
-      energyRemaining: this.session.getEnergyPercentage()
+      energyRemaining: this.session.getEnergyPercentage(),
+      cardsUntilNextOffer: this.session.getCardsUntilNextBankerOffer()
     });
 
     if (this.session.getStatus() === 'lost') {

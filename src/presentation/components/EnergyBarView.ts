@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import languageManager from '../../shared/i18n/LanguageManager';
+import { TranslationKey } from '../../shared/i18n/LanguageData';
 
 /**
  * EnergyBarView: Barra de energía HUD.
@@ -22,6 +24,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
   private readonly bg: Phaser.GameObjects.Image;
   private readonly fill: Phaser.GameObjects.Image;
   private readonly labelText: Phaser.GameObjects.Text;
+  private readonly bankerOfferText: Phaser.GameObjects.Text;
   private readonly baseMaxWidth: number;
   private capacityMultiplier = 1;
   private criticalTween: Phaser.Tweens.Tween | null = null;
@@ -44,7 +47,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     // vigente ni el porcentaje de energía actual: el relleno simplemente
     // crece/decrece desde ese mismo centro compartido.
     this.bg = scene.add.image(0, 0, 'energy-bar-bg').setOrigin(0.5, 0.5);
-    this.fill = scene.add.image(5, 1, 'energy-bar-fill').setOrigin(0.5, 0.5);
+    this.fill = scene.add.image(0, 0, 'energy-bar-fill').setOrigin(0.5, 0.5);
     this.baseMaxWidth = this.fill.width;
 
     // Centrado sobre la barra (antes anclado a la izquierda en x=4, lo
@@ -58,7 +61,23 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
       })
       .setOrigin(0.5, 0.5);
 
-    this.add([this.bg, this.fill, this.labelText]);
+    // Justo debajo de la barra (labelText va arriba, en -24 — este va
+    // simétricamente abajo). Dorado en vez de cian: se lee como
+    // información secundaria/meta, no como el dato principal (energía)
+    // que ya domina el label de arriba — mismo criterio cromático que el
+    // resto de la UI "Casino de Lujo" del juego.
+    this.bankerOfferText = scene.add
+      .text(0, 24, '', {
+        fontSize: '12px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#ffd76a',
+        stroke: '#000000',
+        strokeThickness: 3
+      })
+      .setOrigin(0.5, 0.5);
+
+    this.add([this.bg, this.fill, this.labelText, this.bankerOfferText]);
     scene.add.existing(this);
 
     // Animación de "respiración": pulso continuo y sutil en bucle
@@ -172,5 +191,38 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     if (percentage > 50) return 0x2ecc71; // Verde esmeralda
     if (percentage > 20) return 0xf1c40f; // Ámbar dorado
     return 0xe74c3c; // Rojo carmesí crítico
+  }
+
+  /**
+   * REQ (transparencia de mecánicas): "Oferta del banquero en X cartas"
+   * (singular si X = 1). Se llama en cada `CardOpened` — ver
+   * GameSceneController.handleEvent() — con el valor ya calculado por el
+   * dominio (Banker.cardsUntilNextOffer(), vía GameSession), nunca
+   * recalculado ni hardcodeado acá: este componente solo sabe MOSTRAR el
+   * número, no de dónde sale.
+   */
+
+  // Extraer la lógica de selección de clave a un método privado o helper puro
+  private getCountdownKey(cardsRemaining: number): TranslationKey {
+    if (cardsRemaining <= 0) return 'BANKER_OFFER_COUNTDOWN_ZERO';
+    return cardsRemaining === 1 ? 'BANKER_OFFER_COUNTDOWN_SINGULAR' : 'BANKER_OFFER_COUNTDOWN_PLURAL';
+  }
+
+  setBankerOfferCountdown(cardsRemaining: number): void {
+    const key = this.getCountdownKey(cardsRemaining);
+    this.bankerOfferText.setText(languageManager.getText(key, { count: cardsRemaining }));
+  }
+
+
+  /**
+   * REQ (transparencia de mecánicas): estado "lista" — se muestra durante
+   * la pausa de 1.8s entre que se dispara 'BankerOfferMade' y el modal de
+   * oferta realmente aparece (ver GameSceneController), en vez de saltar
+   * directo a "en 3 cartas" (que ya corresponde al PRÓXIMO ciclo, no
+   * tiene sentido mostrarlo mientras la oferta actual está a punto de
+   * aparecer).
+   */
+  setBankerOfferReady(): void {
+    this.bankerOfferText.setText(languageManager.getText('BANKER_OFFER_READY'));
   }
 }

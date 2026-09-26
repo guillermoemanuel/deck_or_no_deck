@@ -6,10 +6,8 @@ import { ParticleManager } from '../components/ParticleManager';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import {
-  CardPositionSource,
-  getGameObjectGlobalPosition
-} from '../effects/deck-celebrations/DeckCelebrationEffect';
+import { CardPositionSource, getGameObjectGlobalPosition } from '../effects/deck-celebrations/DeckCelebrationEffect';
+import languageManager from '../../shared/i18n/LanguageManager';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts — mismos valores hex, para que la pantalla final se
@@ -243,9 +241,9 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     if (data.hasReviveUpgrade === true) {
       this.createActionButton(width / 2, height / 2 - 5, 'RESULT_REVIVE_BUTTON', COLOR_GOLD, COLOR_GOLD_DIM, async () => {
         if (!data.onRevive) return;
-        this.statusText.setText('loading ad...');
+        this.statusText.setText(languageManager.getText('RESULT_AD_LOADING'));
         await data.onRevive();
-        this.statusText.setText('The ad was not completed. Try again.');
+        this.statusText.setText(languageManager.getText('RESULT_AD_FAILED'));
       });
     }
 
@@ -261,11 +259,11 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   private async handleMultiply(multiplier: RewardMultiplier): Promise<void> {
     if (!this.multiplyUseCase || this.multiplyUseCase.isClaimed()) return;
 
-    this.statusText.setText('loading ad...');
+    this.statusText.setText(languageManager.getText('RESULT_AD_LOADING'));
     const result = await this.multiplyUseCase.execute(multiplier);
 
     if (result.success) {
-      this.statusText.setText(`¡BONUS!\n+$${result.bonusAwarded.toLocaleString()}`);
+      this.statusText.setText(languageManager.getText('RESULT_AD_BONUS', { amount: result.bonusAwarded.toLocaleString() }));
       this.particleManager.emitVictoryBurst(this.cameras.main.centerX, this.cameras.main.centerY - 50);
       this.disableMultiplyButtons();
     } else {
@@ -276,11 +274,11 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   private errorMessageFor(reason: 'ad_failed' | 'sdk_unavailable' | 'already_claimed'): string {
     switch (reason) {
       case 'ad_failed':
-        return 'The ad was not completed. Try again.';
+        return  languageManager.getText('RESULT_AD_FAILED');
       case 'sdk_unavailable':
-        return 'Ads are not available at this time.';
+        return languageManager.getText('RESULT_AD_UNAVAILABLE');
       case 'already_claimed':
-        return 'You have already claimed your bonus.';
+        return languageManager.getText('RESULT_AD_ALREADY_CLAIMED');
     }
   }
 
@@ -296,32 +294,81 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     });
   }
 
+  /**
+   * "Jugar de nuevo": dispara el Midgame Ad (interstitial) de CrazyGames
+   * ANTES de reiniciar GameScene — este es uno de los dos puntos de
+   * transición entre partidas que exige la política de monetización de
+   * CrazyGames (ver `runMidgameAdThen`, que documenta el contrato de
+   * "garantía de navegación" completo).
+   */
   private restartGame(): void {
-    this.scene.stop('ResultScene');
-    this.scene.get('GameScene')?.scene.restart();
+    void this.runMidgameAdThen(() => {
+      this.scene.stop('ResultScene');
+      this.scene.get('GameScene')?.scene.restart();
+    });
   }
 
   /**
    * Botón "Ir al Menú" (REQ): NO limpia la caché ni elimina los datos del jugador almacenados en localStorage.
+   *
+   * También dispara el Midgame Ad ANTES de transicionar a MainMenuScene
+   * (segundo punto de transición entre partidas exigido por CrazyGames).
    */
   private exitToMainMenu(): void {
     // REQ: Redirigir al usuario a MainMenuScene SIN limpiar la caché.
     // Se elimina this.services.progressionManager.resetAllProgress();
+    void this.runMidgameAdThen(() => {
+      // BUGFIX (bug_fix_audio_lifecycle) — requisito (b): se invoca el
+      // método de detención GLOBAL del servicio de audio ANTES de la
+      // transición de escena. A diferencia de la versión anterior
+      // (`this.audioManager.stopMusic(0)` sobre una instancia local que
+      // nunca había reproducido nada), `this.audioService` es la MISMA
+      // instancia que GameScene usó para arrancar la música — por lo tanto
+      // esto SÍ la detiene de verdad, y con `stopAll` de paso se limpia
+      // cualquier efecto de sonido que pudiera seguir sonando.
+      this.audioService.stopAll(0);
 
-    // BUGFIX (bug_fix_audio_lifecycle) — requisito (b): se invoca el
-    // método de detención GLOBAL del servicio de audio ANTES de la
-    // transición de escena. A diferencia de la versión anterior
-    // (`this.audioManager.stopMusic(0)` sobre una instancia local que
-    // nunca había reproducido nada), `this.audioService` es la MISMA
-    // instancia que GameScene usó para arrancar la música — por lo tanto
-    // esto SÍ la detiene de verdad, y con `stopAll` de paso se limpia
-    // cualquier efecto de sonido que pudiera seguir sonando.
-    this.audioService.stopAll(0);
+      this.scene.stop('ResultScene');
+      this.scene.stop('UIScene');
+      this.scene.stop('GameScene');
+      this.scene.start('MainMenuScene');
+    });
+  }
 
-    this.scene.stop('ResultScene');
-    this.scene.stop('UIScene');
-    this.scene.stop('GameScene');
-    this.scene.start('MainMenuScene');
+  /**
+   * Punto único de integración del Midgame Ad (CrazyGames SDK v3), usado
+   * por AMBAS transiciones entre partidas ("Jugar de nuevo" e "Ir al
+   * Menú"). Encapsula el contrato de "Flow Safety" que exige la política
+   * de monetización/retención de CrazyGames:
+   *
+   * 1. Pausa el sonido de Phaser (`this.sound.pauseAll()`) mientras el
+   *    anuncio está en pantalla, para no superponer música/SFX del juego
+   *    con el audio del anuncio.
+   * 2. Espera `showMidgameAd()` (async/await) — que ya internamente
+   *    resuelve siempre (nunca rechaza) sea cual sea el resultado real:
+   *    reproducido con éxito, fallido, omitido o bloqueado por un
+   *    AdBlocker (ver CrazyGamesService.requestAd()).
+   * 3. Reanuda el audio (`this.sound.resumeAll()`) en el bloque `finally`,
+   *    es decir SIEMPRE, incluso si `showMidgameAd()` lanzara una
+   *    excepción inesperada.
+   * 4. Ejecuta `onComplete()` (que es quien finalmente llama a
+   *    `scene.start()`/`scene.restart()`) también en el `finally` — así
+   *    la navegación queda garantizada pase lo que pase con el anuncio,
+   *    sin congelar jamás la pantalla de resultado.
+   */
+  private async runMidgameAdThen(onComplete: () => void): Promise<void> {
+    this.sound.pauseAll();
+    try {
+      // No se inspecciona el AdResult: al usuario le llega la misma
+      // transición ya sea que el anuncio se haya mostrado, fallado,
+      // saltado o bloqueado por un AdBlocker.
+      await this.services.crazyGamesService.showMidgameAd();
+    } catch (error) {
+      console.warn('[ResultScene] showMidgameAd() rechazó inesperadamente — se continúa igual.', error);
+    } finally {
+      this.sound.resumeAll();
+      onComplete();
+    }
   }
 
   /**

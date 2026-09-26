@@ -109,7 +109,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     this.audioService = services.audioService;
     const { width, height } = this.cameras.main;
 
-    //backgroud
+    //background
     const backdrop = this.add.image(width / 2, height / 2, 'backdrop');
     backdrop.setDisplaySize(width, height).setAlpha(0.68).setDepth(-10);
     this.add.rectangle(width / 2, height / 2, width, height, 0x061018, 0.34).setDepth(-9);
@@ -117,7 +117,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     //Energy Bar
     const energyBar = new EnergyBarView(this, 490, 32);
     energyBar.setPercentage(50);
-
+    
     // Pedestal para la Carta Secreta en el lateral derecho
     const pedestalX = width - 155;
     const pedestalY = height / 2 + 25;
@@ -181,7 +181,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    this.selectionBanner = this.add.container(width / 2 - 80, 105, [bannerBg, bannerTitle, bannerSub]);
+    this.selectionBanner = this.add.container(width / 2, 105, [bannerBg, bannerTitle, bannerSub]);
 
     // Renderizar las 13 cartas repartidas para que el jugador elija
     const initialViews: CardView[] = [];
@@ -344,6 +344,14 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // tanto con el tablero (arranca en boardStartX ~282) como con la barra
     // de energía (ahora centrada arriba, ver bug_energy_bar_layout).
     const payoutBoard = new PayoutBoardView(this, 95, 175, CASE_VALUES);
+
+     // Contador inicial (REQ transparencia de mecánicas): recién ACÁ existe
+    // una GameSession real — antes de esto (fase de elegir la Carta
+    // Secreta) no hay "próxima oferta" de la que hablar todavía. Se
+    // deriva del dominio (nunca se hardcodea "3" acá) para que, si algún
+    // día cambia el intervalo de ofertas en Banker.ts, esto no quede
+    // desactualizado.
+    energyBar.setBankerOfferCountdown(session.getCardsUntilNextBankerOffer());
 
     // Iniciar el controlador con la carta secreta en el pedestal
     this.controller = new GameSceneController(

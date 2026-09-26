@@ -26,32 +26,32 @@ export interface SessionUpgradeDefinition {
 // EXACTAMENTE el doble del costo de "Duplicar" — se deriva del mismo
 // valor base en vez de hardcodearse por separado, para que la regla se
 // cumpla estructuralmente y no pueda desincronizarse en un futuro cambio.
-const DOUBLE_REWARD_COST = 600;
+const DOUBLE_REWARD_COST = 3000;
 
 export const SESSION_UPGRADE_CATALOG: readonly SessionUpgradeDefinition[] = [
   {
     id: 'energy_tank_1',
     name: 'UPGRADE_NAME_ENERGY_TANK_1',
     description: 'UPGRADE_DESC_ENERGY_TANK_1',
-    cost: 350
+    cost: 500
   },
   {
     id: 'energy_tank_2',
     name: 'UPGRADE_NAME_ENERGY_TANK_2',
     description: 'UPGRADE_DESC_ENERGY_TANK_2',
-    cost: 500
+    cost: 800
   },
   {
     id: 'negative_card_shield',
     name: 'UPGRADE_NAME_NEGATIVE_CARD_SHIELD',
     description: 'UPGRADE_DESC_NEGATIVE_CARD_SHIELD',
-    cost: 400
+    cost: 750
   },
   {
     id: 'negotiator',
     name: 'UPGRADE_NAME_NEGOTIATOR',
     description: 'UPGRADE_DESC_NEGOTIATOR',
-    cost: 550
+    cost: 1000
   },
   {
     id: 'double_reward',
@@ -69,13 +69,13 @@ export const SESSION_UPGRADE_CATALOG: readonly SessionUpgradeDefinition[] = [
     id: 'revive',
     name: 'UPGRADE_NAME_REVIVE',
     description: 'UPGRADE_DESC_REVIVE',
-    cost: 450
+    cost: 1250
   },
   {
     id: 'secret_swap_final',
     name: 'UPGRADE_NAME_SECRET_SWAP_FINAL',
     description: 'UPGRADE_DESC_SECRET_SWAP_FINAL',
-    cost: 700
+    cost: 1750
   }
 ] as const;
 

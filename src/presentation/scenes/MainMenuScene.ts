@@ -3,6 +3,7 @@ import { getServices } from '../GameServices';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { SupportedLanguage, TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
+import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 
 /** Paleta "Casino de Lujo" — reutiliza tonos ya presentes en CardView/ResultScene
  * (oro, cian, rojo rubí, verde esmeralda) para mantener cohesión visual con
@@ -59,6 +60,11 @@ export class MainMenuScene extends Phaser.Scene {
   private languageButtons = new Map<SupportedLanguage, { bg: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }>();
   private decorativeCards: DecorativeCard[] = [];
   private elapsedMs = 0;
+  // Controles persistentes de Sonido/Pantalla Completa (mismo componente
+  // que UIScene/GameScene, ver SoundFullscreenControls.ts) — así el
+  // jugador puede cambiar el tamaño de pantalla y silenciar/activar el
+  // audio también desde el menú principal, con coherencia total.
+  private hudControls!: SoundFullscreenControls;
 
   constructor() {
     super({ key: 'MainMenuScene' });
@@ -159,6 +165,12 @@ export class MainMenuScene extends Phaser.Scene {
     buttons.forEach(config => this.createCasinoButton(width / 2, config));
 
     this.renderLanguageSelector();
+
+    // Sonido/Pantalla Completa — esquina inferior derecha, igual que en
+    // GameScene (ver UIScene.ts). Se limpia en el SHUTDOWN ya existente
+    // de esta escena (el mismo que usa el selector de idioma).
+    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hudControls.destroy());
   }
 
   update(_time: number, delta: number): void {

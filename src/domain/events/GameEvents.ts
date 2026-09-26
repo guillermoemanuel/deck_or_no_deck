@@ -8,7 +8,13 @@ import { Card } from '../entities/Card';
  */
 export type GameEvent =
   | { type: 'SecretCardChosen'; secretCard: Card }
-  | { type: 'CardOpened'; card: Card; energyRemaining: number }
+  | {
+    type: 'CardOpened';
+    card: Card;
+    energyRemaining: number;
+    /** Contador de turnos (REQ transparencia de mecánicas): cartas que faltan abrir para la próxima oferta del Banquero. */
+    cardsUntilNextOffer: number;
+  }
   | { type: 'EnergyDepleted' }
   | { type: 'BankerOfferMade'; offer: BankerOffer }
   | { type: 'DealAccepted'; amount: number; secretCardValue: number }

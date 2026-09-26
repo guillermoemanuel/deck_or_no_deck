@@ -4,8 +4,11 @@ import { ProgressionEvent } from '../../domain/events/ProgressionEvents';
 import { ABANDON_PENALTY_AMOUNT, deactivateGameAbandonGuard, isGameAbandonGuardActive } from '../GameAbandonGuard';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
+import languageManager from '../../shared/i18n/LanguageManager';
 import { PeriodicBonusModal } from '../components/PeriodicBonusModal';
 import { PeriodicBonusStatus } from '../../domain/value-objects/PeriodicBonus';
+import { HudIconButton } from '../components/HudIconButton';
+import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / BankerOfferPanel.ts /
  * ResultScene.ts / SwapEventModal.ts — mismos valores hex, para que el
@@ -19,6 +22,20 @@ const COLOR_NEUTRAL_GLOW = 0xd8d8de;
 const COLOR_PANEL_BG = 0x0a0e17;
 const COLOR_WHITE_HEX = '#ffffff';
 const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
+
+/** Layout del renglón superior de botones-ícono del HUD (Bono / Tienda /
+ * Salir): mismo tamaño cuadrado, mismo espaciado, misma Y — anclado al
+ * borde derecho de la cámara. Se recalcula en cada resize (ver
+ * layoutTopRightRow()). Sonido/Pantalla Completa viven en su propio
+ * renglón, anclado a la esquina inferior derecha, resuelto por el
+ * componente compartido SoundFullscreenControls (ver más abajo) — así
+ * MainMenuScene/HowToPlayScene/DeckSelectionScene/UIScene comparten
+ * EXACTAMENTE el mismo comportamiento en vez de cuatro copias del mismo
+ * layout. */
+const HUD_BUTTON_SIZE = 48; // >= 44px táctil (REQ 2), ya lo fuerza HudIconButton igual
+const HUD_BUTTON_GAP = 14; // separación horizontal proporcional entre botones de un renglón
+const HUD_EDGE_MARGIN = 20; // distancia del borde del botón al borde de la cámara
+const HUD_TOP_ROW_Y = HUD_EDGE_MARGIN + HUD_BUTTON_SIZE / 2; // Container = origen central
 
 /**
  * Escena superpuesta (launch, no start) para HUD que no debe reiniciarse
@@ -34,8 +51,33 @@ export class UIScene extends Phaser.Scene {
   private unsubscribe: (() => void) | null = null;
   private exitModal: Phaser.GameObjects.Container | null = null;
   private bonusModal: Phaser.GameObjects.Container | null = null;
-  private bonusButtonText!: Phaser.GameObjects.Text;
   private bonusRefreshTimer: Phaser.Time.TimerEvent | null = null;
+
+  // Botones-ícono del renglón superior (Bono / Tienda / Salir) — se
+  // necesitan guardados como referencias, no solo creados al vuelo, para
+  // poder reposicionarlos en cada resize del ScaleManager
+  // (layoutTopRightRow()) y para poder destruirlos explícitamente en el
+  // shutdown de la escena.
+  private tiendaButton!: HudIconButton;
+  private salirButton!: HudIconButton;
+  private bonusButton!: HudIconButton;
+  // Renglón inferior (Sonido / Pantalla Completa) — componente
+  // compartido con MainMenuScene/HowToPlayScene/DeckSelectionScene, ver
+  // SoundFullscreenControls.ts.
+  private hudControls!: SoundFullscreenControls;
+
+  // Bound una sola vez en create() para poder hacer `off()` con la MISMA
+  // referencia en shutdown() — pasar una arrow function nueva a `off()`
+  // no desengancharía nada (ver requisito de limpieza de listeners).
+  private readonly handleScaleResize = (gameSize: Phaser.Structs.Size): void => {
+    this.layoutTopRightRow(gameSize.width);
+  };
+  // Desuscripción de LanguageManager (ver create()/shutdown()) — mismo
+  // motivo/patrón que `unsubscribe` (ProgressionManager) más abajo: se
+  // guarda la función de desuscripción, no un booleano ni una referencia
+  // de listener suelta, porque LanguageManager expone `onLanguageChanged`
+  // con ese contrato (ver LanguageManager.ts).
+  private unsubscribeLanguage: (() => void) | null = null;
 
   constructor() {
     super({ key: 'UIScene' });
@@ -50,28 +92,50 @@ export class UIScene extends Phaser.Scene {
       color: '#f1c40f'
     });
 
-    this.add
-      .text(this.cameras.main.width - 250, 20, '🛒 Tienda', { fontSize: '18px', color: '#ffffff' })
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.scene.launch('ShopScene'));
+    // Renglón superior — Bono / Tienda / Salir. Posición real (x,y) la
+    // resuelve layoutTopRightRow() más abajo; acá solo se instancian.
+    // Cada botón lleva su descripción como `label` (REQ: "agregar a
+    // cada botón la descripción a su lado").
+    this.tiendaButton = new HudIconButton(this, 0, 0, 'hud-shop', () => this.scene.launch('ShopScene'), {
+      size: HUD_BUTTON_SIZE,
+      label: languageManager.getText('HUD_SHOP')
+    });
 
-    // Botón "Salir / Menú" — posicionado en armonía con "Tienda": mismo
-    // borde derecho, justo debajo, mismo estilo de texto liviano del HUD
-    // (el modal de confirmación, no este botón disparador, es quien lleva
-    // el tratamiento visual completo "Casino de Lujo").
-    this.add
-      .text(this.cameras.main.width - 120, 20, '🚪 Salir', { fontSize: '18px', color: '#ffffff' })
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.showExitConfirmationModal());
+    // Botón "Salir / Menú" — mismo renglón que "Tienda" (el modal de
+    // confirmación, no este botón disparador, es quien lleva el
+    // tratamiento visual completo "Casino de Lujo").
+    this.salirButton = new HudIconButton(this, 0, 0, 'hud-exit', () => this.showExitConfirmationModal(), {
+      size: HUD_BUTTON_SIZE,
+      label: languageManager.getText('HUD_EXIT')
+    });
 
-    // Botón "Bono Periódico" — arriba de Tienda/Salir, mismo borde derecho.
-    // Su texto cambia solo (cuenta regresiva / disponible) vía
-    // refreshBonusButton(), sin bloquear el click: si está en 'locked' el
-    // handler simplemente no abre nada.
-    this.bonusButtonText = this.add
-      .text(this.cameras.main.width - 380, 20, '', { fontSize: '18px', color: '#ffffff' })
-      .setInteractive({ useHandCursor: true })
-      .on('pointerup', () => this.tryOpenBonusModal(services));
+    // Botón "Bono Periódico" — ícono fijo; su ESTADO (cuenta regresiva /
+    // disponible) se comunica con el `label` (countdown ó "¡Bonus!") +
+    // setIconAlpha(), no cambiando de textura. Ver refreshBonusButton().
+    // Si está 'locked', el propio botón queda deshabilitado
+    // (setEnabled(false)) — antes el click en 'locked' simplemente no
+    // hacía nada, ahora además no reacciona visualmente al hover,
+    // comunicando lo mismo con más claridad. El label arranca vacío:
+    // refreshBonusButton() lo completa apenas termina create().
+    this.bonusButton = new HudIconButton(this, 0, 0, 'hud-bonus', () => this.tryOpenBonusModal(services), {
+      size: HUD_BUTTON_SIZE,
+      label: ''
+    });
+
+    // Renglón inferior — Sonido / Pantalla Completa, esquina INFERIOR
+    // derecha: componente compartido (ver SoundFullscreenControls.ts),
+    // el MISMO que usan MainMenuScene/HowToPlayScene/DeckSelectionScene,
+    // para mantener coherencia total en todo el juego.
+    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+
+    // Posiciona el renglón superior por primera vez, y lo vuelve a
+    // calcular en cada resize del canvas/iframe (activar/desactivar
+    // fullscreen desde el wrapper de CrazyGames, redimensionar la
+    // ventana, etc.) — REQ 4: espaciado horizontal proporcional e igual
+    // altura Y dentro del renglón, adaptado al tamaño actual del canvas.
+    // El renglón inferior se recalcula solo, dentro de `hudControls`.
+    this.layoutTopRightRow(this.scale.gameSize.width);
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
     // REQ (bono periódico): si el ciclo anterior expiró sin reclamarse,
     // se resuelve UNA vez acá, al entrar a la partida — arranca un nuevo
     // ciclo de 12hs desde ahora. Ver ProgressionManager.resolvePeriodicBonusExpiry()
@@ -100,11 +164,43 @@ export class UIScene extends Phaser.Scene {
       }
     });
 
+    // REQ i18n: reactividad en tiempo real — Tienda/Salir se re-etiquetan
+    // de inmediato, y el botón de Bono se resuelve vía refreshBonusButton
+    // (que además reacomoda el renglón, ya que el ancho de cada etiqueta
+    // cambia de un idioma a otro). LanguageManager es un singleton de
+    // módulo (sobrevive a esta escena) — por eso se guarda y desengancha
+    // `unsubscribeLanguage` explícitamente en SHUTDOWN, igual que
+    // `handleScaleResize` con el ScaleManager más abajo.
+    this.unsubscribeLanguage = languageManager.onLanguageChanged(() => {
+      this.tiendaButton.setLabel(languageManager.getText('HUD_SHOP'));
+      this.salirButton.setLabel(languageManager.getText('HUD_EXIT'));
+      this.refreshBonusButton(services);
+    });
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.unsubscribe?.();
       this.unsubscribe = null;
+      this.unsubscribeLanguage?.();
+      this.unsubscribeLanguage = null;
       this.bonusRefreshTimer?.destroy();
       this.bonusRefreshTimer = null;
+      // Limpieza de listeners del ScaleManager (REQ): a diferencia de los
+      // listeners de `this.events`/`this.tweens`, los de `this.scale`
+      // NO se destruyen solos con la escena — el ScaleManager vive a
+      // nivel Game, así que un `on()` sin su `off()` acá quedaría
+      // apilando callbacks de una UIScene ya destruida en cada
+      // reingreso a partida, filtrando memoria y disparando lógica
+      // sobre GameObjects ya inexistentes.
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
+      // REQ 2/técnico: limpieza explícita de los botones-ícono del HUD
+      // (y sus listeners pointerover/pointerout/pointerdown internos, ver
+      // HudIconButton.destroy()) al apagar la escena.
+      this.tiendaButton.destroy();
+      this.salirButton.destroy();
+      this.bonusButton.destroy();
+      // Sonido/Pantalla Completa + sus propios listeners del ScaleManager
+      // (ver SoundFullscreenControls.destroy()).
+      this.hudControls.destroy();
       // Red de seguridad: si esta escena se cierra por cualquier vía
       // mientras el modal seguía abierto, GameScene no debe quedar
       // congelada para siempre (scene.pause() sin su scene.resume()).
@@ -115,24 +211,70 @@ export class UIScene extends Phaser.Scene {
       }
     });
   }
+
   /**
-   * Actualiza el texto del botón "Bono" según el estado vigente:
-   * cuenta regresiva mientras está 'locked', invitación pulsante cuando
-   * está 'available'. ('expired' no debería observarse acá — se resuelve
-   * en el mismo instante en que se detecta, ver resolvePeriodicBonusExpiry()
-   * llamado justo antes de cada refresh — pero se contempla igual por las
-   * dudas de una carrera entre el timer de 30s y el reloj real).
+   * Recalcula la posición del renglón superior de HUD (Bono / Tienda /
+   * Salir), anclado al borde derecho de la cámara — sin tocar el
+   * renglón inferior de Sonido/Pantalla Completa (resuelto aparte por
+   * SoundFullscreenControls, ver `hudControls`). Coloca cada botón de
+   * derecha a izquierda usando su `getTotalWidth()` real (ícono +
+   * descripción), así ningún botón se superpone con el anterior sin
+   * importar cuánto mida su texto en ese momento (countdown de Bono,
+   * p. ej.). Se llama una vez al crear la escena, en cada evento
+   * `resize` del ScaleManager, y de nuevo cada vez que cambia el texto
+   * de algún botón de este renglón (REQ 1 y REQ 4).
+   */
+  private layoutTopRightRow(width: number): void {
+    let rightEdge = width - HUD_EDGE_MARGIN;
+    rightEdge = this.placeIconRightToLeft(this.salirButton, rightEdge, HUD_TOP_ROW_Y);
+    rightEdge = this.placeIconRightToLeft(this.tiendaButton, rightEdge, HUD_TOP_ROW_Y);
+    this.placeIconRightToLeft(this.bonusButton, rightEdge, HUD_TOP_ROW_Y);
+  }
+
+  /**
+   * Igual criterio que layoutTopRightRow() (derecha a izquierda, según
+   * `getTotalWidth()` real de cada botón) — la implementación para
+   * "Sonido"/"Pantalla Completa" vive ahora en el componente compartido
+   * SoundFullscreenControls, no acá.
+   */
+  private placeIconRightToLeft(button: HudIconButton, rightEdge: number, y: number): number {
+    const iconCenterX = rightEdge - HUD_BUTTON_SIZE / 2;
+    button.setPosition(iconCenterX, y);
+    return rightEdge - button.getTotalWidth() - HUD_BUTTON_GAP;
+  }
+
+  /**
+   * Actualiza el estado visual del botón "Bono" (el ícono bonus.png es
+   * fijo, ver REQ 3): mientras está 'locked' muestra countdown + ícono
+   * atenuado + botón deshabilitado; al pasar a 'available' muestra
+   * "¡Bonus!" + ícono a color pleno + botón habilitado. Reacomoda el
+   * renglón superior porque el countdown cambia de ancho en cada
+   * refresh. ('expired' no debería observarse acá — se resuelve en el
+   * mismo instante en que se detecta, ver resolvePeriodicBonusExpiry()
+   * llamado justo antes de cada refresh — pero se contempla igual por
+   * las dudas de una carrera entre el timer de 30s y el reloj real).
    */
   private refreshBonusButton(services: ReturnType<typeof getServices>): void {
     const status: PeriodicBonusStatus = services.progressionManager.getPeriodicBonusStatus();
     if (status.state === 'available') {
-      this.bonusButtonText.setText('🎁 ¡Bonus!');
-      this.bonusButtonText.setColor('#ffd76a');
+      // REQ i18n: reemplaza el literal '¡Bonus!' — HUD_BONUS ("Bono"/
+      // "Bonus") es la clave más cercana del diccionario centralizado
+      // para el estado "disponible" de este botón; el estado 'locked'
+      // sigue mostrando el countdown formateado (no es un string de UI
+      // traducible, son minutos/horas calculados en runtime, ver
+      // formatBonusCountdown()).
+      this.bonusButton.setLabel(languageManager.getText('HUD_BONUS'));
+      this.bonusButton.setLabelColor(COLOR_GOLD_HEX);
+      this.bonusButton.setIconAlpha(1);
+      this.bonusButton.setEnabled(true);
     } else {
       const remainingMs = Math.max(0, status.availableAt - Date.now());
-      this.bonusButtonText.setText(`🎁 ${this.formatBonusCountdown(remainingMs)}`);
-      this.bonusButtonText.setColor('#8b949e');
+      this.bonusButton.setLabel(this.formatBonusCountdown(remainingMs));
+      this.bonusButton.setLabelColor('#8b949e');
+      this.bonusButton.setIconAlpha(0.55);
+      this.bonusButton.setEnabled(false);
     }
+    this.layoutTopRightRow(this.scale.gameSize.width);
   }
   private formatBonusCountdown(ms: number): string {
     const totalMinutes = Math.ceil(ms / 60000);
@@ -142,10 +284,10 @@ export class UIScene extends Phaser.Scene {
   }
   /**
    * Abre el modal del bono SOLO si el estado vigente es 'available' — si
-   * el jugador clickea mientras está 'locked', no pasa nada (el propio
-   * texto del botón ya le muestra el countdown, no hace falta feedback
-   * adicional). Misma exclusión mutua con el modal de salida, y mismo
-   * patrón de pausar GameScene mientras decide, que showExitConfirmationModal().
+   * el jugador clickea mientras está 'locked' no pasa nada (además, el
+   * botón ya está deshabilitado en ese estado, ver refreshBonusButton()).
+   * Misma exclusión mutua con el modal de salida, y mismo patrón de
+   * pausar GameScene mientras decide, que showExitConfirmationModal().
    */
   private tryOpenBonusModal(services: ReturnType<typeof getServices>): void {
     if (this.exitModal || this.bonusModal) return;
@@ -352,4 +494,3 @@ export class UIScene extends Phaser.Scene {
     return container;
   }
 }
-

@@ -231,6 +231,11 @@ export class GameSession {
     return this.cardsOpenedCount;
   }
 
+  /** Cartas que faltan abrir hasta la próxima oferta del Banquero — ver Banker.cardsUntilNextOffer(). */
+  getCardsUntilNextBankerOffer(): number  {
+    return this.banker.cardsUntilNextOffer(this.cardsOpenedCount, this.deckManager.getBoardCardsCount());
+  }
+
   getClosedCards(): Card[] {
     return this.deckManager.getClosedCards();
   }
