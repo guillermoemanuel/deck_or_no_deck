@@ -94,6 +94,22 @@ export class PurchaseSessionUpgradeUseCase {
         break;
       case 'secret_swap_final':
         upgrades.grantSecretSwapFinal();
+        // BUGFIX (secret_swap_final comprado en la última jugada): la
+        // disponibilidad de este intercambio normalmente se anuncia una
+        // única vez, justo al abrir la anteúltima carta (ver
+        // OpenCardUseCase.execute() → evento 'FinalCardSwapAvailable').
+        // Si en ese momento el jugador todavía no tenía el upgrade, ese
+        // aviso nunca se disparaba — y como nada más vuelve a chequear
+        // la condición, comprarlo DESPUÉS, ya con una única carta
+        // cerrada restante, no ofrecía la opción de intercambio hasta
+        // la partida siguiente. Se repite acá el mismo chequeo
+        // (session.canSwapFinalSecretCard()) inmediatamente después de
+        // otorgar el upgrade: si el tablero YA está en esa última
+        // jugada, se anuncia la disponibilidad ahora mismo, en vez de
+        // esperar a un próximo 'openCard' que no va a volver a llegar.
+        if (this.session.canSwapFinalSecretCard()) {
+          this.eventBus.emit({ type: 'FinalCardSwapAvailable' });
+        }
         break;
       case 'negative_card_shield':
         upgrades.grantNegativeCardShield();

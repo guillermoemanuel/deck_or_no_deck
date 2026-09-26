@@ -1,6 +1,7 @@
 import { defineConfig, UserConfig } from 'vite';
 
 const config: UserConfig = {
+  base: './',
   build: {
     // esbuild (el minificador que Vite ya trae incluido, no requiere
     // instalar nada) en vez de terser: terser saca un puñado de KB

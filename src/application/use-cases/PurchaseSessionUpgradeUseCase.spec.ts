@@ -1,5 +1,5 @@
 import { PurchaseSessionUpgradeUseCase } from './PurchaseSessionUpgradeUseCase';
-import { GameSession, DefaultEnergyDrainRule } from '../../domain/entities/GameSession';
+import { GameSession, DefaultEnergyDrainRule, EnergyDrainRule } from '../../domain/entities/GameSession';
 import { Banker } from '../../domain/services/Banker';
 import { OfferCalculator } from '../../domain/services/OfferCalculator';
 import { Card } from '../../domain/entities/Card';
@@ -16,6 +16,27 @@ function buildSession(): GameSession {
   const boardCards = STANDARD_VALUES.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', STANDARD_VALUES[12], true);
   return new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new DefaultEnergyDrainRule());
+}
+
+class NoDrainRule implements EnergyDrainRule {
+  drainFor(): number {
+    return 0;
+  }
+}
+
+/** Mismo helper que SwapFinalSecretCardUseCase.spec.ts — deja la sesión en la ÚLTIMA jugada (una única carta cerrada restante), sin el upgrade todavía. */
+function buildSessionWithOneCardLeft(): GameSession {
+  const boardCards = STANDARD_VALUES.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
+  const secretCard = Card.create('card_secret', STANDARD_VALUES[12], true);
+  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new NoDrainRule());
+
+  for (let i = 0; i < 11; i++) {
+    session.openCard(`card_${i}`);
+    if (session.getStatus() === 'awaiting_offer_response') {
+      session.rejectDeal();
+    }
+  }
+  return session;
 }
 
 function buildContext(seedCoins = 100000) {
@@ -136,6 +157,36 @@ describe('PurchaseSessionUpgradeUseCase', () => {
 
       expect(result).toEqual({ success: true });
       expect(session.getSessionUpgrades().hasSecretSwapFinal()).toBe(true);
+    });
+
+    it('does NOT emit FinalCardSwapAvailable when the board is not on its last card', () => {
+      const { eventBus, useCase } = buildContext();
+      const events = collectEvents(eventBus);
+
+      useCase.execute('secret_swap_final');
+
+      expect(events).toHaveLength(0);
+    });
+
+    // BUGFIX reportado: comprar este upgrade estando YA en la última
+    // jugada (una única carta cerrada restante) no ofrecía la opción de
+    // intercambio hasta la partida siguiente, porque esa disponibilidad
+    // normalmente se anuncia una única vez, al abrir la anteúltima carta
+    // (ver OpenCardUseCase.execute()) — momento que para esta compra ya
+    // pasó. Ver PurchaseSessionUpgradeUseCase.applyEffect().
+    it('emits FinalCardSwapAvailable immediately when purchased with exactly 1 closed card left', () => {
+      const session = buildSessionWithOneCardLeft();
+      const repository = new FakeProgressionRepository();
+      repository.seedCoins(100000);
+      const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+      const eventBus = new SimpleEventEmitter<GameEvent>();
+      const events = collectEvents(eventBus);
+      const useCase = new PurchaseSessionUpgradeUseCase(session, progressionManager, eventBus);
+
+      const result = useCase.execute('secret_swap_final');
+
+      expect(result).toEqual({ success: true });
+      expect(events).toContainEqual({ type: 'FinalCardSwapAvailable' });
     });
   });
 
