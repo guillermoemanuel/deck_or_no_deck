@@ -28,7 +28,12 @@ const PRESS_TWEEN_MS = 70;
  * botón vecino del mismo renglón. `LABEL_GAP` ahora es el espacio
  * VERTICAL entre el borde inferior del panel y el texto. */
 const LABEL_GAP = 6;
-const LABEL_FONT_SIZE = '13px';
+// QA de legibilidad (requisitos de CrazyGames: iframes chicos de hasta
+// 800x450) — 13px sobre el lienzo virtual de 1280x720 terminaba
+// renderizando ~8px reales en ese tamaño, por debajo de lo cómodo. Sigue
+// la misma política de piso que el resto del proyecto (13px -> 16px, ver
+// el resto de fontSize del código): ~10px reales en el peor caso.
+const LABEL_FONT_SIZE = '16px';
 const LABEL_FONT_FAMILY = 'Arial';
 const LABEL_COLOR = '#ffffff';
 /** Ancho máximo del texto antes de partir en una segunda línea — evita

@@ -15,6 +15,7 @@ import { ShopScene } from './presentation/scenes/ShopScene';
 import { ResultScene } from './presentation/scenes/ResultScene';
 import { GameServices } from './presentation/GameServices';
 import { ABANDON_PENALTY_AMOUNT, isGameAbandonGuardActive, deactivateGameAbandonGuard } from './presentation/GameAbandonGuard';
+import languageManager from './shared/i18n/LanguageManager';
 
 // --- Composition Root: unica zona del proyecto donde se instancian concretos ---
 const crazyGamesService = new CrazyGamesService();
@@ -24,13 +25,27 @@ const crazyGamesService = new CrazyGamesService();
 // misma Promise antes de tocar `SDK.ad`/`SDK.game` (ver CrazyGamesService.ts).
 crazyGamesService.init();
 
+// Auto-detección de idioma (requisito CrazyGames: usar el locale que
+// reporta el SDK, con fallback a inglés). `getUserLocale()` ya espera
+// internamente a que `init()` termine y resuelve `null` sin lanzar si el
+// SDK no está disponible (dev local, otras plataformas, etc.) — acá solo
+// hace falta pasarle lo que devuelva a LanguageManager, que decide en
+// aislamiento si corresponde aplicarlo (nunca pisa una elección o
+// detección previa — ver applyDetectedLocale()). No se espera esta
+// Promise: si resuelve después de que MainMenuScene ya dibujó su primer
+// frame en DEFAULT_LANGUAGE, el cambio se ve igual, en caliente, gracias
+// a LocalizedText/onLanguageChanged.
+void crazyGamesService.getUserLocale().then(locale => {
+  if (locale) {
+    languageManager.applyDetectedLocale(locale);
+  }
+});
+
 const progressionRepository = new LocalStorageProgressionRepository();
 const randomProvider = new CryptoRandomProvider();
 // ProgressionManager ahora también depende de IRandomProvider (baraja los
 // valores del bono periódico) — ver el comentario en su constructor.
 const progressionManager = new ProgressionManager(progressionRepository, randomProvider);
-
-crazyGamesService.reportGameplayStart();
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -80,7 +95,22 @@ const services: GameServices = {
 game.registry.set('services', services);
 
 window.addEventListener('beforeunload', () => {
-  crazyGamesService.reportGameplayStop();
+  // BUGFIX (gameplayStart/Stop mal ubicados): reportGameplayStart() ya
+  // NO se llama acá arriba al cargar el script — se movió al entrar a
+  // GameScene (ver create() en GameScene.ts), que es cuando el jugador
+  // realmente entra en un estado jugable. Ese mismo lugar ya se encarga
+  // del reportGameplayStop() simétrico en su SHUTDOWN (reinicio de
+  // partida o salida al menú) — PERO ninguno de esos dos casos cubre
+  // cerrar la pestaña/recargar a mitad de una partida, porque el
+  // SHUTDOWN de Phaser nunca llega a dispararse ahí (el navegador
+  // descarta la página entera antes). Esta es la red de seguridad para
+  // ESE caso puntual — solo se dispara si GameScene seguía activa en ese
+  // instante, para no mandar un Stop "huérfano" (sin su Start
+  // correspondiente) si el jugador cierra la pestaña estando en el menú,
+  // la tienda o el tutorial.
+  if (game.scene.isActive('GameScene')) {
+    crazyGamesService.reportGameplayStop();
+  }
   // Sistema Anti-Cheat (abandono forzado): si el jugador cierra la
   // pestaña, recarga o navega fuera mientras `GameAbandonGuard` indica una
   // partida REALMENTE en curso (ver GameAbandonGuard.ts para el ciclo de

@@ -146,6 +146,88 @@ describe('LanguageManager', () => {
     });
   });
 
+  describe('applyDetectedLocale', () => {
+    it('applies the primary language subtag of a supported locale when nothing is stored yet', () => {
+      const languageManager = freshLanguageManager();
+      languageManager.applyDetectedLocale('es-AR');
+
+      expect(languageManager.getCurrentLanguage()).toBe('es');
+    });
+
+    it('persists the detected language, same storage key as a manual choice', () => {
+      const languageManager = freshLanguageManager();
+      languageManager.applyDetectedLocale('es-AR');
+
+      expect(fakeLocalStorage.getItem('speculation_game_language')).toBe('es');
+    });
+
+    it('emits onLanguageChanged when the detected language actually changes', () => {
+      const languageManager = freshLanguageManager();
+      const listener = jest.fn();
+      languageManager.onLanguageChanged(listener);
+
+      languageManager.applyDetectedLocale('es-AR');
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith({ language: 'es' });
+    });
+
+    it('does NOT emit onLanguageChanged when the detected locale matches the language already active (default "en")', () => {
+      const languageManager = freshLanguageManager();
+      const listener = jest.fn();
+      languageManager.onLanguageChanged(listener);
+
+      languageManager.applyDetectedLocale('en-US');
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(languageManager.getCurrentLanguage()).toBe('en');
+    });
+
+    it('falls back to English (no-op) for an unsupported locale, leaving DEFAULT_LANGUAGE active', () => {
+      const languageManager = freshLanguageManager();
+      languageManager.applyDetectedLocale('fr-FR');
+
+      expect(languageManager.getCurrentLanguage()).toBe('en');
+      expect(fakeLocalStorage.getItem('speculation_game_language')).toBeNull();
+    });
+
+    it('does NOT override a language the player already picked manually', () => {
+      const languageManager = freshLanguageManager();
+      languageManager.setLanguage('en'); // elección explícita del jugador (aunque coincida con el default)
+
+      languageManager.applyDetectedLocale('es-AR');
+
+      expect(languageManager.getCurrentLanguage()).toBe('en');
+    });
+
+    it('does NOT override a language restored from a previous session (already in localStorage)', () => {
+      fakeLocalStorage.setItem('speculation_game_language', 'es');
+      const languageManager = freshLanguageManager();
+
+      languageManager.applyDetectedLocale('en-US');
+
+      expect(languageManager.getCurrentLanguage()).toBe('es');
+    });
+
+    it('is idempotent on a second call once a language is already stored from a first detection', () => {
+      const languageManager = freshLanguageManager();
+      languageManager.applyDetectedLocale('es-AR');
+
+      const listener = jest.fn();
+      languageManager.onLanguageChanged(listener);
+      languageManager.applyDetectedLocale('en-US'); // ya hay algo guardado -> no-op
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(languageManager.getCurrentLanguage()).toBe('es');
+    });
+
+    it('does not crash on a locale with an underscore separator instead of a hyphen', () => {
+      const languageManager = freshLanguageManager();
+      expect(() => languageManager.applyDetectedLocale('es_AR')).not.toThrow();
+      expect(languageManager.getCurrentLanguage()).toBe('es');
+    });
+  });
+
   describe('getText', () => {
     it('returns the text in the current language', () => {
       const languageManager = freshLanguageManager();

@@ -370,11 +370,22 @@ export class UIScene extends Phaser.Scene {
       ? 'GAME_ABANDON_SUBTITLE_PENALIZATION'//`Perderás ${ABANDON_PENALTY_AMOUNT.toLocaleString()} puntos de tu saldo\npor abandonar la partida en curso.`
       : 'GAME_ABANDON_SUBTITLE_GO';
 
+    // QA de legibilidad (fontSize 14px -> 17px) destapó un bug previo:
+    // esta LocalizedText no tenía `wordWrap`, y GAME_ABANDON_SUBTITLE_
+    // PENALIZATION en español (sin el '\n' manual que sí tiene la
+    // variante en inglés) ya se salía del panel de 460px incluso antes
+    // de este cambio de tamaño — con la fuente más grande el desborde
+    // sería todavía peor. Se agrega wordWrap (ambos idiomas, sin
+    // depender de un '\n' a mano que pueda quedar desincronizado en una
+    // futura traducción) y se saca el '\n' del string en inglés más
+    // abajo, dejando que wordWrap reparta las líneas en los dos casos
+    // por igual.
     const bodyText = new LocalizedText(this, cx, cy - 30, bodyMessage, {
-      fontSize: '15px',
+      fontSize: '17px',
       fontFamily: FONT_FAMILY,
       color: willBePenalized ? '#ffb4c0' : '#cbd5e1',
-      align: 'center'
+      align: 'center',
+      wordWrap: { width: 400 }
     },
       {
         amount: ABANDON_PENALTY_AMOUNT.toLocaleString()

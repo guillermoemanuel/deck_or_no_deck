@@ -14,4 +14,13 @@ export interface ICrazyGamesService {
   showMidgameAd(): Promise<AdResult>;
   reportGameplayStart(): void;
   reportGameplayStop(): void;
+  /**
+   * Locale BCP-47 reportado por el SDK (ej. "es-AR", "en-US"), leído de
+   * `SDK.user.systemInfo.locale` — usado para auto-detectar el idioma del
+   * juego (ver LanguageManager.applyDetectedLocale()) en vez de arrancar
+   * siempre en un idioma fijo. Resuelve a `null` si el SDK no está
+   * disponible, todavía no terminó de inicializar, o no expone un locale
+   * (nunca lanza).
+   */
+  getUserLocale(): Promise<string | null>;
 }

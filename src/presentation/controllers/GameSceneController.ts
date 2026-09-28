@@ -119,12 +119,18 @@ export class GameSceneController {
     const cx = this.scene.cameras.main.centerX - 80;
     const cy = 110;
 
+    // QA de legibilidad (fontSize 14px -> 17px, ver LanguageManager/todo
+    // el resto del proyecto): a 480px este fondo ya quedaba MUY justo
+    // (~460px estimados) para el texto largo en mayúsculas de
+    // FINAL_CHANGE_SECRET_CARD en cualquiera de los 2 idiomas — se
+    // ensancha a 620px para dejar margen real y no arriesgar que el
+    // texto se corte contra el borde del banner.
     const bg = this.scene.add
-      .rectangle(0, 0, 480, 40, 0xffaa00, 0.95)
+      .rectangle(0, 0, 620, 40, 0xffaa00, 0.95)
       .setStrokeStyle(2, 0xffffff);
 
     const bannerText = new LocalizedText(this.scene, 0, 0, 'FINAL_CHANGE_SECRET_CARD',{
-        fontSize: '15px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#000000'
@@ -165,7 +171,7 @@ export class GameSceneController {
       .setOrigin(0.5);
 
     const descText = new LocalizedText(this.scene,0, -35, 'FINAL_CHANGE_PREVIEW_SECRET_CARD_VALUE', {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: FONT_FAMILY,
         color: '#cbd5e1'
       })
@@ -191,7 +197,7 @@ export class GameSceneController {
       .setOrigin(0.5);
 
     const subText = new LocalizedText(this.scene, 0, 75, 'FINAL_CHANGE_NEW_SECRET_CARD', {
-        fontSize: '13px',
+        fontSize: '16px',
         fontFamily: FONT_FAMILY,
         color: '#8b949e'
       })
@@ -561,7 +567,7 @@ export class GameSceneController {
       .setInteractive({ useHandCursor: true });
 
     const text = new LocalizedText(this.scene, 0, -12, 'FINAL_CHANGE_FINAL_CARD', {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#2ecc71'
@@ -569,7 +575,7 @@ export class GameSceneController {
       .setOrigin(0.5);
 
     const subText = new LocalizedText(this.scene, 0, 12, 'FINAL_CHANGE_UPGRATED', {
-        fontSize: '11px',
+        fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e'
       })

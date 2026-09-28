@@ -25,7 +25,7 @@ export class PayoutBoardView extends Phaser.GameObjects.Container {
     const rowWidth = 132;
 
     const title = new LocalizedText(scene, 0, -30, 'GAME_VALUES_TITLE', {
-      fontSize: '12px',
+      fontSize: '15px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
       color: '#8b949e',
@@ -43,7 +43,7 @@ export class PayoutBoardView extends Phaser.GameObjects.Container {
 
       const text = scene.add
         .text(0, rowY, `$${value.toLocaleString()}`, {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: '#e6edf3'

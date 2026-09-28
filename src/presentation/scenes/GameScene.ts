@@ -100,6 +100,22 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
 
   create(): void {
     const services = getServices(this);
+
+    // BUGFIX (gameplayStart/Stop mal ubicados): antes se llamaba
+    // reportGameplayStart() UNA sola vez, al cargar el script entero
+    // (ver main.ts), mucho antes de que existiera el menú, la selección
+    // de mazo o esta escena — CrazyGames documenta que este evento "debe
+    // dispararse cuando el jugador entra en un estado jugable, excluyendo
+    // menús y pasos de carga adicionales", y además lo usan para medir el
+    // tamaño de descarga inicial real. Acá, al entrar a GameScene (el
+    // jugador ya está eligiendo su carta secreta — eso es gameplay real,
+    // no un menú), es el punto correcto. El cierre simétrico
+    // (reportGameplayStop) está en el SHUTDOWN de más abajo — se dispara
+    // tanto al reiniciar una partida (ResultScene.restartGame() →
+    // scene.restart()) como al salir al menú (UIScene.exitToMainMenu()),
+    // cubriendo ambas transiciones sin tocar esas dos escenas.
+    services.crazyGamesService.reportGameplayStart();
+
     this.particleManager = new ParticleManager(this);
     // BUGFIX (bug_fix_audio_lifecycle): ya NO se crea `new AudioManager(this)`
     // por escena — se reutiliza la ÚNICA instancia de AudioService que vive
@@ -150,6 +166,11 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // lo cual no pasa en este juego.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.audioService.stopMusic(0);
+      // Cierre simétrico de reportGameplayStart() (ver arriba) — se
+      // dispara sin importar POR QUÉ se cierra esta escena (reinicio de
+      // partida o salida al menú), mismo criterio "red de seguridad de
+      // ciclo de vida" que ya se aplicaba acá para la música.
+      services.crazyGamesService.reportGameplayStop();
     });
   }
 
@@ -163,9 +184,14 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
   ): void {
     const { width } = this.cameras.main;
 
-    // Banner de instrucción inicial
+    // Banner de instrucción inicial — QA de legibilidad (fontSize del
+    // subtítulo 13px -> 16px): a 580px, "Selecciona una de las 13
+    // cartas para guardarlas en tu pedestal" (la variante más larga)
+    // quedaba con muy poco margen o directamente se salía del fondo.
+    // Se ensancha a 680px; sigue centrado y entra cómodo en el canvas de
+    // 1280 de ancho.
     const bannerBg = this.add
-      .rectangle(0, 0, 580, 52, 0x0a0f1d, 0.95)
+      .rectangle(0, 0, 680, 52, 0x0a0f1d, 0.95)
       .setStrokeStyle(2, 0xffaa00);
 
     const bannerTitle = new LocalizedText(this, 0, -10, 'SECRET_CARD_SELECTION_TITLE', {
@@ -176,7 +202,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     }).setOrigin(0.5);
 
     const bannerSub = new LocalizedText(this, 0, 12, 'SECRET_CARD_SELECTION_SUBTITLE', {
-      fontSize: '13px',
+      fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
       color: '#ffffff'
     }).setOrigin(0.5);
@@ -418,7 +444,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       .setStrokeStyle(1, 0xffd700, 0.3);
 
     new LocalizedText(this, x, y - 115, 'PEDESTAL_SECRET_CARD_LABEL', {
-      fontSize: '13px',
+      fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
       color: '#ffcc00',

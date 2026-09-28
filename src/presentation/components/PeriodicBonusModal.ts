@@ -72,7 +72,7 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
 
     const subtitleText = scene.add
       .text(0, -82, 'Elegí una carta — te llevás lo que tenga.', {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: FONT_FAMILY,
         color: '#cbd5e1'
       })
@@ -113,7 +113,14 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
 
     const valueText = scene.add
       .text(0, 0, `+$${value.toLocaleString()}`, {
-        fontSize: '14px',
+        // QA de legibilidad: se queda en 16px (no 17, como el resto de
+        // los textos "14px->17px" de este archivo) a propósito — la
+        // carta mide apenas 78px de ancho y "+$5.000" (el valor más alto
+        // del catálogo, ver PERIODIC_BONUS_VALUES) ya casi la llena a
+        // 17px; 16px sigue muy por encima del piso de legibilidad
+        // (10px reales @800x450) sin arriesgar que el número se salga
+        // del borde de la carta.
+        fontSize: '16px',
         fontFamily: FONT_FAMILY,
         fontStyle: 'bold',
         color: COLOR_GOLD_HEX,

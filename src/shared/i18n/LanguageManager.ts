@@ -60,6 +60,15 @@ class LanguageManager {
     return (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
   }
 
+  /** true si ya hay CUALQUIER idioma persistido — sin importar si llegó por una elección manual (el toggle de MainMenuScene) o por una detección automática previa (ver applyDetectedLocale). Una detección automática nunca debe pisar un estado que el jugador ya tiene funcionando. */
+  private hasStoredLanguage(): boolean {
+    try {
+      return window.localStorage.getItem(STORAGE_KEY) !== null;
+    } catch {
+      return false; // storage bloqueado: tratamos como "nada guardado todavía"
+    }
+  }
+
   /** Idioma activo en este momento. */
   getCurrentLanguage(): SupportedLanguage {
     return this.currentLanguage;
@@ -99,6 +108,65 @@ class LanguageManager {
     // caliente sin tener que recrearse.
     this.eventBus.emit({ language: this.currentLanguage });
     return true;
+  }
+
+  /**
+   * Auto-detección de idioma (requisito de CrazyGames: "the game should
+   * use the user's language based on locale info provided through the
+   * system info method in our SDK, and fallback to English").
+   *
+   * Recibe un locale BCP-47 crudo (ej. "es-AR", "en-US", tal como lo
+   * reporta `SDK.user.systemInfo.locale`) y, SOLO si el jugador todavía
+   * no tiene ningún idioma persistido en esta máquina, lo aplica como
+   * idioma inicial. Si ya hay algo guardado —sea porque tocó el toggle
+   * manual alguna vez, o porque una detección anterior ya corrió—, esta
+   * llamada es un no-op: una detección automática nunca debe pisar un
+   * estado que el jugador ya tiene.
+   *
+   * Si el subtag de idioma del locale no está soportado (ej. "fr-FR"),
+   * también es un no-op — el idioma activo ya es DEFAULT_LANGUAGE
+   * ('en'), que es exactamente el fallback a inglés que exige el
+   * requisito de arriba, sin necesitar código extra para lograrlo.
+   *
+   * DESACOPLAMIENTO: este método no sabe qué es CrazyGames ni de dónde
+   * viene el string — solo entiende "locale BCP-47 opcional". Mantiene
+   * la restricción arquitectónica #1 de esta clase (nunca conoce
+   * ICrazyGamesService); la orquestación real ("preguntale al SDK,
+   * después llamá acá") vive en el Composition Root — ver main.ts.
+   */
+  applyDetectedLocale(locale: string): void {
+    if (this.hasStoredLanguage()) {
+      return;
+    }
+
+    // BCP-47: el subtag de idioma es el primer segmento, separado por
+    // '-' o '_' ("es-AR" -> "es", "en_US" -> "en").
+    const languageSubtag = locale.split(/[-_]/)[0]?.toLowerCase();
+    if (!languageSubtag || !this.isSupportedLanguage(languageSubtag)) {
+      return;
+    }
+
+    // Persiste SIEMPRE que el subtag sea válido (incluso si coincide con
+    // el idioma ya activo) — así una próxima carga de página encuentra
+    // `hasStoredLanguage()` en true y no vuelve a pasar por acá. Pero el
+    // evento de cambio solo se emite si realmente HAY un cambio (mismo
+    // criterio de no-op que setLanguage()) — el caso más común en la
+    // práctica es un jugador angloparlante cuyo locale detectado ("en-US")
+    // coincide con DEFAULT_LANGUAGE, y ahí no tiene sentido notificar un
+    // "cambio" de idioma que no cambió nada.
+    const languageActuallyChanged = languageSubtag !== this.currentLanguage;
+    this.currentLanguage = languageSubtag;
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, languageSubtag);
+    } catch (error) {
+      console.warn('[LanguageManager] No se pudo persistir el idioma auto-detectado.', error);
+    }
+
+    if (languageActuallyChanged) {
+      console.info(`[LanguageManager] Idioma auto-detectado vía SDK: "${locale}" -> "${languageSubtag}".`);
+      this.eventBus.emit({ language: this.currentLanguage });
+    }
   }
 
   /**

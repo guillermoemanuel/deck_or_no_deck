@@ -25,8 +25,30 @@ interface TutorialSlide {
   readonly draw: (gfx: Phaser.GameObjects.Graphics, container: Phaser.GameObjects.Container, cx: number, cy: number) => void;
 }
 
-const MODAL_WIDTH = 720;
-const MODAL_HEIGHT = 520;
+// QA de legibilidad (fontSize del cuerpo de cada paso 14px -> 17px, ver
+// renderStep() más abajo): el modal se agranda un poco en ambos ejes
+// para darle más presupuesto real al párrafo de cada paso —
+// MODAL_WIDTH más ancho ensancha el wordWrap (menos líneas por párrafo),
+// MODAL_HEIGHT más alto da más aire entre el título y los botones de
+// navegación. Ambos siguen entrando cómodos en el lienzo de 1280x720
+// (620x620 de margen combinado sobrante), y como el resto del archivo
+// posiciona todo en relación a estas dos constantes (nunca con números
+// sueltos), el resto del layout — botones, cierre, puntos de paginación —
+// se reacomoda solo.
+const MODAL_WIDTH = 780;
+const MODAL_HEIGHT = 580;
+/** Y del título de cada paso (independiente de la altura de su
+ * ilustración — ver TUTORIAL_SLIDES, cada `draw()` se ancla a
+ * illustrationCenterY=-60 sin importar dónde arranca el título). */
+const STEP_TITLE_Y = 112;
+/** Y del BORDE SUPERIOR del párrafo del cuerpo (origin (0.5,0) — ver
+ * renderStep()) — 26px debajo de STEP_TITLE_Y, suficiente para el título
+ * de una sola línea a 20px. Presupuesto disponible hasta los botones de
+ * navegación (MODAL_HEIGHT/2 - 44): a 17px + lineSpacing 4 (~24.4px por
+ * línea), caben 3 líneas completas con margen — ver el acortado de
+ * TUTORIAL_STEP_6/7_BODY en LanguageData.ts, el único paso que llegaba a
+ * necesitar más de 3 líneas antes de ese ajuste. */
+const STEP_BODY_Y = 138;
 const ACCENT_COLOR = 0x00e5ff;
 const DANGER_COLOR = 0xff4d6d;
 const SAFE_COLOR = 0x4dd0ff;
@@ -196,7 +218,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
       const labelY = cy + (bg.height * bgScale) / 2 + 26;
       const safeLabel = scene.add
         .text(fillLeftX + displayWidth * (fillPercent / 2), labelY, languageManager.getText('ENERGY_PROTECT_LABEL'), {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           color: '#4dd0ff',
           fontStyle: 'bold'
@@ -207,7 +229,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
           fillLeftX + displayWidth * fillPercent + (displayWidth * (1 - fillPercent)) / 2,
           labelY,
           languageManager.getText('ENERGY_DRAIN_LABEL'),
-          { fontSize: '13px', fontFamily: 'Arial, sans-serif', color: '#ff4d6d', fontStyle: 'bold' }
+          { fontSize: '16px', fontFamily: 'Arial, sans-serif', color: '#ff4d6d', fontStyle: 'bold' }
         )
         .setOrigin(0.5);
 
@@ -247,7 +269,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
         .setOrigin(0.5);
       const noDealText = scene.add
         .text(cx + 75, btnY, languageManager.getText('BANKER_NO_DEAL_BUTTON'), {
-          fontSize: '14px',
+          fontSize: '17px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: '#ff4d6d'
@@ -289,7 +311,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
 
       const percentText = scene.add
         .text(cx, cy + 80, languageManager.getText('TUTORIAL_MIDGAME_PERCENT_LABEL', { percent: 50 }), {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: '#ffd166'
@@ -317,7 +339,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
 
       const shopText = scene.add
         .text(cx, iconY + iconSize / 2 + 34, languageManager.getText('TUTORIAL_SHOP_UPGRADES_LABEL'), {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: '#f1c40f'
@@ -358,7 +380,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
         .setOrigin(0.5);
       const captionLabel = scene.add
         .text(cx, iconY + iconSize / 2 + 52, languageManager.getText('TUTORIAL_BONUS_CAPTION'), {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           color: '#8b949e'
         })
@@ -415,7 +437,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
       const captionY = startY + gridH / 2 + 24;
       const decksCaption = scene.add
         .text(cx, captionY, languageManager.getText('TUTORIAL_DECKS_CAPTION'), {
-          fontSize: '13px',
+          fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: '#e6edf3'
@@ -423,7 +445,7 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
         .setOrigin(0.5);
       const effectCaption = scene.add
         .text(cx, captionY + 20, languageManager.getText('TUTORIAL_DECKS_EFFECT_CAPTION'), {
-          fontSize: '12px',
+          fontSize: '15px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
           color: GOLD_HEX
@@ -534,7 +556,7 @@ export class HowToPlayScene extends Phaser.Scene {
     // Indicador de paso ("2 / 7")
     this.stepIndicatorText = this.add
       .text(0, -MODAL_HEIGHT / 2 + 66, '', {
-        fontSize: '13px',
+        fontSize: '16px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e'
       })
@@ -659,7 +681,7 @@ export class HowToPlayScene extends Phaser.Scene {
 
     this.contentContainer.add(
       this.add
-        .text(0, 120, languageManager.getText(slide.titleKey), {
+        .text(0, STEP_TITLE_Y, languageManager.getText(slide.titleKey), {
           fontSize: '20px',
           fontFamily: 'Arial, sans-serif',
           fontStyle: 'bold',
@@ -668,17 +690,25 @@ export class HowToPlayScene extends Phaser.Scene {
         .setOrigin(0.5)
     );
 
+    // QA de legibilidad: origin (0.5, 0) — TOP-anchorado, no centrado.
+    // Con el cuerpo a 17px, el texto más largo de los 7 pasos puede
+    // ocupar hasta 3 líneas (ver el acortado de TUTORIAL_STEP_6/7_BODY
+    // en LanguageData.ts); un origin centrado haría crecer el bloque
+    // simétricamente HACIA ARRIBA también, pisando el título de arriba.
+    // Anclado por arriba, un párrafo más largo sólo se extiende hacia
+    // abajo, hacia los botones de navegación — dirección predecible y
+    // fácil de acotar con STEP_BODY_Y.
     this.contentContainer.add(
       this.add
-        .text(0, 160, languageManager.getText(slide.bodyKey), {
-          fontSize: '15px',
+        .text(0, STEP_BODY_Y, languageManager.getText(slide.bodyKey), {
+          fontSize: '17px',
           fontFamily: 'Arial, sans-serif',
           color: '#e6edf3',
           align: 'center',
           wordWrap: { width: MODAL_WIDTH - 120 },
           lineSpacing: 4
         })
-        .setOrigin(0.5)
+        .setOrigin(0.5, 0)
     );
 
     this.stepIndicatorText.setText(
@@ -732,7 +762,7 @@ export class HowToPlayScene extends Phaser.Scene {
       .setStrokeStyle(2, ACCENT_COLOR, 0.8)
       .setInteractive({ useHandCursor: true });
     const text = this.add
-      .text(0, 0, label, { fontSize: '15px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff' })
+      .text(0, 0, label, { fontSize: '17px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff' })
       .setOrigin(0.5);
 
     bg.on('pointerover', () => bg.setFillStyle(0x2d333b));
@@ -796,7 +826,7 @@ export class HowToPlayScene extends Phaser.Scene {
     const icon = this.add.image(-width / 2 + 28, 0, 'hud-exit').setDisplaySize(20, 20);
     const text = this.add
       .text(8, 0, languageManager.getText('TUTORIAL_BACK_TO_MENU'), {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#c9d1d9'

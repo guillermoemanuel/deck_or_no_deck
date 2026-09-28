@@ -7,6 +7,11 @@ import { ICrazyGamesService, AdResult } from '../../../domain/ports/ICrazyGamesS
 export class FakeCrazyGamesService implements ICrazyGamesService {
   private available = true;
   private nextAdResult: AdResult = { success: true };
+  // `null` por defecto: mismo comportamiento que el servicio real cuando
+  // el SDK no está disponible o no expone locale — ejercita el "no-op,
+  // se queda en DEFAULT_LANGUAGE" de LanguageManager.applyDetectedLocale()
+  // sin que cada test tenga que configurar un locale explícito.
+  private userLocale: string | null = null;
   public rewardedAdCallCount = 0;
   public midgameAdCallCount = 0;
   public gameplayStartCalled = false;
@@ -14,6 +19,10 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
 
   setAvailable(available: boolean): void {
     this.available = available;
+  }
+
+  setUserLocale(locale: string | null): void {
+    this.userLocale = locale;
   }
 
   setNextAdResult(result: AdResult): void {
@@ -40,5 +49,9 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
 
   reportGameplayStop(): void {
     this.gameplayStopCalled = true;
+  }
+
+  async getUserLocale(): Promise<string | null> {
+    return this.userLocale;
   }
 }

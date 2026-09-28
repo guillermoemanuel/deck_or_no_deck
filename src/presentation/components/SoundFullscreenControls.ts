@@ -8,18 +8,37 @@ const BUTTON_GAP = 14; // separación horizontal entre "Sonido" y "Pantalla Comp
 const EDGE_MARGIN = 20; // distancia del borde del botón al borde de la cámara
 
 /**
- * Controles persistentes de Sonido (ON/OFF) y Pantalla Completa/Ventana,
- * anclados a la esquina INFERIOR derecha de la cámara — mismo
- * `HudIconButton` (panel + ícono + descripción al lado + feedback de
- * hover/press) que ya se usa en UIScene/GameScene.
+ * Controles persistentes de Sonido (ON/OFF) y, opcionalmente, Pantalla
+ * Completa/Ventana — anclados a la esquina INFERIOR derecha de la
+ * cámara — mismo `HudIconButton` (panel + ícono + descripción al lado +
+ * feedback de hover/press) que ya se usa en UIScene/GameScene.
  *
  * Se extrajo a un componente propio (en vez de duplicar la lógica en
  * cada escena) para que MainMenuScene, HowToPlayScene, DeckSelectionScene
- * y UIScene compartan EXACTAMENTE el mismo comportamiento y look & feel:
- * el jugador puede cambiar el tamaño de pantalla y silenciar/activar el
- * audio desde cualquier parte del juego, de forma coherente.
+ * y UIScene compartan EXACTAMENTE el mismo comportamiento y look & feel.
  *
- * Uso en cualquier escena:
+ * BOTÓN DE PANTALLA COMPLETA — apagado por defecto (build CrazyGames):
+ * CrazyGames prohíbe explícitamente los botones de pantalla completa
+ * dentro del propio juego ("Custom in-game fullscreen buttons are
+ * prohibited, as they can interfere with other features") — ellos ya
+ * proveen el suyo alrededor del iframe. Por eso `showFullscreenButton`
+ * default a `false`: NINGÚN llamado existente a este componente lo pasa,
+ * así que hoy el botón queda desactivado en las 4 escenas que lo usan,
+ * SIN tocar esas escenas ni borrar el código del botón en sí — el ícono,
+ * el toggle de fullscreen y su sincronización con el ScaleManager siguen
+ * ahí, listos para reactivarse con el flag en una build de otra plataforma.
+ *
+ * Para una build de otra plataforma que sí lo permita, se reactiva
+ * pasando `true` explícitamente en esa build:
+ * ```ts
+ * new SoundFullscreenControls(this, services.audioService, true);
+ * ```
+ * (Hoy no hay un flag de plataforma en el proyecto — ver vite.config.ts —
+ * así que ese `true` se pasaría a mano en los 4 call sites de esa build
+ * en particular. El día que exista un flag de build por plataforma, ese
+ * booleano es el único lugar que hace falta tocar acá.)
+ *
+ * Uso en cualquier escena (CrazyGames, con Sonido únicamente):
  * ```ts
  * const hudControls = new SoundFullscreenControls(this, services.audioService);
  * this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => hudControls.destroy());
@@ -29,7 +48,10 @@ export class SoundFullscreenControls {
   private readonly scene: Phaser.Scene;
   private readonly audioService: IAudioService;
   private readonly muteButton: HudIconButton;
-  private readonly fullscreenButton: HudIconButton;
+  // `null` cuando showFullscreenButton=false (default) — el botón NUNCA
+  // se instancia en ese caso, no solo se oculta, para no dejar un
+  // GameObject invisible escuchando el ScaleManager de más.
+  private readonly fullscreenButton: HudIconButton | null;
 
   // Bound una sola vez para poder hacer `off()` con la MISMA referencia
   // en destroy() — pasar una arrow function nueva a `off()` no
@@ -54,7 +76,13 @@ export class SoundFullscreenControls {
   // patrón que los `off()` del ScaleManager de acá abajo.
   private readonly unsubscribeLanguageChanged: () => void;
 
-  constructor(scene: Phaser.Scene, audioService: IAudioService) {
+  /**
+   * @param showFullscreenButton Default `false` — ver el comentario de
+   * la clase (prohibición de CrazyGames). Pasar `true` solo en builds de
+   * plataformas donde un botón de pantalla completa propio esté
+   * permitido.
+   */
+  constructor(scene: Phaser.Scene, audioService: IAudioService, showFullscreenButton: boolean = true) {
     this.scene = scene;
     this.audioService = audioService;
 
@@ -76,25 +104,29 @@ export class SoundFullscreenControls {
       { size: BUTTON_SIZE, label: languageManager.getText(initialMuted ? 'HUD_SOUND_OFF' : 'HUD_SOUND_ON') }
     );
 
-    // `this.scene.scale.toggleFullscreen()` es la API nativa de Phaser 3
-    // para esto; el ícono se actualiza solo cuando el ScaleManager
-    // confirma el cambio real de estado (eventos ENTER_FULLSCREEN/
-    // LEAVE_FULLSCREEN registrados más abajo), no de forma optimista al
-    // click — así el ícono nunca queda "mintiendo" si el navegador/
-    // iframe rechaza el pedido de fullscreen.
-    this.fullscreenButton = new HudIconButton(
-      scene,
-      0,
-      0,
-      scene.scale.isFullscreen ? 'hud-windows' : 'hud-fullscreen',
-      () => scene.scale.toggleFullscreen(),
-      { size: BUTTON_SIZE, label: languageManager.getText(scene.scale.isFullscreen ? 'HUD_WINDOWED' : 'HUD_FULLSCREEN') }
-    );
+    if (showFullscreenButton) {
+      // `this.scene.scale.toggleFullscreen()` es la API nativa de Phaser 3
+      // para esto; el ícono se actualiza solo cuando el ScaleManager
+      // confirma el cambio real de estado (eventos ENTER_FULLSCREEN/
+      // LEAVE_FULLSCREEN registrados más abajo), no de forma optimista al
+      // click — así el ícono nunca queda "mintiendo" si el navegador/
+      // iframe rechaza el pedido de fullscreen.
+      this.fullscreenButton = new HudIconButton(
+        scene,
+        0,
+        0,
+        scene.scale.isFullscreen ? 'hud-windows' : 'hud-fullscreen',
+        () => scene.scale.toggleFullscreen(),
+        { size: BUTTON_SIZE, label: languageManager.getText(scene.scale.isFullscreen ? 'HUD_WINDOWED' : 'HUD_FULLSCREEN') }
+      );
+      scene.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, this.handleFullscreenChange);
+      scene.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, this.handleFullscreenChange);
+    } else {
+      this.fullscreenButton = null;
+    }
 
     this.layout(scene.scale.gameSize.width, scene.scale.gameSize.height);
     scene.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
-    scene.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, this.handleFullscreenChange);
-    scene.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, this.handleFullscreenChange);
     // REQ i18n: reactividad en caliente — si el jugador cambia el idioma
     // en configuración mientras este componente ya está montado (HUD de
     // GameScene, o el propio MainMenuScene/HowToPlayScene/
@@ -114,7 +146,11 @@ export class SoundFullscreenControls {
     const y = height - EDGE_MARGIN - BUTTON_SIZE / 2;
     const rightEdge = width - EDGE_MARGIN;
     const nextRightEdge = this.placeIconRightToLeft(this.muteButton, rightEdge, y);
-    this.placeIconRightToLeft(this.fullscreenButton, nextRightEdge, y);
+    // Sin botón de Pantalla Completa (default), "Sonido" queda solo,
+    // pegado al borde — no hay un segundo botón que encadenar.
+    if (this.fullscreenButton) {
+      this.placeIconRightToLeft(this.fullscreenButton, nextRightEdge, y);
+    }
   }
 
   /**
@@ -136,7 +172,10 @@ export class SoundFullscreenControls {
     this.layout(this.scene.scale.gameSize.width, this.scene.scale.gameSize.height);
   }
 
+  /** No-op si el botón está desactivado (`fullscreenButton === null`) — deja llamar a este método sin condicionales en cada call site (handleFullscreenChange, handleLanguageChanged). */
   private refreshFullscreenButton(): void {
+    if (!this.fullscreenButton) return;
+
     const isFullscreen = this.scene.scale.isFullscreen;
     this.fullscreenButton.setIconTexture(isFullscreen ? 'hud-windows' : 'hud-fullscreen');
     this.fullscreenButton.setLabel(languageManager.getText(isFullscreen ? 'HUD_WINDOWED' : 'HUD_FULLSCREEN'));
@@ -153,14 +192,20 @@ export class SoundFullscreenControls {
    */
   destroy(): void {
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
-    this.scene.scale.off(Phaser.Scale.Events.ENTER_FULLSCREEN, this.handleFullscreenChange);
-    this.scene.scale.off(Phaser.Scale.Events.LEAVE_FULLSCREEN, this.handleFullscreenChange);
+    // Estos dos solo se engancharon en el constructor si
+    // showFullscreenButton=true (ver arriba) — `off()` de un listener
+    // nunca enganchado es un no-op inofensivo en Phaser, pero se guarda
+    // detrás del mismo `if` por simetría/legibilidad con el alta.
+    if (this.fullscreenButton) {
+      this.scene.scale.off(Phaser.Scale.Events.ENTER_FULLSCREEN, this.handleFullscreenChange);
+      this.scene.scale.off(Phaser.Scale.Events.LEAVE_FULLSCREEN, this.handleFullscreenChange);
+    }
     // REQ i18n: desuscripción del LanguageManager — es un singleton de
     // módulo (ver LanguageManager.ts) que vive más allá de esta escena,
     // así que sin este `unsubscribe()` cada MainMenuScene/GameScene/etc.
     // que se recrea iría apilando listeners sobre botones ya destruidos.
     this.unsubscribeLanguageChanged();
     this.muteButton.destroy();
-    this.fullscreenButton.destroy();
+    this.fullscreenButton?.destroy();
   }
 }

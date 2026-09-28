@@ -151,7 +151,13 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     textColor: number,
     onClick: () => void
   ): Phaser.GameObjects.Container {
-    const width = 230;
+    // QA de legibilidad (fontSize del label 14px -> 17px, ver
+    // LanguageManager/todo el resto del proyecto): a 230px el label más
+    // largo ("Mantener mi carta"/"Keep my card") quedaba con muy poco
+    // margen contra el borde derecho del botón — se ensancha a 250px
+    // (el hueco entre los dos botones baja de 30px a 10px, pero siguen
+    // sin tocarse ni salirse del panel de 560px).
+    const width = 250;
     const height = 48;
 
     const container = scene.add.container(x, y);
@@ -200,7 +206,7 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
 
     const text = new LocalizedText(scene, 14, 0, labelKey, {
       fontFamily: FONT_FAMILY,
-      fontSize: '14px',
+      fontSize: '17px',
       fontStyle: 'bold',
       color: `#${textColor.toString(16).padStart(6, '0')}`
     }).setOrigin(0.5);

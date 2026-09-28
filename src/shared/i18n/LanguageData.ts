@@ -126,12 +126,22 @@ export const TRANSLATIONS = {
       'Turn your winnings into persistent coins for the Main Menu shop. Buy permanent upgrades like "Energy Shield" or "Master Negotiator" to grow stronger.',
     TUTORIAL_SHOP_UPGRADES_LABEL: '🛒 PERMANENT UPGRADES',
     TUTORIAL_STEP_6_TITLE: '6. The 12-Hour Bonus',
+    // QA de legibilidad (HowToPlayScene: fontSize del cuerpo 14px -> 17px):
+    // este texto era el más largo de los 7 pasos del tutorial (216
+    // caracteres) — con la fuente más grande necesitaba 4-5 líneas y
+    // pisaba el título de arriba. Se acortó a un tamaño consistente con
+    // el resto de los pasos (~160 caracteres), sin perder ningún dato
+    // del mecanismo (cada 12hs, ícono de Bono, carta boca abajo, espera
+    // de otras 12hs si se deja vencer).
     TUTORIAL_STEP_6_BODY:
-      'Every 12 hours you get a free bonus: tap the Bonus icon on the HUD, pick a face-down card and instantly add coins to your balance. Miss the window and the cooldown resets — you\u2019ll have to wait a full 12 hours again.',
+      'Every 12 hours you get a free bonus: tap the Bonus icon, pick a face-down card, and add coins instantly. Miss the window and you\u2019ll wait a full 12 hours again.',
     TUTORIAL_BONUS_CAPTION: 'Every 12 hours',
     TUTORIAL_STEP_7_TITLE: '7. Shop: 10 Themed Decks',
+    // QA de legibilidad: mismo motivo que TUTORIAL_STEP_6_BODY de arriba
+    // — acortado sin perder los 3 datos clave (10 mazos coleccionables,
+    // reskin completo, efecto especial en la carta de 25.000).
     TUTORIAL_STEP_7_BODY:
-      'The shop offers 10 collectible decks. Each one completely reskins the board, the cards and the Banker — and triggers a unique special effect when you reveal the top-value card (25,000 points).',
+      'The shop offers 10 collectible decks. Each one reskins the board, the cards and the Banker, and triggers a special effect when you reveal the 25,000-point card.',
     TUTORIAL_DECKS_CAPTION: '10 collectible decks',
     TUTORIAL_DECKS_EFFECT_CAPTION: 'Special effect on the 25,000 card!',
 
@@ -145,7 +155,11 @@ export const TRANSLATIONS = {
 
     // --- Abandonar partida en curso --- //
     GAME_ABANDON_EXIT_TITLE: 'Exit to the menu?',
-    GAME_ABANDON_SUBTITLE_PENALIZATION: 'You will lose {amount} points from your balance for abandoning\n the match in progress.',
+    // QA de legibilidad (ver UIScene.showExitConfirmationModal): se saca
+    // el '\n' manual — ahora el wordWrap: {width:400} de la propia
+    // LocalizedText reparte las líneas, igual que en la versión en
+    // español (que nunca tuvo un salto manual).
+    GAME_ABANDON_SUBTITLE_PENALIZATION: 'You will lose {amount} points from your balance for abandoning the match in progress.',
     GAME_ABANDON_SUBTITLE_GO: 'You will return to the main menu.',
     GAME_ABANDON_CANCEL: 'Cancel',
     GAME_ABANDON_GO: 'Go to Menu',
@@ -273,12 +287,17 @@ export const TRANSLATIONS = {
       'Convierte tus ganancias en monedas persistentes para la tienda del Menú Principal. Compra mejoras permanentes como "Blindaje de energía" o "Negociador maestro" para volverte más fuerte.',
     TUTORIAL_SHOP_UPGRADES_LABEL: '🛒 MEJORAS PERMANENTES',
     TUTORIAL_STEP_6_TITLE: '6. El Bono de 12 Horas',
+    // QA de legibilidad — ver el comentario en el bloque `en` de arriba:
+    // era el texto más largo del tutorial (257 caracteres) y con la
+    // fuente más grande pisaba el título. Acortado sin perder ningún
+    // dato del mecanismo.
     TUTORIAL_STEP_6_BODY:
-      'Cada 12 horas tenés un bono gratuito disponible: tocá el ícono de Bono en el HUD, elegí una carta boca abajo y sumá monedas al instante a tu saldo. Si dejás vencer la ventana sin reclamarlo, el ciclo se reinicia y tenés que esperar otras 12 horas completas.',
+      'Cada 12 horas tenés un bono gratis: tocá el ícono de Bono, elegí una carta boca abajo y sumá monedas al instante. Si dejás pasar la ventana, esperás otras 12 horas completas.',
     TUTORIAL_BONUS_CAPTION: 'Cada 12 horas',
     TUTORIAL_STEP_7_TITLE: '7. Tienda: 10 Mazos Temáticos',
+    // QA de legibilidad — mismo motivo, sin perder los 3 datos clave.
     TUTORIAL_STEP_7_BODY:
-      'La tienda ofrece 10 mazos coleccionables. Cada uno cambia por completo la estética del tablero, las cartas y el Banquero — y dispara un efecto especial único al revelar la carta de mayor valor (25.000 puntos).',
+      'La tienda ofrece 10 mazos coleccionables. Cada uno cambia la estética del tablero, las cartas y el Banquero, y dispara un efecto especial al revelar la carta de 25.000 puntos.',
     TUTORIAL_DECKS_CAPTION: '10 mazos coleccionables',
     TUTORIAL_DECKS_EFFECT_CAPTION: '¡Efecto especial en la carta de 25.000!',
 
@@ -308,10 +327,10 @@ export const TRANSLATIONS = {
     HUD_BONUS: 'Bono',
     HUD_SHOP: 'Tienda',
     HUD_EXIT: 'Salir',
-    HUD_FULLSCREEN: 'Completa',
-    HUD_WINDOWED: 'Ventana',
-    HUD_SOUND_ON: 'Sonido On',
-    HUD_SOUND_OFF: 'Sonido Off',
+    HUD_FULLSCREEN: 'Pantalla Completa',
+    HUD_WINDOWED: 'Modo Ventana',
+    HUD_SOUND_ON: 'Sonido Activado',
+    HUD_SOUND_OFF: 'Sonido Silenciado',
   }
   // Para agregar un idioma nuevo (ej. 'pt'): copiar un bloque completo de
   // arriba, traducir cada valor, y listo — SUPPORTED_LANGUAGES y

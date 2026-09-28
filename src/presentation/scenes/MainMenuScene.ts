@@ -458,7 +458,7 @@ export class MainMenuScene extends Phaser.Scene {
       const text = this.add
         .text(x, y, lang.toUpperCase(), {
           fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: '13px',
+          fontSize: '16px',
           fontStyle: 'bold',
           color: '#9a9aa2'
         })

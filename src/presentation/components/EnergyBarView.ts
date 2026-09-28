@@ -54,7 +54,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     // que quedaba descentrado respecto del nuevo marco simétrico).
     this.labelText = scene.add
       .text(0, -24, 'ENERGÍA: 100%', {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#00e5ff'
@@ -68,7 +68,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     // resto de la UI "Casino de Lujo" del juego.
     this.bankerOfferText = scene.add
       .text(0, 24, '', {
-        fontSize: '12px',
+        fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffd76a',

@@ -53,42 +53,43 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
     // dorado — mismo lenguaje visual que los paneles del menú principal y
     // de selección de mazo, en vez del contorno neón verde anterior.
     this.panelBg = scene.add
-      .rectangle(0, 0, 520, 340, COLOR_PANEL_BG, 0.98)
+      .rectangle(0, 0, 453, 453, COLOR_PANEL_BG, 0.98)
       .setStrokeStyle(3, COLOR_GOLD_DIM, 0.9);
 
     // Segundo borde interior, más fino, para un acabado "metálico" en
     // capas (misma técnica que el filo interior de los botones casino).
     const innerFrame = scene.add
-      .rectangle(0, 0, 500, 320, 0x000000, 0)
+      .rectangle(0, 0, 436, 436, 0x000000, 0)
       .setStrokeStyle(1, COLOR_GOLD, 0.35);
 
     // Resplandor exterior dorado
     const outerGlow = scene.add
-      .rectangle(0, 0, 528, 348, COLOR_GOLD, 0)
+      .rectangle(0, 0, 460, 460, COLOR_GOLD, 0)
       .setStrokeStyle(1, COLOR_GOLD, 0.4);
 
     // Retrato del banquero
-    const portrait = scene.add.image(0, -90, 'banker-portrait').setScale(0.85);
+    const portrait = scene.add.image(0, 0, 'banker-portrait').setScale(0.85);
 
     // Título con tipografía elegante, coherente con el resto de la UI.
-    const titleText = new LocalizedText(this.scene, 0, -10, 'BANKER_OFFER_TITLE', {
+    const titleText = new LocalizedText(this.scene, 0, 60, 'BANKER_OFFER_TITLE', {
         fontFamily: FONT_FAMILY,
         fontSize: '18px',
         fontStyle: 'bold',
-        color: COLOR_GOLD_HEX
+        color: COLOR_GOLD_HEX,
+        backgroundColor: '#000000'
       })
       .setOrigin(0.5);
 
     // Halo detrás del monto — ver startOfferAmountPulse() para el pulso
     // continuo que lo convierte en el foco de atención inmediato.
     const offerGlow = scene.add.graphics();
-    offerGlow.fillStyle(COLOR_GOLD, 0.28);
-    offerGlow.fillRoundedRect(-110, 10, 220, 50, 20);
+    offerGlow.fillStyle(COLOR_GOLD, 0.48);
+    offerGlow.fillRoundedRect(-110, 80, 220, 50, 20);
     offerGlow.lineStyle(2, COLOR_GOLD, 0.5);
-    offerGlow.strokeRoundedRect(-110, 10, 220, 50, 20);
+    offerGlow.strokeRoundedRect(-110, 80, 220, 50, 20);
 
     const offerText = scene.add
-      .text(0, 30, '$0', {
+      .text(0, 100, '$0', {
         fontFamily: FONT_FAMILY,
         fontSize: '38px',
         fontStyle: 'bold',
@@ -107,7 +108,7 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
     const dealBtn = this.createArcadeButton(
       scene,
       -110,
-      105,
+      165,
       'BANKER_DEAL_BUTTON',
       0x00e676,
       0x5cffb0,
@@ -117,7 +118,7 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
     const noDealBtn = this.createArcadeButton(
       scene,
       110,
-      105,
+      165,
       'BANKER_NO_DEAL_BUTTON',
       0xff1744,
       0xff4d6d,

@@ -73,7 +73,13 @@ type ShopTab = 'upgrades' | 'decks';
 // Layout en 2 columnas de 4 filas (8 upgrades de partida) — evita que el
 // catálogo desborde el modal a medida que se agregan nuevas mejoras.
 const ROWS_PER_COLUMN = 4;
-const ROW_SPACING_Y = 105;
+// QA de legibilidad (fontSize de la descripción 12px -> 15px): la
+// descripción más larga del catálogo ("Mitiga a la mitad el drenaje...",
+// 83 caracteres) pasa de 2 a 3 líneas dentro de wordWrap.width=280 a este
+// tamaño — 105 alcanzaba para 2 líneas, pero dejaba la 3ra pisando el
+// renglón siguiente. Sube a 118 para darle lugar a esa 3ra línea sin
+// que el catálogo dé la sensación de estar apretado.
+const ROW_SPACING_Y = 118;
 const FIRST_ROW_OFFSET_Y = -190;
 const COLUMN_OFFSETS = [
   { textX: -450, buttonX: -90 },
@@ -233,7 +239,21 @@ export class ShopScene extends Phaser.Scene {
     const glow = this.add.graphics().setAlpha(0);
     const bg = this.add.graphics();
     const text = this.add
-      .text(0, 0, initialLabel, { fontSize: '13px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff' })
+      .text(0, 0, initialLabel, {
+        // QA de legibilidad: se queda en 15px (no 16, como el resto de
+        // los textos "13px->16px" de esta pantalla) a propósito — este
+        // botón mide 150px de ancho y el label más largo posible,
+        // "Comprar $20.000" (el mazo más caro del catálogo, ver
+        // DECK_PRICE en DeckSetups.ts), ya casi lo llena a 16px. 15px
+        // sigue muy por encima del piso de legibilidad (9.4px reales
+        // @800x450) sin arriesgar que el precio se salga del botón —
+        // sobre todo en la columna derecha, donde el botón ya está
+        // cerca del borde del modal (ver COLUMN_OFFSETS).
+        fontSize: '15px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#ffffff'
+      })
       .setOrigin(0.5);
     container.add([glow, bg, text]);
 
@@ -271,7 +291,7 @@ export class ShopScene extends Phaser.Scene {
     const glow = this.add.graphics().setAlpha(0);
     const bg = this.add.graphics();
     const label = new LocalizedText(this, 0, 0, labelKey, {
-      fontSize: '13px',
+      fontSize: '16px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
       color: '#8b949e'
@@ -340,7 +360,7 @@ export class ShopScene extends Phaser.Scene {
           width / 2,
           height / 2,
           'SHOP_NO_ACTIVE_SESSION',
-          { fontSize: '15px', fontFamily: 'Arial, sans-serif', color: '#8b949e', align: 'center' }
+          { fontSize: '17px', fontFamily: 'Arial, sans-serif', color: '#8b949e', align: 'center' }
         ).setOrigin(0.5)
       );
       return;
@@ -348,7 +368,7 @@ export class ShopScene extends Phaser.Scene {
 
     this.tabContainer.add(
       new LocalizedText(this, width / 2, height / 2 - 200, 'SHOP_UPGRADES_CAPTION', {
-        fontSize: '12px',
+        fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e'
       }).setOrigin(0.5)
@@ -371,7 +391,7 @@ export class ShopScene extends Phaser.Scene {
 
     this.tabContainer.add(
       new LocalizedText(this, textX, y, definition.name as TranslationKey, {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffffff'
@@ -379,15 +399,23 @@ export class ShopScene extends Phaser.Scene {
     );
     this.tabContainer.add(
       new LocalizedText(this, textX, y + 18, definition.description as TranslationKey, {
-        fontSize: '11px',
+        fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e',
-        wordWrap: { width: 260 }
+        // QA de legibilidad: 280 en vez de 260 — aprovecha el espacio
+        // horizontal real disponible antes del botón de la fila (ver
+        // COLUMN_OFFSETS, ~285px libres en ambas columnas), aunque no
+        // alcanza para evitar una 3ra línea en la descripción más larga
+        // del catálogo — de ahí el ROW_SPACING_Y más alto de arriba.
+        wordWrap: { width: 280 }
       })
     );
 
-    const levelOrOwnedText = this.add.text(textX, y + 58, '', {
-      fontSize: '11px',
+    // QA de legibilidad: y+78 (no y+58) — dejando lugar para que la
+    // descripción de arriba ocupe hasta 3 líneas a 15px sin pisarlo (ver
+    // el comentario de ROW_SPACING_Y más arriba).
+    const levelOrOwnedText = this.add.text(textX, y + 78, '', {
+      fontSize: '15px',
       fontFamily: 'Arial, sans-serif',
       color: '#58a6ff'
     });
@@ -510,7 +538,7 @@ export class ShopScene extends Phaser.Scene {
 
     this.tabContainer.add(
       new LocalizedText(this, width / 2, height / 2 - 199, 'SHOP_DECKS_CAPTION', {
-        fontSize: '12px',
+        fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         color: '#8b949e'
       }).setOrigin(0.5)
@@ -521,7 +549,14 @@ export class ShopScene extends Phaser.Scene {
     // interior de los botones, para que se lea como parte de la misma
     // familia visual y no como un elemento suelto.
     const counterY = height / 2 + 275;
-    const counterWidth = 130;
+    // QA de legibilidad (fontSize 12px -> 15px): a 130px "Obtenidos
+    // 10/10" (el texto más largo posible, catálogo completo en español)
+    // ya prácticamente llenaba el badge sin margen. Se ensancha a 160 —
+    // es un elemento standalone centrado en `width / 2`, sin ningún
+    // vecino con el que competir por espacio, así que no hay riesgo de
+    // colisión al agrandarlo (a diferencia de los botones de fila, que
+    // sí están apretados contra la grilla — ver createActionButton()).
+    const counterWidth = 160;
     const counterHeight = 26;
     const counterBg = this.add.graphics();
     counterBg.fillStyle(PANEL_FILL, 0.9).fillRoundedRect(width / 2 - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
@@ -529,7 +564,7 @@ export class ShopScene extends Phaser.Scene {
     this.tabContainer.add(counterBg);
 
     this.deckCounterText = this.add
-      .text(width / 2, counterY, '', { fontSize: '12px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: COLOR_GOLD_HEX })
+      .text(width / 2, counterY, '', { fontSize: '15px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: COLOR_GOLD_HEX })
       .setOrigin(0.5);
     this.tabContainer.add(this.deckCounterText);
     this.updateDeckCounter();
@@ -569,7 +604,7 @@ export class ShopScene extends Phaser.Scene {
 
     this.tabContainer.add(
       this.add.text(textX + 60, y - 20, definition.name, {
-        fontSize: '14px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffffff'
@@ -577,7 +612,7 @@ export class ShopScene extends Phaser.Scene {
     );
 
     const statusText = this.add.text(textX + 60, y + 2, '', {
-      fontSize: '11px',
+      fontSize: '15px',
       fontFamily: 'Arial, sans-serif',
       color: '#58a6ff'
     });

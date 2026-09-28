@@ -28,6 +28,22 @@ declare global {
           gameplayStart: () => void;
           gameplayStop: () => void;
         };
+        user: {
+          /**
+           * Propiedad SÍNCRONA (no un método/Promise) del SDK v3 — a
+           * diferencia de `SDK.init()`/`SDK.ad`/`SDK.game`, no hace falta
+           * "esperarla", solo leerla una vez que `init()` resolvió.
+           */
+          systemInfo: {
+            countryCode: string;
+            /** BCP-47, ej. "es-AR", "en-US". */
+            locale: string;
+            device: { type: 'desktop' | 'tablet' | 'mobile' };
+            os: { name: string; version: string };
+            browser: { name: string; version: string };
+            applicationType: string;
+          };
+        };
       };
     };
   }
@@ -48,6 +64,8 @@ declare global {
  * 3. Timeout de seguridad (15s): previene promesas colgadas si un callback no dispara.
  * 4. Notificacion de inicio/fin de gameplay tolerante a fallos.
  * 5. Manejo defensivo de excepciones durante la invocacion del SDK.
+ * 6. Lectura del locale del jugador (systemInfo.locale) para auto-detectar
+ *    idioma — ver getUserLocale() y LanguageManager.applyDetectedLocale().
  */
 export class CrazyGamesService implements ICrazyGamesService {
   private static readonly AD_TIMEOUT_MS = 15000;
@@ -137,6 +155,31 @@ export class CrazyGamesService implements ICrazyGamesService {
         console.warn('[CrazyGamesService] gameplayStop failed', error);
       }
     });
+  }
+
+  /**
+   * Auto-detección de idioma (ver LanguageManager.applyDetectedLocale()
+   * del lado del dominio de presentación): espera a que `init()` termine
+   * y devuelve `SDK.user.systemInfo.locale` tal cual lo reporta el SDK
+   * ("es-AR", "en-US", etc.), o `null` si el SDK no está disponible o no
+   * expone un locale — nunca lanza, mismo criterio defensivo que el
+   * resto de esta clase.
+   */
+  async getUserLocale(): Promise<string | null> {
+    if (this.initPromise) {
+      await this.initPromise;
+    }
+
+    if (!this.isAvailable()) {
+      return null;
+    }
+
+    try {
+      return window.CrazyGames?.SDK?.user?.systemInfo?.locale ?? null;
+    } catch (error) {
+      console.warn('[CrazyGamesService] Unexpected error reading SDK.user.systemInfo', error);
+      return null;
+    }
   }
 
   /** Espera el `init()` pendiente (si lo hay) y sólo entonces ejecuta `action`, si el SDK terminó disponible. */

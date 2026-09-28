@@ -1,4 +1,3 @@
-
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
 import { DeckCelebrationEffect, getCelebrationTargetPosition } from './DeckCelebrationEffect';
@@ -164,7 +163,7 @@ export class VegasRouletteEffect implements DeckCelebrationEffect {
     // Texto de denominación ($25K)
     const text = scene.add
       .text(0, 0, label, {
-        fontSize: '15px',
+        fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffd76a',
