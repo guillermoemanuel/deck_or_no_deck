@@ -48,7 +48,7 @@ const DECK_PRICE = 20000;
 export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   basic: {
     id: 'basic',
-    name: 'Mazo Clásico',
+    name: 'TV Show',
     background: 'basic-backdrop',
     cardBack: 'card-back-basic',
     cardFront: 'card-front-basic',
@@ -76,7 +76,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   medieval: {
     id: 'medieval',
-    name: 'Fortaleza Medieval',
+    name: 'Medieval',
     background: 'medieval-backdrop',
     cardBack: 'card-back-medieval',
     cardFront: 'card-front-medieval',
@@ -90,7 +90,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   tarot: {
     id: 'tarot',
-    name: 'Tarot de Marsella',
+    name: 'Tarot of Marseilles',
     background: 'tarot-backdrop',
     cardBack: 'card-back-tarot',
     cardFront: 'card-front-tarot',
@@ -132,7 +132,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   dracula: {
     id: 'dracula',
-    name: 'Castillo de Dracula',
+    name: 'Castle of Terror',
     background: 'dracula-backdrop',
     cardBack: 'card-back-dracula',
     cardFront: 'card-front-dracula',
@@ -146,7 +146,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   glacier: {
     id: 'glacier',
-    name: 'Glaciar Antartico',
+    name: 'Glacier',
     background: 'glacier-backdrop',
     cardBack: 'card-back-glacier',
     cardFront: 'card-front-glacier',
@@ -160,7 +160,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   egypt: {
     id: 'egypt',
-    name: 'Egypto Antiguo',
+    name: 'Ancient Egypt',
     background: 'egypt-backdrop',
     cardBack: 'card-back-egypt',
     cardFront: 'card-front-egypt',
@@ -174,7 +174,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
   },
   ovni: {
     id: 'ovni',
-    name: 'Experimento Ovni',
+    name: 'UFO experience',
     background: 'ovni-backdrop',
     cardBack: 'card-back-ovni',
     cardFront: 'card-front-ovni',

@@ -207,6 +207,7 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_COMPLETED: 'Completed! Come back in {time}',
     DAILY_CHALLENGE_USED: 'In progress. Finish it or come back in {time}',
     STATS_LINE: '🏆 {games} games · {winRate}% wins · Best: {bestPayout}',
+    SHOP_UPGRADE_CONFLICT: 'Already active: {other}. Only one reward multiplier per game.',
     RESULT_NEW_RECORD: '🏆 New personal best!',
     RESULT_DAILY_REWARD: '📅 Daily Challenge: +{reward} coins (streak: {streak})',
   },
@@ -389,6 +390,7 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_COMPLETED: '¡Completado! Volvé en {time}',
     DAILY_CHALLENGE_USED: 'En curso. Terminalo o volvé en {time}',
     STATS_LINE: '🏆 {games} partidas · {winRate}% victorias · Mejor: {bestPayout}',
+    SHOP_UPGRADE_CONFLICT: 'Ya tenés activo: {other}. Solo un multiplicador de premio por partida.',
     RESULT_NEW_RECORD: '🏆 ¡Nuevo récord personal!',
     RESULT_DAILY_REWARD: '📅 Desafío Diario: +{reward} monedas (racha: {streak})',
   }

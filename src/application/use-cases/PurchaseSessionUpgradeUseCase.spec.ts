@@ -124,14 +124,9 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(coinsAfterTriple).toBe(coinsAfterDouble * 2);
     });
 
-    it('both can be purchased and coexist in the same session', () => {
-      const { session, useCase } = buildContext();
-      useCase.execute('double_reward');
-      useCase.execute('triple_reward');
-
-      expect(session.getSessionUpgrades().hasDoubleReward()).toBe(true);
-      expect(session.getSessionUpgrades().hasTripleReward()).toBe(true);
-    });
+    // Superado por el describe "mutual exclusion (conflictsWith)" más abajo:
+    // ya NO pueden coexistir en la misma partida — solo un multiplicador de
+    // premio por partida (ver SessionUpgradeCatalog.conflictsWith).
 
     it('rejects buying the same one-shot upgrade twice', () => {
       const { useCase } = buildContext();
@@ -238,6 +233,57 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       const second = useCase.execute('negotiator');
 
       expect(second).toEqual({ success: false, reason: 'not_applicable' });
+    });
+  });
+
+  describe('double_reward / triple_reward mutual exclusion (conflictsWith)', () => {
+    it('blocks buying triple_reward when double_reward is already owned, without charging', () => {
+      const { session, repository, useCase } = buildContext();
+      useCase.execute('double_reward');
+      const coinsAfterDouble = repository.getCoins();
+
+      const result = useCase.execute('triple_reward');
+
+      expect(result).toEqual({ success: false, reason: 'conflicting_upgrade', conflictsWith: 'double_reward' });
+      expect(session.getSessionUpgrades().hasTripleReward()).toBe(false);
+      expect(repository.getCoins()).toBe(coinsAfterDouble);
+    });
+
+    it('blocks buying double_reward when triple_reward is already owned, without charging', () => {
+      const { session, repository, useCase } = buildContext();
+      useCase.execute('triple_reward');
+      const coinsAfterTriple = repository.getCoins();
+
+      const result = useCase.execute('double_reward');
+
+      expect(result).toEqual({ success: false, reason: 'conflicting_upgrade', conflictsWith: 'triple_reward' });
+      expect(session.getSessionUpgrades().hasDoubleReward()).toBe(false);
+      expect(repository.getCoins()).toBe(coinsAfterTriple);
+    });
+
+    it('still allows buying either one on its own', () => {
+      const { session, useCase } = buildContext();
+
+      expect(useCase.execute('double_reward')).toEqual({ success: true });
+      expect(session.getSessionUpgrades().hasDoubleReward()).toBe(true);
+    });
+
+    it('the conflict check runs before the already-owned check (repeat purchase still reports conflicting_upgrade, not not_applicable)', () => {
+      const { useCase } = buildContext();
+      useCase.execute('double_reward');
+      useCase.execute('double_reward'); // ya sería not_applicable por sí solo
+
+      const result = useCase.execute('triple_reward');
+
+      expect(result).toEqual({ success: false, reason: 'conflicting_upgrade', conflictsWith: 'double_reward' });
+    });
+
+    it('other upgrades without conflictsWith are unaffected', () => {
+      const { session, useCase } = buildContext();
+      useCase.execute('double_reward');
+
+      expect(useCase.execute('negotiator')).toEqual({ success: true });
+      expect(session.getSessionUpgrades().hasNegotiator()).toBe(true);
     });
   });
 });

@@ -233,7 +233,12 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     // Upgrades "Duplicar"/"Triplicar": son consumibles de esta partida —
     // solo se ofrecen si el jugador los compró en la tienda durante ESTA
     // sesión (ver GameSceneController.buildUpgradeFlagsForResultScene).
-    // Ambos pueden coexistir; si falta alguno, el que queda se centra.
+    // Son mutuamente excluyentes desde la Tienda (ver
+    // PurchaseSessionUpgradeUseCase / SessionUpgradeCatalog.conflictsWith):
+    // no debería llegar a haber comprado ambos en la misma partida. La rama
+    // `wantsDouble && wantsTriple` queda igual como red de seguridad (por
+    // si alguna partida vieja, comprada antes de este cambio, todavía trae
+    // los dos flags en `sessionStorage`/memoria).
     const multiplyRowY = height / 2 + 20;
     const wantsDouble = data.hasDoubleReward === true;
     const wantsTriple = data.hasTripleReward === true;

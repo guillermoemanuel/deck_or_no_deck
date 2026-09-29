@@ -6,6 +6,14 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#0d1117" />
+
+  <!-- Ícono del juego (fuente: assets/dond.ico.jpeg, recortado a los tamaños
+       estándar con Pillow — ver public/assets/icons/). El .ico trae 16/32/48/64px
+       para que cada navegador use el que le calce; el PNG de 180px es el que
+       usa iOS al "Agregar a pantalla de inicio", y el de 512px queda
+       disponible para un manifest.json si más adelante se agrega uno. -->
+  <link rel="icon" href="/assets/icons/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
   <title>Deck or No Deck</title>
   <!--
     BUGFIX (monetización): sin este script, `window.CrazyGames` nunca

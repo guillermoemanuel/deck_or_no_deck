@@ -20,6 +20,16 @@ export interface SessionUpgradeDefinition {
   readonly name: string;
   readonly description: string;
   readonly cost: number;
+  /**
+   * Otros upgrades que NO pueden coexistir con este en la misma partida
+   * (ej. "Duplicar" y "Triplicar" — dos multiplicadores de premio a la
+   * vez no tiene sentido: solo uno se termina usando en ResultScene). Se
+   * declara en AMBAS direcciones (double↔triple) a propósito: no se
+   * infiere la relación inversa automáticamente, para que
+   * PurchaseSessionUpgradeUseCase pueda chequear con una simple
+   * búsqueda en el catálogo, sin necesitar un grafo bidireccional.
+   */
+  readonly conflictsWith?: readonly SessionUpgradeId[];
 }
 
 // Restricción de diseño explícita: el costo de "Triplicar" debe ser
@@ -57,13 +67,15 @@ export const SESSION_UPGRADE_CATALOG: readonly SessionUpgradeDefinition[] = [
     id: 'double_reward',
     name: 'UPGRADE_NAME_DOUBLE_REWARD',
     description: 'UPGRADE_DESC_DOUBLE_REWARD',
-    cost: DOUBLE_REWARD_COST
+    cost: DOUBLE_REWARD_COST,
+    conflictsWith: ['triple_reward']
   },
   {
     id: 'triple_reward',
     name: 'UPGRADE_NAME_TRIPLE_REWARD',
     description: 'UPGRADE_DESC_TRIPLE_REWARD',
-    cost: DOUBLE_REWARD_COST * 2
+    cost: DOUBLE_REWARD_COST * 2,
+    conflictsWith: ['double_reward']
   },
   {
     id: 'revive',

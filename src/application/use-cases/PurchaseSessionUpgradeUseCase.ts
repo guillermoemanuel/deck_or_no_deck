@@ -3,10 +3,17 @@ import { IProgressionService } from '../../domain/ports/IProgressionService';
 import { GameEvent } from '../../domain/events/GameEvents';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { SessionUpgradeId, findSessionUpgradeDefinition } from '../../domain/value-objects/SessionUpgradeCatalog';
+import { SessionUpgrades } from '../../domain/entities/SessionUpgrades';
 
 export type PurchaseSessionUpgradeResult =
   | { success: true }
-  | { success: false; reason: 'insufficient_coins' | 'unknown_upgrade' | 'not_applicable' };
+  | { success: false; reason: 'insufficient_coins' | 'unknown_upgrade' | 'not_applicable' }
+  // Motivo específico para Duplicar/Triplicar (ver SessionUpgradeCatalog.
+  // conflictsWith): distinto de 'not_applicable' a propósito, para que la
+  // UI pueda mostrar un mensaje claro ("Ya tenés X activo") en vez del
+  // genérico "no se puede comprar" — `conflictsWith` trae el id del
+  // upgrade que ya tiene, para armar ese mensaje.
+  | { success: false; reason: 'conflicting_upgrade'; conflictsWith: SessionUpgradeId };
 
 /**
  * Orquesta la compra de un upgrade DE PARTIDA (consumible — ver
@@ -30,6 +37,15 @@ export class PurchaseSessionUpgradeUseCase {
       return { success: false, reason: 'unknown_upgrade' };
     }
 
+    // Se chequea ANTES que isApplicable(): comprar Triplicar ya teniendo
+    // Duplicar (o viceversa) es un caso más específico que el genérico
+    // "no aplicable" — amerita su propio motivo de error (ver el
+    // comentario en PurchaseSessionUpgradeResult).
+    const conflict = this.findOwnedConflict(definition.conflictsWith);
+    if (conflict) {
+      return { success: false, reason: 'conflicting_upgrade', conflictsWith: conflict };
+    }
+
     if (!this.isApplicable(upgradeId)) {
       return { success: false, reason: 'not_applicable' };
     }
@@ -40,6 +56,37 @@ export class PurchaseSessionUpgradeUseCase {
 
     this.applyEffect(upgradeId);
     return { success: true };
+  }
+
+  /** Primer upgrade de `candidates` que el jugador YA tiene en esta partida, o `null` si ninguno. */
+  private findOwnedConflict(candidates: readonly SessionUpgradeId[] | undefined): SessionUpgradeId | null {
+    if (!candidates || candidates.length === 0) {
+      return null;
+    }
+    const upgrades = this.session.getSessionUpgrades();
+    return candidates.find(id => this.isOwned(upgrades, id)) ?? null;
+  }
+
+  /** Mismos getters que isApplicable(), pero en sentido positivo ("¿ya lo tiene?") — usado solo para resolver conflictos declarados en el catálogo. */
+  private isOwned(upgrades: SessionUpgrades, upgradeId: SessionUpgradeId): boolean {
+    switch (upgradeId) {
+      case 'energy_tank_1':
+        return upgrades.getEnergyTankLevel() >= 1;
+      case 'energy_tank_2':
+        return upgrades.getEnergyTankLevel() >= 2;
+      case 'double_reward':
+        return upgrades.hasDoubleReward();
+      case 'triple_reward':
+        return upgrades.hasTripleReward();
+      case 'revive':
+        return upgrades.hasRevive();
+      case 'secret_swap_final':
+        return upgrades.hasSecretSwapFinal();
+      case 'negative_card_shield':
+        return upgrades.hasNegativeCardShield();
+      case 'negotiator':
+        return upgrades.hasNegotiator();
+    }
   }
 
   private isApplicable(upgradeId: SessionUpgradeId): boolean {

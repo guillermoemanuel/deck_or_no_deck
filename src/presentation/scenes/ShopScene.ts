@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getServices } from '../GameServices';
 import { getActiveSessionBridge } from '../ActiveSessionBridge';
-import { SESSION_UPGRADE_CATALOG, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
+import { findSessionUpgradeDefinition, SESSION_UPGRADE_CATALOG, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
 import { SessionUpgrades } from '../../domain/entities/SessionUpgrades';
 import { PurchaseSessionUpgradeUseCase } from '../../application/use-cases/PurchaseSessionUpgradeUseCase';
 import { DECK_SETUP_IDS, DeckSetupId, getDeckSetup } from '../../domain/value-objects/DeckSetups';
@@ -163,6 +163,31 @@ export class ShopScene extends Phaser.Scene {
     this.activeTab = bridge ? 'upgrades' : 'decks';
 
     const { width, height } = this.cameras.main;
+
+    // Backdrop bloqueador: sin esto, esta escena se abre con `scene.launch()`
+    // ENCIMA de MainMenuScene o de GameScene+UIScene (ver el comentario de
+    // la clase) que siguen activas y reciben clicks — un jugador podía
+    // tocar "sin querer" un botón del menú o del HUD a través del hueco
+    // fuera del panel de la Tienda. El rectángulo cubre TODA la pantalla y
+    // es interactivo (sin handler propio): eso alcanza para que Phaser lo
+    // trate como el objeto "de encima" y no despache el click a lo que hay
+    // detrás — no cierra la Tienda al tocarlo, solo bloquea.
+    this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.6).setInteractive();
+
+    // Si se abrió desde el HUD durante una partida (GameScene+UIScene
+    // activas), se pausa GameScene mientras se compra — mismo criterio que
+    // el modal de "Salir al Menú" y el del bono periódico en UIScene: así
+    // ninguna animación, timer del banquero ni input del tablero avanza
+    // mientras el jugador está en la Tienda. Se reanuda en SHUTDOWN, sin
+    // importar por qué vía se cierra esta escena (✕, `scene.stop()`, etc.).
+    if (this.scene.isActive('GameScene')) {
+      this.scene.pause('GameScene');
+    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.scene.isPaused('GameScene')) {
+        this.scene.resume('GameScene');
+      }
+    });
 
     // Panel principal — mismo tratamiento "Casino de Lujo" que el modal
     // de HowToPlayScene (panel carbón + borde de acento + resplandor
@@ -453,10 +478,45 @@ export class ShopScene extends Phaser.Scene {
 
     if (!result.success) {
       this.flashError(buttonText);
+      // "Duplicar"/"Triplicar" son mutuamente excluyentes (ver
+      // SessionUpgradeCatalog.conflictsWith): a diferencia de las demás
+      // fallas silenciosas (fondos insuficientes, ya se ve en el botón),
+      // esta amerita un mensaje explícito — sin él, un click sobre un
+      // botón que sigue diciendo "Comprar $X" y no pasa nada es confuso.
+      if (result.reason === 'conflicting_upgrade') {
+        this.showConflictMessage(upgradeId, result.conflictsWith);
+      }
       return;
     }
 
     this.refreshUpgradeRow(upgradeId);
+    // Comprar uno de los dos puede dejar al OTRO no-comprable (ver
+    // isApplicable/findOwnedConflict) — se refresca también su fila para
+    // que el botón del que queda bloqueado se dibuje ya deshabilitado,
+    // en vez de esperar a la próxima vez que se repinte solo.
+    const definition = findSessionUpgradeDefinition(upgradeId);
+    definition?.conflictsWith?.forEach(id => this.refreshUpgradeRow(id));
+  }
+
+  /** Reemplaza brevemente la línea de estado de la fila por un mensaje claro de conflicto, y la repone. */
+  private showConflictMessage(upgradeId: SessionUpgradeId, conflictsWith: SessionUpgradeId): void {
+    const refs = this.upgradeRowRefs.get(upgradeId);
+    if (!refs) return;
+
+    const otherName = findSessionUpgradeDefinition(conflictsWith)?.name;
+    const message = languageManager.getText('SHOP_UPGRADE_CONFLICT', {
+      other: otherName ? languageManager.getText(otherName as TranslationKey) : ''
+    });
+
+    const originalText = refs.levelOrOwnedText.text;
+    const originalColor = refs.levelOrOwnedText.style.color;
+    refs.levelOrOwnedText.setText(message).setColor('#e74c3c');
+    this.time.delayedCall(2200, () => {
+      // Si mientras tanto se compró/cambió de fila, no pisar el estado nuevo.
+      if (refs.levelOrOwnedText.text === message) {
+        refs.levelOrOwnedText.setText(originalText).setColor(originalColor);
+      }
+    });
   }
 
   private refreshUpgradeRow(upgradeId: SessionUpgradeId): void {

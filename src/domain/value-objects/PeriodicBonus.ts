@@ -21,7 +21,7 @@
  */
 
 /** Rango de valores posibles: uno por carta, sin repetir (6 valores para 6 cartas). */
-export const PERIODIC_BONUS_VALUES: readonly number[] = [0, 1000, 2000, 3000, 4000, 5000];
+export const PERIODIC_BONUS_VALUES: readonly number[] = [500, 1000, 2000, 3000, 4000, 5000];
 
 export const PERIODIC_BONUS_CARD_COUNT = PERIODIC_BONUS_VALUES.length;
 
