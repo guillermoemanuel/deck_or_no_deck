@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { CardView } from '../components/CardView';
+import { OnboardingCoach } from '../components/OnboardingCoach';
+import { OnboardingFlow, OnboardingAction } from '../../application/onboarding/OnboardingFlow';
 import { EnergyBarView } from '../components/EnergyBarView';
 import { GameSceneController } from '../controllers/GameSceneController';
 import { OpenCardUseCase } from '../../application/use-cases/OpenCardUseCase';
@@ -17,6 +19,11 @@ import { activateGameAbandonGuard, deactivateGameAbandonGuard } from '../GameAba
 import { ParticleManager } from '../components/ParticleManager';
 import { PayoutBoardView } from '../components/PayoutBoardView';
 import { CASE_VALUES } from '../../domain/value-objects/CaseValues';
+import { generateDailyBoardValues, getUtcDateKey } from '../../domain/value-objects/DailyBoard';
+import { consumeGameMode } from '../GameMode';
+import { setPenaltyFreeSession } from '../GameAbandonGuard';
+import { createPenaltyFreeProgression } from '../PenaltyFreeProgression';
+import { GameResultTracker } from '../../application/records/GameResultTracker';
 import { LocalizedText } from '../components/LocalizedText';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { getDeckSetup } from '../../domain/value-objects/DeckSetups';
@@ -52,6 +59,11 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
   // comentario de clase en SpotlightSweepEffect. Instancia única y
   // reutilizable: la estrategia no guarda estado propio entre reproducciones.
   private readonly spotlightEffect = new SpotlightSweepEffect();
+  // Fecha (UTC, `YYYY-MM-DD`) del Desafío Diario si esta partida es una, o
+  // `null` en una partida normal. Se decide UNA vez en create() (ver
+  // consumeGameMode) y de ahí se deriva tanto el tablero como si esta
+  // partida queda exenta de la penalización por derrota/abandono.
+  private dailyDateKey: string | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -139,8 +151,32 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     const pedestalY = height / 2 + 25;
     this.createSecretCardPedestal(pedestalX, pedestalY);
 
-    // Generar los 13 valores monetarios de la partida
-    const values = services.randomProvider.generateBoardValues();
+    // Un resumen de la partida ANTERIOR no debe filtrarse a esta ResultScene
+    // (p. ej. "Jugar de nuevo" reinicia esta misma escena con `scene.restart()`).
+    this.registry.remove('lastGameSummary');
+
+    // Desafío Diario: MainMenuScene deja el pedido en el registry (ver
+    // GameMode.ts) antes de entrar acá; `consumeGameMode` lo retira y, si el
+    // pedido quedó "viejo" (la partida se demoró hasta pasada la medianoche
+    // UTC), cae sola a partida normal para no completar el día equivocado.
+    const todayKey = getUtcDateKey(Date.now());
+    const mode = consumeGameMode(this.registry, todayKey);
+    this.dailyDateKey = mode.mode === 'daily' ? mode.dateKey : null;
+
+    // Generar los 13 valores monetarios de la partida: el mismo tablero para
+    // todo el mundo si es el Desafío Diario de hoy, o al azar en partida normal.
+    const values =
+      this.dailyDateKey !== null ? generateDailyBoardValues(this.dailyDateKey) : services.randomProvider.generateBoardValues();
+
+    if (this.dailyDateKey !== null) {
+      services.outcomeRecorder.startDaily(this.dailyDateKey);
+    }
+    // Decisión de diseño: el Desafío Diario NO castiga con la penalización de
+    // -5000 monedas por derrota ni por abandonar (cerrar la pestaña) — ver
+    // PenaltyFreeProgression.ts y GameAbandonGuard.setPenaltyFreeSession.
+    // Sí paga su recompensa igual si se pierde: es una invitación diaria a
+    // volver, no un desafío punitivo. Las partidas NORMALES no cambian.
+    setPenaltyFreeSession(this.registry, this.dailyDateKey !== null);
 
     //Color del numero de posicion del reverso
     const numberColor = getDeckSetup(services.progressionManager.getSelectedDeckId()).numberColor;
@@ -282,13 +318,20 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // Crear la sesión de juego en el Dominio con la elección del jugador
     const session = createGameSessionWithSelection(values, chosenIndex);
 
+    // En el Desafío Diario, TODOS los use-cases que tocan monedas/penalidades
+    // reciben esta versión "sin castigo" en vez del servicio real (ver
+    // createPenaltyFreeProgression) — sigue pagando premios y upgrades
+    // normalmente, solo `applyLossPenalty()` queda anulado.
+    const progressionForSession =
+      this.dailyDateKey !== null ? createPenaltyFreeProgression(services.progressionManager) : services.progressionManager;
+
     // Use cases
-    const openCardUseCase = new OpenCardUseCase(session, eventBus, services.progressionManager);
-    const resolveDealUseCase = new ResolveDealUseCase(session, services.progressionManager, eventBus);
+    const openCardUseCase = new OpenCardUseCase(session, eventBus, progressionForSession);
+    const resolveDealUseCase = new ResolveDealUseCase(session, progressionForSession, eventBus);
     const swapSecretCardUseCase = new SwapSecretCardUseCase(session, eventBus);
     const reviveWithAdUseCase = new ReviveWithAdUseCase(session, services.crazyGamesService, eventBus);
-    const swapFinalSecretCardUseCase = new SwapFinalSecretCardUseCase(session, services.progressionManager, eventBus);
-    const purchaseSessionUpgradeUseCase = new PurchaseSessionUpgradeUseCase(session, services.progressionManager, eventBus);
+    const swapFinalSecretCardUseCase = new SwapFinalSecretCardUseCase(session, progressionForSession, eventBus);
+    const purchaseSessionUpgradeUseCase = new PurchaseSessionUpgradeUseCase(session, progressionForSession, eventBus);
 
     // Suscripción INDEPENDIENTE de GameSceneController.handleEvent(): el
     // festejo de "carta de mayor valor revelada" es puramente cosmético y
@@ -371,6 +414,13 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // de energía (ahora centrada arriba, ver bug_energy_bar_layout).
     const payoutBoard = new PayoutBoardView(this, 95, 175, CASE_VALUES);
 
+    // Onboarding contextual: consejos breves en el momento exacto en que
+    // hacen falta (abrir carta → energía → banquero). Solo se muestran la
+    // primera vez y se pueden omitir; la guía completa sigue disponible en
+    // "Cómo jugar" desde el menú.
+    const unsubscribeOnboarding = this.setupOnboarding(eventBus);
+    const unsubscribeOutcomeRecording = this.setupOutcomeRecording(eventBus);
+
      // Contador inicial (REQ transparencia de mecánicas): recién ACÁ existe
     // una GameSession real — antes de esto (fase de elegir la Carta
     // Secreta) no hay "próxima oferta" de la que hablar todavía. Se
@@ -408,6 +458,8 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       clearActiveSessionBridge(this);
       deactivateGameAbandonGuard(this.registry);
       unsubscribeTopValueCelebration();
+      unsubscribeOnboarding();
+      unsubscribeOutcomeRecording();
     });
   }
 
@@ -428,6 +480,98 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
    * `numberColor`/`glowBorderSelect` más arriba en create()). El dominio
    * (OpenCardUseCase) no tiene por qué saber qué mazo visual está activo.
    */
+  /**
+   * Conecta OnboardingFlow (decide QUÉ consejo y CUÁNDO) con OnboardingCoach
+   * (lo dibuja). Devuelve la función de limpieza para el SHUTDOWN de la escena.
+   */
+  /**
+   * Registra el resultado FINAL de la partida (ganada o perdida) en
+   * récords + Desafío Diario. Usa `GameResultTracker` (ver ese archivo)
+   * para no contar una derrota de la que el jugador se salvó con "Revivir":
+   * una derrota queda pendiente hasta `flush()` (SHUTDOWN de esta escena) o
+   * hasta que 'GameRevived' la cancele. Una victoria siempre se reporta al
+   * toque — es lo que permite a ResultScene mostrar "Nuevo récord" o la
+   * recompensa diaria en la MISMA pantalla que anuncia el premio.
+   *
+   * Límite conocido: si el Desafío Diario se PIERDE sin revivir, la
+   * recompensa igual se acredita (ver el comentario en create()), pero
+   * recién al cerrar esta escena — demasiado tarde para mostrarla en la
+   * pantalla de "Perdiste". Las monedas llegan igual, solo sin el aviso.
+   */
+  private setupOutcomeRecording(eventBus: SimpleEventEmitter<GameEvent>): () => void {
+    const services = getServices(this);
+    const dailyDateKey = this.dailyDateKey;
+
+    const tracker = new GameResultTracker(result => {
+      const summary = services.outcomeRecorder.record(result, dailyDateKey);
+      this.registry.set('lastGameSummary', summary);
+    });
+
+    const unsubscribe = eventBus.subscribe(event => tracker.onGameEvent(event));
+    return () => {
+      tracker.flush();
+      unsubscribe();
+    };
+  }
+
+  private setupOnboarding(eventBus: SimpleEventEmitter<GameEvent>): () => void {
+    const flow = new OnboardingFlow(getServices(this).onboardingRepository);
+    if (!flow.isActive()) {
+      return () => undefined;
+    }
+
+    const coach = new OnboardingCoach(this);
+    let disposed = false;
+
+    // El panel del banquero aparece 1800 ms después de 'BankerOfferMade'
+    // (ver GameSceneController); el consejo espera a que esté en pantalla.
+    const BANKER_PANEL_DELAY_MS = 1900;
+    let pendingBankerHint: Phaser.Time.TimerEvent | null = null;
+
+    const apply = (action: OnboardingAction): void => {
+      if (disposed) {
+        return;
+      }
+      if (action.kind === 'hide') {
+        pendingBankerHint?.remove(false);
+        pendingBankerHint = null;
+        coach.hide();
+        return;
+      }
+      if (action.kind !== 'show') {
+        return;
+      }
+      if (action.hint === 'banker_offer') {
+        coach.hide();
+        pendingBankerHint = this.time.delayedCall(BANKER_PANEL_DELAY_MS, () => {
+          pendingBankerHint = null;
+          if (!disposed && flow.getCurrentHint() === 'banker_offer') {
+            coach.show('banker_offer');
+          }
+        });
+        return;
+      }
+      coach.show(action.hint);
+    };
+
+    coach.onSkip(() => apply(flow.skipAll()));
+
+    const unsubscribeEvents = eventBus.subscribe(event => apply(flow.onGameEvent(event)));
+
+    // Las cartas tardan ~450 ms en acomodarse en el tablero (tween de
+    // onSecretCardChosen): el primer consejo espera a que se puedan abrir.
+    const BOARD_SETTLE_DELAY_MS = 700;
+    const boardReadyTimer = this.time.delayedCall(BOARD_SETTLE_DELAY_MS, () => apply(flow.onBoardReady()));
+
+    return () => {
+      disposed = true;
+      boardReadyTimer.remove(false);
+      pendingBankerHint?.remove(false);
+      unsubscribeEvents();
+      coach.destroy();
+    };
+  }
+
   private playTopValueCardCelebration(card: Card): void {
     const deckId = getServices(this).progressionManager.getSelectedDeckId();
     this.spotlightEffect.play(this, card);

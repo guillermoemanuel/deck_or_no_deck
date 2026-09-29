@@ -73,6 +73,13 @@ type ShopTab = 'upgrades' | 'decks';
 // Layout en 2 columnas de 4 filas (8 upgrades de partida) — evita que el
 // catálogo desborde el modal a medida que se agregan nuevas mejoras.
 const ROWS_PER_COLUMN = 4;
+
+/** Upgrades cuyo uso dispara un rewarded ad al final/durante la partida. */
+const REWARDED_AD_UPGRADE_IDS: ReadonlySet<SessionUpgradeId> = new Set<SessionUpgradeId>([
+  'double_reward',
+  'triple_reward',
+  'revive'
+]);
 // QA de legibilidad (fontSize de la descripción 12px -> 15px): la
 // descripción más larga del catálogo ("Mitiga a la mitad el drenaje...",
 // 83 caracteres) pasa de 2 a 3 líneas dentro de wordWrap.width=280 a este
@@ -374,7 +381,18 @@ export class ShopScene extends Phaser.Scene {
       }).setOrigin(0.5)
     );
 
-    SESSION_UPGRADE_CATALOG.forEach((definition, index) => {
+    // Upgrades que dependen de un rewarded ad (Duplicar/Triplicar/Revivir):
+    // si hoy no se puede mostrar un rewarded (Basic Launch con ads
+    // deshabilitados, adblock, SDK ausente, sin fill reciente), NO se
+    // ofrecen — el jugador pagaría monedas por algo que no puede usar, y
+    // QA rechaza botones de rewarded sin efecto. Reaparecen solos cuando
+    // vuelve a haber anuncios (ver ICrazyGamesService.isRewardedAdAvailable).
+    const rewardedAdsUsable = getServices(this).crazyGamesService.isRewardedAdAvailable();
+    const visibleUpgrades = SESSION_UPGRADE_CATALOG.filter(
+      u => rewardedAdsUsable || !REWARDED_AD_UPGRADE_IDS.has(u.id)
+    );
+
+    visibleUpgrades.forEach((definition, index) => {
       const column = Math.floor(index / ROWS_PER_COLUMN);
       const row = index % ROWS_PER_COLUMN;
       const y = height / 2 + FIRST_ROW_OFFSET_Y + 30 + row * ROW_SPACING_Y;

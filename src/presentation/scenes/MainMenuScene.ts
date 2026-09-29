@@ -3,6 +3,10 @@ import { getServices } from '../GameServices';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { SupportedLanguage, TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DailyChallengeBanner } from '../components/DailyChallengeBanner';
+import { getNewGameWarning } from '../../shared/utils/NewGameConfirmation';
+import { clearPendingGameMode } from '../GameMode';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 
 /** Paleta "Casino de Lujo" — reutiliza tonos ya presentes en CardView/ResultScene
@@ -57,6 +61,8 @@ interface DecorativeCard {
  * botones) sigue 100% localizado como antes.
  */
 export class MainMenuScene extends Phaser.Scene {
+  private newGameDialog: ConfirmDialog | null = null;
+  private dailyChallengeBanner: DailyChallengeBanner | null = null;
   private languageButtons = new Map<SupportedLanguage, { bg: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text }>();
   private decorativeCards: DecorativeCard[] = [];
   private elapsedMs = 0;
@@ -96,7 +102,7 @@ export class MainMenuScene extends Phaser.Scene {
     new LocalizedText(
       this,
       width / 2,
-      height * 0.42,
+      height * 0.40,
       'MENU_COINS_LABEL',
       {
         fontFamily: 'Georgia, "Times New Roman", serif',
@@ -107,18 +113,41 @@ export class MainMenuScene extends Phaser.Scene {
       { amount: coins.toLocaleString() }
     ).setOrigin(0.5);
 
+    // --- Desafío Diario + récords personales ------------------------------
+    // Recompensa/racha (o cuenta regresiva) y una línea de récords debajo.
+    // Un solo clic empieza el desafío directo (sin pasar por selección de
+    // mazo, que es solo cosmética) — ver DailyChallengeBanner.ts.
+    this.dailyChallengeBanner = new DailyChallengeBanner(this, {
+      x: width / 2,
+      y: height * 0.49,
+      width: Math.min(420, width * 0.6),
+      onStart: () => {
+        this.scene.start('GameScene');
+        this.scene.launch('UIScene');
+      }
+    });
+
     // --- Botonera principal ------------------------------------------------
     const buttonWidth = Math.min(280, width * 0.42);
-    const buttonHeight = 56;
-    const buttonGap = 18;
-    const buttonsStartY = height * 0.54;
+    const buttonHeight = 52;
+    const buttonGap = 13;
+    // Antes en 0.6: quedaba pegado a la línea de récords del banner de
+    // arriba (Desafío Diario + stats). Se baja a 0.63 para separarlos.
+    const buttonsStartY = height * 0.63;
+
+    const isFirstVisit =
+      services.onboardingRepository.getSeenHints().length === 0 && !services.onboardingRepository.isSkipped();
 
     const buttons: CasinoButtonConfig[] = [
       {
         y: buttonsStartY,
         width: buttonWidth,
         height: buttonHeight,
-        labelKey: 'MENU_PLAY_AGAIN_BUTTON',
+        // Primera visita (ningún consejo visto ni omitido): "JUGAR" en vez de
+        // "JUGAR DE NUEVO", que confunde a quien todavía no jugó ninguna
+        // partida. Un solo clic lleva directo a la partida (con el mazo
+        // básico) y ahí el onboarding contextual explica lo necesario.
+        labelKey: isFirstVisit ? 'MENU_PLAY_BUTTON' : 'MENU_PLAY_AGAIN_BUTTON',
         accentColor: 0x2ea043,
         onClick: () => {
           // requirement_scene_flow_and_selection: con más de un mazo
@@ -138,11 +167,7 @@ export class MainMenuScene extends Phaser.Scene {
         height: buttonHeight,
         labelKey: 'MENU_NEW_GAME_BUTTON',
         accentColor: 0xff4d6d,
-        onClick: () => {
-          services.progressionManager.resetAllProgress();
-          this.scene.start('GameScene');
-          this.scene.launch('UIScene');
-        }
+        onClick: () => this.requestNewGame()
       },
       {
         y: buttonsStartY + (buttonHeight + buttonGap) * 2,
@@ -170,7 +195,13 @@ export class MainMenuScene extends Phaser.Scene {
     // GameScene (ver UIScene.ts). Se limpia en el SHUTDOWN ya existente
     // de esta escena (el mismo que usa el selector de idioma).
     this.hudControls = new SoundFullscreenControls(this, services.audioService);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hudControls.destroy());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.hudControls.destroy();
+      this.newGameDialog?.destroy();
+      this.newGameDialog = null;
+      this.dailyChallengeBanner?.destroy();
+      this.dailyChallengeBanner = null;
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -279,6 +310,21 @@ export class MainMenuScene extends Phaser.Scene {
    * un único grupo horizontal.
    */
   private createStyledTitle(centerX: number, y: number): Phaser.GameObjects.Container {
+    const { width, height } = this.cameras.main;
+
+    // Fondo fotográfico del menú (mesa de casino + silueta del banquero, la
+    // misma escena que cover.jpeg pero sin títulos horneados en la imagen —
+    // ver PreloadScene: 'main-menu-bg'). Reemplaza el degradado radial plano
+    // que dibujaba drawAtmosphere() como capa de fondo principal; las
+    // siluetas de cartas decorativas (drawDecorativeCardSilhouettes) siguen
+    // encima, ahora como una textura sutil sobre la foto real.
+    const backdrop = this.add.image(width / 2, height / 2, 'main-menu-bg').setDepth(-18);
+    backdrop.setScale(Math.max(width / backdrop.width, height / backdrop.height));
+    // Oscurece la foto para que el título dorado y el texto blanco de los
+    // botones sigan siendo legibles encima — mismo criterio que el overlay
+    // que GameScene ya aplica sobre su propio backdrop.
+    this.add.rectangle(width / 2, height / 2, width, height, 0x05070c, 0.55).setDepth(-17);
+
     const container = this.add.container(centerX, y);
 
     const goldStyle: Phaser.Types.GameObjects.Text.TextStyle = {
@@ -374,6 +420,48 @@ export class MainMenuScene extends Phaser.Scene {
    * (1.05x) al pasar el cursor — cumple el requisito de animaciones suaves
    * en `pointerover`/`pointerout` vía tweens de Phaser 3.
    */
+  /**
+   * "NUEVO JUEGO" borra TODO el progreso guardado (monedas y mazos comprados),
+   * así que antes de hacerlo se le pide confirmación al jugador. Si no hay nada
+   * que perder (0 monedas y solo el mazo básico) se empieza directo.
+   * "Cancelar" (o ESC) deja todo exactamente como estaba.
+   */
+  private requestNewGame(): void {
+    if (this.newGameDialog?.isOpen()) return; // evita apilar dos diálogos
+    const { progressionManager, recordsRepository } = getServices(this);
+    const coins = progressionManager.getCoins();
+    const hasRecords = recordsRepository.get().gamesPlayed > 0;
+    const warning = getNewGameWarning(coins, progressionManager.hasMoreThanBasicDeck(), hasRecords);
+
+    if (warning === 'none') {
+      this.startFreshGame();
+      return;
+    }
+
+    this.newGameDialog = new ConfirmDialog(this, {
+      titleKey: 'NEW_GAME_CONFIRM_TITLE',
+      bodyKey: 'NEW_GAME_CONFIRM_BODY',
+      bodyParams: { coins: coins.toLocaleString() },
+      cancelKey: 'NEW_GAME_CONFIRM_CANCEL',
+      confirmKey: 'NEW_GAME_CONFIRM_ACCEPT',
+      confirmColor: 0xff4d6d,
+      onConfirm: () => this.startFreshGame()
+    });
+  }
+
+  private startFreshGame(): void {
+    const services = getServices(this);
+    services.progressionManager.resetAllProgress();
+    // Récords personales: se borran con "NUEVO JUEGO" (a diferencia del
+    // Desafío Diario, que se conserva a propósito — ver IDailyChallengeRepository).
+    services.recordsRepository.reset();
+    // Un pedido de Desafío Diario pendiente (si tocó ese botón y canceló
+    // acá) no debe colarse en esta partida nueva.
+    clearPendingGameMode(this.registry);
+    this.scene.start('GameScene');
+    this.scene.launch('UIScene');
+  }
+
   private createCasinoButton(x: number, config: CasinoButtonConfig): Phaser.GameObjects.Container {
     const { y, width, height, labelKey, accentColor, onClick } = config;
     const container = this.add.container(x, y);

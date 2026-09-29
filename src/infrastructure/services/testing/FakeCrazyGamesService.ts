@@ -1,4 +1,10 @@
-import { ICrazyGamesService, AdResult } from '../../../domain/ports/ICrazyGamesService';
+import {
+  ICrazyGamesService,
+  AdResult,
+  AdType,
+  AdLifecycleListener,
+  AdLifecyclePhase
+} from '../../../domain/ports/ICrazyGamesService';
 
 /**
  * Fake controlable: el test decide de antemano que resultado devolvera
@@ -6,6 +12,8 @@ import { ICrazyGamesService, AdResult } from '../../../domain/ports/ICrazyGamesS
  */
 export class FakeCrazyGamesService implements ICrazyGamesService {
   private available = true;
+  private rewardedAvailable = true;
+  private readonly lifecycleListeners = new Set<AdLifecycleListener>();
   private nextAdResult: AdResult = { success: true };
   // `null` por defecto: mismo comportamiento que el servicio real cuando
   // el SDK no está disponible o no expone locale — ejercita el "no-op,
@@ -19,6 +27,26 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
 
   setAvailable(available: boolean): void {
     this.available = available;
+  }
+
+  setRewardedAvailable(available: boolean): void {
+    this.rewardedAvailable = available;
+  }
+
+  /** Permite a los tests simular las fases started/ended que emitiría el SDK real. */
+  emitAdLifecycle(phase: AdLifecyclePhase, type: AdType = 'midgame'): void {
+    this.lifecycleListeners.forEach(listener => listener(phase, type));
+  }
+
+  isRewardedAdAvailable(): boolean {
+    return this.available && this.rewardedAvailable;
+  }
+
+  onAdLifecycle(listener: AdLifecycleListener): () => void {
+    this.lifecycleListeners.add(listener);
+    return () => {
+      this.lifecycleListeners.delete(listener);
+    };
   }
 
   setUserLocale(locale: string | null): void {

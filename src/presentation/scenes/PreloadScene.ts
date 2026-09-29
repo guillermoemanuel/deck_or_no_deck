@@ -75,6 +75,11 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('hud-soundon', 'assets/ui/hud/soundon.png');
     this.load.image('hud-soundoff', 'assets/ui/hud/soundoff.png');
 
+    // Fondo fotográfico del Menú Principal (mesa/banquero, sin títulos ni
+    // textos horneados en la imagen — MainMenuScene dibuja "DECK OR NO
+    // DECK" y el subtítulo encima). Tampoco depende del mazo activo.
+    this.load.image('main-menu-bg', 'assets/ui/main-menu.jpg');
+
     this.load.audio('music_gameplay','assets/audio/music/clasic_gameplay.mp3');
     this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');
     this.load.audio('sfx-offer', 'assets/audio/sfx/offer.mp3');

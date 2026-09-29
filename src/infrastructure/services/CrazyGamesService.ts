@@ -1,4 +1,10 @@
-import { ICrazyGamesService, AdResult } from '../../domain/ports/ICrazyGamesService';
+import {
+  ICrazyGamesService,
+  AdResult,
+  AdType,
+  AdLifecycleListener,
+  AdLifecyclePhase
+} from '../../domain/ports/ICrazyGamesService';
 
 declare global {
   interface Window {
@@ -23,6 +29,7 @@ declare global {
               adStarted?: () => void;
             }
           ) => void;
+          hasAdblock?: () => Promise<boolean>;
         };
         game: {
           gameplayStart: () => void;
@@ -68,10 +75,29 @@ declare global {
  *    idioma — ver getUserLocale() y LanguageManager.applyDetectedLocale().
  */
 export class CrazyGamesService implements ICrazyGamesService {
-  private static readonly AD_TIMEOUT_MS = 15000;
+  /**
+   * Tiempo máximo de espera hasta que el SDK CONFIRME el inicio del anuncio
+   * (`adStarted`) o falle (`adError`). Antes este timeout corría sobre el
+   * anuncio ENTERO: un rewarded de 20-30 s vencía a mitad de reproducción,
+   * se resolvía como error y el `adFinished` posterior se ignoraba — el
+   * jugador veía el anuncio completo y no recibía la recompensa.
+   */
+  private static readonly AD_START_TIMEOUT_MS = 15000;
+  /**
+   * Red de seguridad DESPUÉS de `adStarted`: si el SDK nunca reporta
+   * `adFinished`/`adError`, se libera el juego (audio + promesa) pasado este
+   * tiempo, muy por encima de la duración de cualquier anuncio real.
+   */
+  private static readonly AD_PLAYBACK_SAFETY_TIMEOUT_MS = 120000;
+  /** Tras un rewarded fallido, no se ofrecen acciones con rewarded durante este lapso. */
+  private static readonly REWARDED_RETRY_COOLDOWN_MS = 60000;
 
   private ready = false;
   private initPromise: Promise<void> | null = null;
+  private adblockDetected = false;
+  private adInProgress = false;
+  private rewardedBlockedUntil = 0;
+  private readonly lifecycleListeners = new Set<AdLifecycleListener>();
 
   /**
    * Dispara `SDK.init()` UNA vez. Debe llamarse apenas se instancia el
@@ -98,6 +124,7 @@ export class CrazyGamesService implements ICrazyGamesService {
     this.initPromise = window.CrazyGames.SDK.init()
       .then(() => {
         this.ready = true;
+        this.detectAdblock();
       })
       .catch((error: unknown) => {
         console.warn('[CrazyGamesService] SDK.init() failed — ads/telemetry quedan deshabilitados esta sesión.', error);
@@ -121,6 +148,17 @@ export class CrazyGamesService implements ICrazyGamesService {
       console.warn('[CrazyGamesService] Unexpected error reading SDK.ad', error);
       return false;
     }
+  }
+
+  isRewardedAdAvailable(): boolean {
+    return this.isAvailable() && !this.adblockDetected && Date.now() >= this.rewardedBlockedUntil;
+  }
+
+  onAdLifecycle(listener: AdLifecycleListener): () => void {
+    this.lifecycleListeners.add(listener);
+    return () => {
+      this.lifecycleListeners.delete(listener);
+    };
   }
 
   showRewardedAd(): Promise<AdResult> {
@@ -193,12 +231,45 @@ export class CrazyGamesService implements ICrazyGamesService {
     action();
   }
 
-  private async requestAd(type: 'rewarded' | 'midgame'): Promise<AdResult> {
-    // Ya era async/Promise (y ya se espera con `await` en los use cases
-    // que la llaman), así que agregar este `await` acá es un cambio
-    // totalmente compatible: nadie afuera nota la diferencia salvo que
-    // ahora, si `init()` sigue en curso, esto espera a que termine en
-    // vez de fallar de una con `sdk_unavailable` por una carrera de timing.
+  private detectAdblock(): void {
+    try {
+      const check = window.CrazyGames?.SDK?.ad?.hasAdblock;
+      if (typeof check !== 'function') {
+        return;
+      }
+      void check
+        .call(window.CrazyGames!.SDK!.ad)
+        .then((hasAdblock: boolean) => {
+          this.adblockDetected = Boolean(hasAdblock);
+        })
+        .catch(() => {
+          // Sin dato fiable: se asume "sin adblock" y el fallo real (si lo
+          // hubiera) lo resuelve el cooldown de rewarded.
+        });
+    } catch (error) {
+      console.warn('[CrazyGamesService] hasAdblock() failed', error);
+    }
+  }
+
+  private emitLifecycle(phase: AdLifecyclePhase, type: AdType): void {
+    this.lifecycleListeners.forEach(listener => {
+      try {
+        listener(phase, type);
+      } catch (error) {
+        console.warn('[CrazyGamesService] Ad lifecycle listener threw', error);
+      }
+    });
+  }
+
+  private static isUnfilled(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+    const data = error as { code?: unknown; reason?: unknown };
+    return data.code === 'unfilled' || data.reason === 'unfilled';
+  }
+
+  private async requestAd(type: AdType): Promise<AdResult> {
     if (this.initPromise) {
       await this.initPromise;
     }
@@ -208,42 +279,86 @@ export class CrazyGamesService implements ICrazyGamesService {
       return { success: false, reason: 'sdk_unavailable' };
     }
 
+    // Un solo anuncio a la vez: el SDK no admite requests solapados y, sin
+    // este guard, dos llamadas romperían el par started/ended del audio.
+    if (this.adInProgress) {
+      return { success: false, reason: 'error' };
+    }
+    this.adInProgress = true;
+
     return new Promise<AdResult>((resolve) => {
       let isSettled = false;
+      // `true` desde `adStarted` hasta que se emite 'ended'. Es independiente
+      // de `isSettled`: si el start-timeout ya resolvió la promesa pero el SDK
+      // arranca el anuncio igual, el audio se silencia Y se restaura igual.
+      let lifecycleOpen = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
 
-      const timer = setTimeout(() => {
-        if (!isSettled) {
-          isSettled = true;
-          console.warn(`[CrazyGamesService] Ad request for "${type}" timed out after ${CrazyGamesService.AD_TIMEOUT_MS}ms.`);
-          resolve({ success: false, reason: 'error' });
+      const closeLifecycle = (): void => {
+        if (lifecycleOpen) {
+          lifecycleOpen = false;
+          this.emitLifecycle('ended', type);
         }
-      }, CrazyGamesService.AD_TIMEOUT_MS);
+      };
+
+      const settle = (result: AdResult): void => {
+        if (isSettled) {
+          return;
+        }
+        isSettled = true;
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+        this.adInProgress = false;
+        if (type === 'rewarded') {
+          this.rewardedBlockedUntil = result.success
+            ? 0
+            : Date.now() + CrazyGamesService.REWARDED_RETRY_COOLDOWN_MS;
+        }
+        resolve(result);
+      };
+
+      timer = setTimeout(() => {
+        console.warn(`[CrazyGamesService] Ad "${type}" did not start within ${CrazyGamesService.AD_START_TIMEOUT_MS}ms.`);
+        settle({ success: false, reason: 'error' });
+      }, CrazyGamesService.AD_START_TIMEOUT_MS);
 
       try {
         window.CrazyGames!.SDK!.ad.requestAd(type, {
-          adFinished: () => {
+          adStarted: () => {
+            if (!lifecycleOpen) {
+              lifecycleOpen = true;
+              this.emitLifecycle('started', type);
+            }
             if (!isSettled) {
-              isSettled = true;
-              clearTimeout(timer);
-              resolve({ success: true });
+              // Ya empezó: el timeout de arranque deja de aplicar.
+              if (timer !== undefined) {
+                clearTimeout(timer);
+              }
+              timer = setTimeout(() => {
+                console.warn(`[CrazyGamesService] Ad "${type}" never reported end; releasing the game.`);
+                closeLifecycle();
+                settle({ success: false, reason: 'error' });
+              }, CrazyGamesService.AD_PLAYBACK_SAFETY_TIMEOUT_MS);
             }
           },
+          adFinished: () => {
+            closeLifecycle();
+            settle({ success: true });
+          },
           adError: (error: unknown) => {
-            if (!isSettled) {
-              isSettled = true;
-              clearTimeout(timer);
-              console.warn('[CrazyGamesService] Ad error received from SDK:', error);
-              resolve({ success: false, reason: 'ad_unavailable' });
-            }
+            console.warn('[CrazyGamesService] Ad error received from SDK:', error);
+            closeLifecycle();
+            settle({
+              success: false,
+              reason: CrazyGamesService.isUnfilled(error) ? 'ad_unavailable' : 'error'
+            });
           }
         });
       } catch (error) {
-        if (!isSettled) {
-          isSettled = true;
-          clearTimeout(timer);
-          console.error('[CrazyGamesService] Unexpected exception requesting ad:', error);
-          resolve({ success: false, reason: 'error' });
-        }
+        console.error('[CrazyGamesService] Unexpected exception requesting ad:', error);
+        closeLifecycle();
+        settle({ success: false, reason: 'error' });
       }
     });
   }

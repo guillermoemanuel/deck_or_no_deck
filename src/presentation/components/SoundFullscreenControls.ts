@@ -104,7 +104,9 @@ export class SoundFullscreenControls {
       { size: BUTTON_SIZE, label: languageManager.getText(initialMuted ? 'HUD_SOUND_OFF' : 'HUD_SOUND_ON') }
     );
 
-    if (showFullscreenButton) {
+    // iPhone/iOS Safari no ofrece Fullscreen API para páginas: el botón no
+    // haría nada (QA no admite botones sin efecto), así que no se crea.
+    if (showFullscreenButton && scene.scale.fullscreen.available) {
       // `this.scene.scale.toggleFullscreen()` es la API nativa de Phaser 3
       // para esto; el ícono se actualiza solo cuando el ScaleManager
       // confirma el cambio real de estado (eventos ENTER_FULLSCREEN/

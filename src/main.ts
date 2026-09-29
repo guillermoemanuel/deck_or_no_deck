@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
 import { ProgressionManager } from './infrastructure/persistence/ProgressionManager';
+import { installCompactTextFloor } from './presentation/mobile/CompactTextFloor';
+import { LocalStorageOnboardingRepository } from './infrastructure/persistence/LocalStorageOnboardingRepository';
+import { LocalStorageRecordsRepository } from './infrastructure/persistence/LocalStorageRecordsRepository';
+import { LocalStorageDailyChallengeRepository } from './infrastructure/persistence/LocalStorageDailyChallengeRepository';
+import { GameOutcomeRecorder } from './application/records/GameOutcomeRecorder';
 import { CryptoRandomProvider } from './infrastructure/services/CryptoRandomProvider';
 import { AudioService } from './infrastructure/audio/AudioService';
 import { BootScene } from './presentation/scenes/BootScene';
@@ -77,6 +82,56 @@ const config: Phaser.Types.Core.GameConfig = {
 
 const game = new Phaser.Game(config);
 
+// --- Soporte móvil -----------------------------------------------------------
+// Texto nunca menor a ~12 px físicos cuando el juego se ve reducido.
+installCompactTextFloor(game);
+
+// Aviso "girá tu dispositivo" (el HTML lo muestra solo en táctiles en vertical);
+// acá solo se le pone el texto en el idioma activo y se mantiene al día.
+const rotateTitle = document.getElementById('rotate-title');
+const rotateHint = document.getElementById('rotate-hint');
+const renderRotateOverlayText = (): void => {
+  if (rotateTitle) rotateTitle.textContent = languageManager.getText('ROTATE_DEVICE_TITLE');
+  if (rotateHint) rotateHint.textContent = languageManager.getText('ROTATE_DEVICE_HINT');
+};
+renderRotateOverlayText();
+languageManager.onLanguageChanged(renderRotateOverlayText);
+
+// iOS informa el tamaño del viewport con retraso tras girar: se vuelve a medir.
+const refreshScale = (): void => game.scale.refresh();
+window.addEventListener('orientationchange', () => window.setTimeout(refreshScale, 300));
+window.visualViewport?.addEventListener('resize', refreshScale);
+
+// Sin menú contextual (pulsación larga en móvil / clic derecho) ni zoom por gesto (iOS Safari).
+document.addEventListener('contextmenu', event => event.preventDefault());
+document.addEventListener('gesturestart', event => event.preventDefault());
+
+// Mejor esfuerzo: al entrar en pantalla completa, fijar horizontal (solo Android/Chrome lo permite).
+game.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => {
+  const orientation = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+  orientation.lock?.('landscape').catch(() => undefined);
+
+  // BUGFIX (fullscreen con barras negras en notebooks): en varios navegadores
+  // de escritorio (sobre todo Windows) el 'resize' que sigue a entrar en
+  // fullscreen se dispara con el tamaño de VENTANA viejo, antes de que el
+  // layout realmente ocupe el monitor entero (ocultar la barra de tareas
+  // tarda uno o dos frames más). Sin este refresh demorado, el FIT de
+  // Phaser queda calculado contra ese tamaño viejo: el canvas se ve chico
+  // y centrado dentro de un rectángulo negro que sí cubre toda la pantalla
+  // — como si el botón "no hiciera" fullscreen de verdad, aunque
+  // técnicamente sí lo pidió (a diferencia de F11, que el propio navegador
+  // sincroniza con su motor de layout sin pasar por este evento). Dos
+  // reintentos cortos cubren tanto el caso rápido como el más lento.
+  window.setTimeout(refreshScale, 100);
+  window.setTimeout(refreshScale, 350);
+});
+
+// Mismo remedio al volver a modo ventana, por si el navegador reporta el
+// tamaño anterior (el de fullscreen) en el primer resize tras salir.
+game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => {
+  window.setTimeout(refreshScale, 100);
+});
+
 // AUDITORÍA DE AUDIO: AudioService requiere la instancia de Phaser.Game
 // (no de una Scene puntual) para poder vivir más allá del ciclo de vida
 // de cualquier escena individual — ver el comentario de clase en
@@ -85,11 +140,39 @@ const game = new Phaser.Game(config);
 // después de `new Phaser.Game(config)`, y no junto a los demás servicios.
 const audioService = new AudioService(game);
 
+// Audio durante anuncios (requisito de CrazyGames): se silencia SOLO cuando
+// el SDK confirma que el anuncio empezó (`adStarted`), no al pedirlo — si el
+// request termina sin fill, el jugador no debe notar ningún corte de audio.
+// Se restaura al estado que tenía el jugador ANTES del anuncio (si había
+// silenciado el juego con el botón del HUD, sigue silenciado). Cubre
+// rewarded y midgame desde un único lugar, sin lógica por escena.
+let mutedBeforeAd: boolean | null = null;
+crazyGamesService.onAdLifecycle(phase => {
+  if (phase === 'started') {
+    if (mutedBeforeAd === null) {
+      mutedBeforeAd = audioService.isMuted();
+    }
+    audioService.setMuted(true);
+    return;
+  }
+  if (mutedBeforeAd !== null) {
+    audioService.setMuted(mutedBeforeAd);
+    mutedBeforeAd = null;
+  }
+});
+
+const recordsRepository = new LocalStorageRecordsRepository();
+const dailyChallengeRepository = new LocalStorageDailyChallengeRepository();
+
 const services: GameServices = {
   crazyGamesService,
   progressionManager,
   randomProvider,
-  audioService
+  audioService,
+  onboardingRepository: new LocalStorageOnboardingRepository(),
+  recordsRepository,
+  dailyChallengeRepository,
+  outcomeRecorder: new GameOutcomeRecorder(recordsRepository, dailyChallengeRepository, progressionManager)
 };
 
 game.registry.set('services', services);

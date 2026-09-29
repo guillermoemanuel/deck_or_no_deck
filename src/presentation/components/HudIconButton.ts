@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getTouchHitSize } from '../../shared/utils/CompactScreen';
 
 /** Misma paleta "Casino de Lujo" que el resto del HUD (ver createCasinoButton
  * en MainMenuScene.ts) — panel carbón + borde dorado + halo en hover. */
@@ -136,7 +137,10 @@ export class HudIconButton extends Phaser.GameObjects.Container {
     // a propósito: la descripción es una etiqueta informativa debajo, no
     // una segunda zona de click — mantiene el área táctil simple y
     // predecible sin importar cuánto texto tenga la descripción.
-    const hitSize = Math.max(size, MIN_TOUCH_SIZE);
+    // En pantallas chicas (teléfono en horizontal, factor ~0.54) 48 px de
+    // diseño son ~26 px físicos: se agranda el área TÁCTIL (no el dibujo) hasta
+    // ~44 px físicos, con tope para no solaparse con el botón vecino.
+    const hitSize = getTouchHitSize(Math.max(size, MIN_TOUCH_SIZE), scene.scale.displayScale.x);
     this.hitZone = scene.add.zone(0, 0, hitSize, hitSize).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.add(this.hitZone);
 

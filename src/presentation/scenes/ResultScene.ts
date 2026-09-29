@@ -4,6 +4,7 @@ import { ResultSceneData, ResultOutcome } from './ResultScene.types';
 import { MultiplyRewardUseCase, RewardMultiplier } from '../../application/use-cases/MultiplyRewardUseCase';
 import { ParticleManager } from '../components/ParticleManager';
 import { LocalizedText } from '../components/LocalizedText';
+import { GameSummary } from '../../application/records/GameOutcomeRecorder';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { CardPositionSource, getGameObjectGlobalPosition } from '../effects/deck-celebrations/DeckCelebrationEffect';
@@ -74,6 +75,14 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
 
     // Fondo atenuador
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.82);
+
+    // Resumen de récords/Desafío Diario de ESTA partida, si lo hay (ver
+    // GameScene.setupOutcomeRecording). Solo existe de forma confiable para
+    // una VICTORIA: una derrota se confirma recién al cerrar GameScene, para
+    // entonces esta pantalla ya se cerró (ver el comentario en ese archivo).
+    const summary = this.registry.get('lastGameSummary') as GameSummary | undefined;
+    this.registry.remove('lastGameSummary');
+    this.renderOutcomeSummary(summary, width / 2, height / 2 + 148);
 
     // Contenedor modal: carbón oscuro translúcido con doble borde
     // (acento de resultado + filo dorado interior), misma técnica de
@@ -189,6 +198,33 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     });
   }
 
+  /** Dibuja, si corresponde, "Nuevo récord" y/o la recompensa del Desafío Diario debajo del contenido principal del modal. */
+  private renderOutcomeSummary(summary: GameSummary | undefined, x: number, startY: number): void {
+    if (!summary) {
+      return;
+    }
+    let y = startY;
+    if (summary.daily) {
+      new LocalizedText(
+        this,
+        x,
+        y,
+        'RESULT_DAILY_REWARD',
+        { fontFamily: 'Arial, sans-serif', fontSize: '14px', fontStyle: 'bold', color: '#ffd76a' },
+        { reward: summary.daily.reward.toLocaleString(), streak: summary.daily.streak }
+      ).setOrigin(0.5);
+      y += 20;
+    }
+    if (summary.isNewBestPayout) {
+      new LocalizedText(this, x, y, 'RESULT_NEW_RECORD', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '14px',
+        fontStyle: 'bold',
+        color: '#ffd76a'
+      }).setOrigin(0.5);
+    }
+  }
+
   private buildWonActions(data: ResultSceneData): void {
     const { width, height } = this.cameras.main;
     const baseAmount = data.amount ?? 0;
@@ -242,8 +278,15 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
       this.createActionButton(width / 2, height / 2 - 5, 'RESULT_REVIVE_BUTTON', COLOR_GOLD, COLOR_GOLD_DIM, async () => {
         if (!data.onRevive) return;
         this.statusText.setText(languageManager.getText('RESULT_AD_LOADING'));
-        await data.onRevive();
-        this.statusText.setText(languageManager.getText('RESULT_AD_FAILED'));
+        const outcome = (await data.onRevive()) as { revived?: boolean; reason?: string } | undefined;
+        // Si revivió, GameSceneController ya detuvo esta escena: tocar
+        // `statusText` acá lanzaría un error sobre un objeto destruido.
+        if (outcome?.revived === true || !this.scene.isActive()) {
+          return;
+        }
+        this.statusText.setText(
+          languageManager.getText(outcome?.reason === 'sdk_unavailable' ? 'RESULT_AD_UNAVAILABLE' : 'RESULT_AD_FAILED')
+        );
       });
     }
 
@@ -338,35 +381,26 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   /**
    * Punto único de integración del Midgame Ad (CrazyGames SDK v3), usado
    * por AMBAS transiciones entre partidas ("Jugar de nuevo" e "Ir al
-   * Menú"). Encapsula el contrato de "Flow Safety" que exige la política
-   * de monetización/retención de CrazyGames:
+   * Menú"). Contrato de "Flow Safety" que exige CrazyGames:
    *
-   * 1. Pausa el sonido de Phaser (`this.sound.pauseAll()`) mientras el
-   *    anuncio está en pantalla, para no superponer música/SFX del juego
-   *    con el audio del anuncio.
-   * 2. Espera `showMidgameAd()` (async/await) — que ya internamente
-   *    resuelve siempre (nunca rechaza) sea cual sea el resultado real:
-   *    reproducido con éxito, fallido, omitido o bloqueado por un
-   *    AdBlocker (ver CrazyGamesService.requestAd()).
-   * 3. Reanuda el audio (`this.sound.resumeAll()`) en el bloque `finally`,
-   *    es decir SIEMPRE, incluso si `showMidgameAd()` lanzara una
-   *    excepción inesperada.
-   * 4. Ejecuta `onComplete()` (que es quien finalmente llama a
-   *    `scene.start()`/`scene.restart()`) también en el `finally` — así
-   *    la navegación queda garantizada pase lo que pase con el anuncio,
-   *    sin congelar jamás la pantalla de resultado.
+   * 1. El audio ya NO se maneja acá: se silencia/restaura globalmente en
+   *    `main.ts` a partir de `onAdLifecycle` ('started' / 'ended'), es
+   *    decir SOLO si el anuncio realmente empezó. Antes esta función
+   *    hacía `sound.pauseAll()` al PEDIR el anuncio, lo que cortaba la
+   *    música aunque el request terminara sin fill (adblock, timing).
+   * 2. Espera `showMidgameAd()`, que siempre resuelve (nunca rechaza)
+   *    sea cual sea el resultado: reproducido, fallado, sin fill o
+   *    bloqueado por AdBlocker.
+   * 3. Ejecuta `onComplete()` (que llama a `scene.start()`/`restart()`)
+   *    en el `finally`, así la navegación queda garantizada pase lo que
+   *    pase con el anuncio y nunca se congela la pantalla de resultado.
    */
   private async runMidgameAdThen(onComplete: () => void): Promise<void> {
-    this.sound.pauseAll();
     try {
-      // No se inspecciona el AdResult: al usuario le llega la misma
-      // transición ya sea que el anuncio se haya mostrado, fallado,
-      // saltado o bloqueado por un AdBlocker.
       await this.services.crazyGamesService.showMidgameAd();
     } catch (error) {
       console.warn('[ResultScene] showMidgameAd() rechazó inesperadamente — se continúa igual.', error);
     } finally {
-      this.sound.resumeAll();
       onComplete();
     }
   }

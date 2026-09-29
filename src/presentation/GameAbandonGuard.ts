@@ -41,7 +41,21 @@ export const ABANDON_PENALTY_AMOUNT = 5000;
  *   la vuelve a poner genuinamente en curso, así que un abandono
  *   POSTERIOR a la revivida sí debe volver a penalizar.
  */
+const PENALTY_FREE_KEY = 'gameAbandonGuard:penaltyFreeSession';
+
+/**
+ * Marca la sesión como "sin castigo" (Desafío Diario): mientras esté activa,
+ * `activateGameAbandonGuard` no hace nada — así ni cerrar la pestaña ni salir
+ * al menú restan monedas, ni siquiera tras un revive (que reactiva el guard).
+ */
+export function setPenaltyFreeSession(registry: Phaser.Data.DataManager, penaltyFree: boolean): void {
+  registry.set(PENALTY_FREE_KEY, penaltyFree);
+}
+
 export function activateGameAbandonGuard(registry: Phaser.Data.DataManager): void {
+  if (registry.get(PENALTY_FREE_KEY) === true) {
+    return;
+  }
   registry.set(REGISTRY_KEY, true);
 }
 

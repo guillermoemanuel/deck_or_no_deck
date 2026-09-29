@@ -179,6 +179,36 @@ export const TRANSLATIONS = {
     HUD_WINDOWED: 'Windowed',
     HUD_SOUND_ON: 'Sound On',
     HUD_SOUND_OFF: 'Sound Off',
+
+    // --- Onboarding in-game (consejos contextuales; la guía completa sigue en "Cómo jugar") ---
+    ONBOARDING_OPEN_CARD_TITLE: '👆 Open a card',
+    ONBOARDING_OPEN_CARD_BODY:
+      'Tap any card on the board to reveal its prize. Your Secret Card is the one on the pedestal.',
+    ONBOARDING_ENERGY_TITLE: '⚡ Watch your energy',
+    ONBOARDING_ENERGY_BODY:
+      'Low-value cards protect your energy; high-value cards drain it. If it reaches 0%, you lose.',
+    ONBOARDING_BANKER_TITLE: '🤝 The Banker is calling',
+    ONBOARDING_BANKER_BODY:
+      'DEAL to take the offer and win now, or NO DEAL to keep playing for your Secret Card.',
+    ONBOARDING_MORE_INFO: '📖 More rules in “How to Play” on the main menu.',
+    ONBOARDING_SKIP: 'Skip tips ✕',
+    MENU_PLAY_BUTTON: 'PLAY',
+    ROTATE_DEVICE_TITLE: 'Rotate your device',
+    ROTATE_DEVICE_HINT: 'Deck or No Deck is played in landscape mode.',
+    NEW_GAME_CONFIRM_TITLE: '⚠ Start over from zero?',
+    NEW_GAME_CONFIRM_BODY:
+      'You will permanently lose your {coins} coins, every deck you unlocked, and your personal stats and best scores. This cannot be undone.',
+    NEW_GAME_CONFIRM_CANCEL: 'Keep my progress',
+    NEW_GAME_CONFIRM_ACCEPT: 'Delete and start over',
+
+    // --- Desafío Diario y Récords (Menú Principal) ---
+    DAILY_CHALLENGE_TITLE: '📅 Daily Challenge',
+    DAILY_CHALLENGE_AVAILABLE: 'Reward: {reward} coins · Streak: {streak}',
+    DAILY_CHALLENGE_COMPLETED: 'Completed! Come back in {time}',
+    DAILY_CHALLENGE_USED: 'In progress. Finish it or come back in {time}',
+    STATS_LINE: '🏆 {games} games · {winRate}% wins · Best: {bestPayout}',
+    RESULT_NEW_RECORD: '🏆 New personal best!',
+    RESULT_DAILY_REWARD: '📅 Daily Challenge: +{reward} coins (streak: {streak})',
   },
 
   es: {
@@ -331,6 +361,36 @@ export const TRANSLATIONS = {
     HUD_WINDOWED: 'Modo Ventana',
     HUD_SOUND_ON: 'Sonido Activado',
     HUD_SOUND_OFF: 'Sonido Silenciado',
+
+    // --- Onboarding in-game (consejos contextuales; la guía completa sigue en "Cómo jugar") ---
+    ONBOARDING_OPEN_CARD_TITLE: '👆 Abrí una carta',
+    ONBOARDING_OPEN_CARD_BODY:
+      'Tocá cualquier carta del tablero para revelar su premio. Tu Carta Secreta es la del pedestal.',
+    ONBOARDING_ENERGY_TITLE: '⚡ Cuidá tu energía',
+    ONBOARDING_ENERGY_BODY:
+      'Las cartas de poco valor protegen tu energía; las de mucho valor la drenan. Si llega a 0%, perdés.',
+    ONBOARDING_BANKER_TITLE: '🤝 Llama el Banquero',
+    ONBOARDING_BANKER_BODY:
+      'DEAL para aceptar la oferta y ganar ya, o NO DEAL para seguir jugando por tu Carta Secreta.',
+    ONBOARDING_MORE_INFO: '📖 Más reglas en «Cómo Jugar», en el menú principal.',
+    ONBOARDING_SKIP: 'Omitir consejos ✕',
+    MENU_PLAY_BUTTON: 'JUGAR',
+    ROTATE_DEVICE_TITLE: 'Girá tu dispositivo',
+    ROTATE_DEVICE_HINT: 'Deck or No Deck se juega en horizontal.',
+    NEW_GAME_CONFIRM_TITLE: '⚠ ¿Empezar de cero?',
+    NEW_GAME_CONFIRM_BODY:
+      'Vas a perder para siempre tus {coins} monedas, todos los mazos que desbloqueaste y tus estadísticas y mejores puntajes. Esta acción no se puede deshacer.',
+    NEW_GAME_CONFIRM_CANCEL: 'Conservar mi progreso',
+    NEW_GAME_CONFIRM_ACCEPT: 'Borrar y empezar',
+
+    // --- Desafío Diario y Récords (Menú Principal) ---
+    DAILY_CHALLENGE_TITLE: '📅 Desafío Diario',
+    DAILY_CHALLENGE_AVAILABLE: 'Recompensa: {reward} monedas · Racha: {streak}',
+    DAILY_CHALLENGE_COMPLETED: '¡Completado! Volvé en {time}',
+    DAILY_CHALLENGE_USED: 'En curso. Terminalo o volvé en {time}',
+    STATS_LINE: '🏆 {games} partidas · {winRate}% victorias · Mejor: {bestPayout}',
+    RESULT_NEW_RECORD: '🏆 ¡Nuevo récord personal!',
+    RESULT_DAILY_REWARD: '📅 Desafío Diario: +{reward} monedas (racha: {streak})',
   }
   // Para agregar un idioma nuevo (ej. 'pt'): copiar un bloque completo de
   // arriba, traducir cada valor, y listo — SUPPORTED_LANGUAGES y
