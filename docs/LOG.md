@@ -7,6 +7,44 @@
 
 ---
 
+## 2026-09-30 · Fase 3 — Arquitectura agéntica (OpenCode)
+
+**Tarea:** definir agentes especializados y comandos del flujo en OpenCode.
+
+**Archivos creados (13, ninguno en `src/`):**
+
+`.opencode/agents/` →
+- `architect.md` (primary, read-only: diseña planes),
+- `reviewer.md` (subagent, read-only: checklist sobre el diff),
+- `qa.md` (subagent, read-only: gates),
+- `domain-builder.md` (edita solo `src/domain/**` y `src/application/**`),
+- `ui-builder.md` (edita solo `src/presentation/**` + `src/shared/i18n/LanguageData.ts`),
+- `infra-builder.md` (infrastructure, shared, main.ts, index.html, public, configs —
+  con `LanguageData.ts` denegado),
+- `test-engineer.md` (solo `*.spec.ts`, `*/testing/**`, `jest.config.js`),
+- `memory-keeper.md` (solo `docs/**`, `AGENTS.md`, `README.md`).
+
+`.opencode/commands/` →
+- `/plan` (agente architect),
+- `/build` (ejecuta con gates),
+- `/review` (reviewer en sesión hijo),
+- `/qa` (qa en sesión hijo),
+- `/log` (memory-keeper en sesión hijo).
+
+**Diseño:**
+- Permisos por zona con `edit deny *` + `allow` explícito (última regla gana).
+- Los builders solo pueden correr los gates por shell.
+- `qa` y `memory-keeper` en modelo pequeño (`opencode/mimo-v2.6-flash-free`).
+- `architect`, builders y `reviewer` heredan el modelo de la sesión.
+
+**Verificación:** gates con el agente `qa` (typecheck, lint, suite completa) —
+verificación delegada al agente qa.
+
+**Pendiente:** Fase 4 — testing (umbrales de cobertura sobre `application/`,
+extracción a `domain` de lógica hoy en `ShopScene`/`EnergyBarView`, checklist de smoke).
+
+---
+
 ## 2026-09-30 · Fase 2 — Reescritura de `AGENTS.md`
 
 **Tarea:** convertir `AGENTS.md` de descripción arquitectónica a **contrato operativo**.
