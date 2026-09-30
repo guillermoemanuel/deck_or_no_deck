@@ -88,7 +88,7 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 |---|---|---|
 | `GameStateDTO` / `GameStateMapper.toDTO` | `application/dto/GameStateDTO.ts` | sin llamadas en producción; arrastra `GameSession.getCardsOpenedCount()` |
 | `GameEvent.SecretCardChosen` | `domain/events/GameEvents.ts` | declarado, ni emisor ni consumidor |
-| `ProgressionEvent.UpgradePurchased` | `domain/events/ProgressionEvents.ts` | idem; el README todavía lo describe como vivo |
+| `ProgressionEvent.UpgradePurchased` | `domain/events/ProgressionEvents.ts` | idem; ningún doc lo da por vivo (corregido 2026-09-30) |
 | `GameStateMachine.start()` / estado `idle` | `domain/state/` | `GameSession` arranca en `'playing'` |
 | `AudioService.preload()` | `infrastructure/audio/` | sin llamadas y con path que no existe |
 | `GameSceneData` | `presentation/scenes/GameScene.types.ts` | referencia a `CaseSelectionScene`, escena inexistente |
@@ -99,20 +99,37 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 
 ---
 
-## 4. Deriva documental detectada (⚠ README vs realidad)
+## 4. Deriva documental detectada (docs vs realidad)
 
 **Corregido en la Fase 2** (reescritura de `AGENTS.md`): `npx vitest` → **Jest**;
 `npm run lint` inexistente → **creado en la Fase 0** (`fa036a3`); referencias a `Money`
 y `EnergyBar` como entidades de dominio → **no existen** (ADR-002).
 
-**Sigue abierto (`README.md`, doc histórica):**
+**Corregido el 2026-09-30** (reescritura de `README.md`: ahora es corto y cierto — qué es
+el juego, cómo levantarlo, gates, estructura mínima y punta a `AGENTS.md`/`docs/`; el
+detalle ya vivía en `ARCHITECTURE.md`, el estado en `LOG.md`/`MAP.md`, y las bitácoras
+antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerraron:
 
-- `README` §4.2 describe `ProgressionManager.getShopCatalog()` / `purchaseUpgrade()` → API **eliminada**.
-- `README` §5 marca `CryptoRandomProvider` como "pendiente" → **implementado**.
-- `README` §13.1 dice "6 mazos" → hay **10**.
-- `README` §14.2 dice "57 claves i18n" → hay **142**.
-- `README` describe el evento `UpgradePurchased` como vivo → **nunca se emite**.
-- El árbol de directorios del `README` nombra `Money`, `EnergyBar`, `Upgrade` → no existen (ADR-002).
+- `README` §4.2 describía `ProgressionManager.getShopCatalog()` / `purchaseUpgrade()` →
+  API **eliminada** (0 ocurrencias en `src/`; hoy `ActiveSessionBridge` +
+  `PurchaseSessionUpgradeUseCase`).
+- `README` §5 marcaba `CryptoRandomProvider` como "pendiente" → **implementado**
+  (`main.ts:52`).
+- `README` §13.1 decía "6 mazos" → hay **10** (ids en `DeckSetups.ts`).
+- `README` §14.2 decía "57 claves i18n" → hay **142** (284 líneas de clave ÷ 2 idiomas).
+- `README` daba el evento `UpgradePurchased` por vivo → **nunca se emite**.
+- El árbol de directorios del `README` nombraba `Money`, `EnergyBar`, `Upgrade` → no
+  existen (ADR-002).
+- `README` §7 listaba "escena de menú principal" como pendiente → `MainMenuScene`
+  existe; §8 decía "agregar mejora en `Upgrade.ts` / `UPGRADE_CATALOG`" → ni el archivo
+  ni el símbolo existen (hoy `SessionUpgradeCatalog.ts` / `SESSION_UPGRADE_CATALOG`).
+- `README` §3 presentaba como "catálogo actual" el viejo catálogo persistente
+  (Blindaje/Negociador/Tanque de Reserva, `startingEnergyBonus`) → el catálogo real son
+  **8 mejoras de sesión**; `startingEnergyBonus` es código muerto (§3 arriba).
+- `README` §14.2 decía "migración de escenas a i18n pendiente" → migrada (ya contradicha
+  por la §15 del propio README).
+
+**Queda abierto:** ninguno sobre el `README`. Toda deriva nueva detectada se anota acá.
 
 ---
 
@@ -129,8 +146,10 @@ y `EnergyBar` como entidades de dominio → **no existen** (ADR-002).
 - **Los specs no están en el `include` de Vite** (no afectan el bundle), pero sí en `tsc`.
 - **`public/assets/` pesa 18 MB** con ~104 archivos; al reemplazar texturas usar
   `removeTextureIfExists()` antes (regla de `AGENTS.md`) o Phaser reusa la vieja.
-- **3 vulnerabilidades en devDependencies** (`brace-expansion` high ×2 → `npm audit fix`;
-  `esbuild`/`vite` moderate → exige Vite 8, breaking). Sin decidir.
+- **`npm audit` (2026-09-30)**: `npm audit fix` resolvió las 2 high de `brace-expansion`
+  (solo `package-lock.json`; suite 38/429 verde después). **Quedan** `esbuild`/`vite`
+  (moderate + high): su único fix es `vite@8.3.1` = breaking change — decisión explícita
+  pendiente del usuario.
 - **Git**: historial de 8 commits con mensajes `DOND_BETA.x.y.z`; `main` local va adelante
   de `origin/main`. `speculation-game.zip` no está en `.gitignore`.
 
@@ -140,8 +159,7 @@ y `EnergyBar` como entidades de dominio → **no existen** (ADR-002).
 
 - Comentarios en **español**, narrando la **causa raíz**, con marca `BUGFIX (ticket)` y a
   veces nombre de bug (`bug_deal_modal_reveal`, `bug_card_focus`).
-- **No hay TODO/FIXME/HACK**: la deuda se documenta en prosa (README "Pendientes",
-  `PLAYBOOK.md`, ADRs). No introduzcas markers.
+- **No hay TODO/FIXME/HACK**: la deuda se documenta en prosa (`PLAYBOOK.md`, ADRs, `docs/LOG.md`). No introduzcas markers.
 - Exports nombrados (la única excepción es `languageManager`, default export).
 - Tipado explícito en firmas (`: void`, `: Promise<AdResult>`), `readonly` donde se pueda,
   uniones discriminadas para resultados, `as const` + `satisfies` en i18n.

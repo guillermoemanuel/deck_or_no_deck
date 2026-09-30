@@ -7,6 +7,65 @@
 
 ---
 
+## 2026-09-30 · README sincronizado con la realidad + npm audit fix
+
+**Tarea:** cerrar la deriva histórica del `README.md` (lista de `PLAYBOOK.md` §4,
+verificada contra el código y no contra la memoria) y registrar el `npm audit fix`.
+
+**README — qué mentía (medido):**
+
+- §4.2 flujo de meta-progresión: `ProgressionManager.getShopCatalog()` /
+  `purchaseUpgrade()` / `repository.purchaseUpgradeLevel()` → **0 ocurrencias en `src/`**
+  (API eliminada; hoy van por `ActiveSessionBridge` + `PurchaseSessionUpgradeUseCase`).
+- §4.2 emite `ProgressionEvent 'UpgradePurchased'` → **nunca se emite** (solo declarado
+  en `ProgressionEvents.ts`).
+- §5 `IRandomProvider` → `CryptoRandomProvider` "*(pendiente)*" → **implementado** e
+  instanciado en `main.ts:52`.
+- §13.1 "6 mazos" → **10** (ids medidos en `DeckSetups.ts`).
+- §14.2 "57 claves i18n" → **142** (284 líneas de clave ÷ 2 idiomas en `LanguageData.ts`).
+- §2 árbol de directorios: `Money`, `EnergyBar`, `Upgrade` en `domain/` → **no existen**
+  (ADR-002).
+- §7 listaba "escena de menú principal" como pendiente → `MainMenuScene` existe;
+  §8 "agregar mejora en `Upgrade.ts` / `UPGRADE_CATALOG`" → **ni el archivo ni el
+  símbolo existen** (hoy `SessionUpgradeCatalog.ts` / `SESSION_UPGRADE_CATALOG`).
+- §3 presentaba como "catálogo actual" el catálogo persistente viejo
+  (Blindaje/Negociador/Tanque de Reserva con `startingEnergyBonus`) → el catálogo real
+  son **8 mejoras de sesión**; `startingEnergyBonus` es código muerto (`PLAYBOOK.md` §3).
+- §14.2 "migración de escenas a i18n pendiente" → migrada (ya contradicha por la §15
+  del propio README).
+- Además: el README **no tenía** cómo levantar el proyecto ni cómo correr los gates, y
+  arrastraba bitácoras de sesiones antiguas (§10–15) cuyo contenido útil ya vive en
+  `docs/ARCHITECTURE.md` / `docs/PLAYBOOK.md` / ADRs (el texto histórico queda en el
+  historial de git, no en la doc viva).
+
+**README — qué quedó:** portada corta y cierta — qué es el juego (mecánicas mínimas
+verificadas: 13 cartas, energía al 50 %, oferta cada 3 cartas con tope de promedio,
+swap de mitad y Cambio Final), `npm install` / `npm run dev` / `npm run build`, gates con
+**Jest** (`npx jest <ruta>`, `npm test`, `typecheck`, `lint`, `test:coverage`), árbol
+mínimo de `src/` + `docs/` + `.opencode/`, y punta a `AGENTS.md` y a cada doc de
+`docs/`. **Sin conteos ni estado que se envejezca mañana**: el estado vive en
+`docs/LOG.md` y `docs/MAP.md`.
+
+**Auditoría:** `npm audit fix` (commit `bfeb7d1`) resolvió las 2 high de
+`brace-expansion` — solo `package-lock.json`, **suite 38/429 verde después**. **Quedan
+pendientes** `esbuild`/`vite` (moderate + high): su único fix es `vite@8.3.1` = breaking
+change — decisión explícita pendiente del usuario.
+
+**Archivos tocados (3):** `README.md` (reescrito: 417 → 64 líneas),
+`docs/PLAYBOOK.md` (§4: la deriva del README pasa de "abierta" a corregida con la lista
+medida; §3 y §6: referencias al README viejo corregidas; §5: `npm audit` actualizado),
+`docs/LOG.md` (esta entrada). **Ningún archivo de `src/`.**
+
+**Verificación:** conteos medidos en el repo: **38** `*.spec.ts` · **142** claves i18n ·
+**10** mazos · **8** agentes (`.opencode/agents/`) y **5** comandos
+(`.opencode/commands/`) · **9** escenas · scripts reales de `package.json` (`dev`,
+`build`, `preview`, `test`, `test:watch`, `test:coverage`, `typecheck`, `lint` —
+**no existe `vitest`**) · 17 commits (`git log`). Gates de código: sin cambios en `src/`
+→ heredados (último registro en `docs/testing.md`: 38 suites · 429 tests verdes);
+`npx jest`/`npm` corren denegados por los permisos de shell de este agente.
+
+---
+
 ## 2026-09-30 · Filtro de ads de la tienda bajado a un use-case
 
 **Tarea:** mover a `application` la decisión de ocultar Duplicar/Triplicar/Revivir cuando
