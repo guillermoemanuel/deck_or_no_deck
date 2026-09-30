@@ -1,0 +1,62 @@
+# LOG de sesiones de trabajo (append-only)
+
+> **Formato:** entrada más reciente arriba. Solo se agrega, nunca se reescribe.
+> Obligatorio al cerrar cualquier tarea de Build: una entrada breve con
+> *qué se tocó*, *cómo se verificó* y *qué quedó pendiente*.
+> El estado detallado del código vive en `docs/MAP.md`; el porqué en `docs/DECISIONS/`.
+
+---
+
+## 2026-09-30 · Fase 1 — Memoria persistente del proyecto
+
+**Tarea:** volcar a documentos todo lo producido por la ingeniería inversa de la sesión.
+
+**Archivos creados (ninguno en `src/`):**
+`docs/ARCHITECTURE.md` · `docs/MAP.md` · `docs/PLAYBOOK.md` · `docs/testing.md` ·
+`docs/LOG.md` · `docs/DECISIONS/README.md` + ADR-001…005.
+
+**Verificación:** sin cambios de código → `npm test` / `typecheck` / `lint` verdes
+(estado heredado de `fa036a3`).
+
+**Contenido:** arquitectura por capas con reglas de dependencia verificables, flujo de
+partida y de meta-progresión, mapa de los 142 archivos con LOC/specs/peligrosidad,
+duplicaciones y código muerto conocidos, deriva documental, política de testing y
+5 ADRs (doble emitido del deal, ausencia de `Money`, tipado concreto en `GameServices`,
+persistencia del idioma manual, bono sin 0).
+
+**Pendiente:** Fase 2 — reescribir `AGENTS.md` (sigue con `vitest`, `Money` y `EnergyBar`
+ficticios).
+
+---
+
+## 2026-09-30 · Fase 0 — Estabilizar la base
+
+**Tarea:** dejar la suite verde, que `typecheck` cubra specs y que el lint exista.
+
+**Commits:** `fa036a3` "Fase 0: suite verde, typecheck de specs y lint real".
+
+**Archivos tocados:**
+- `src/domain/value-objects/PeriodicBonus.spec.ts` — rango acordado `[500…5000]`
+  (el 0 salió del bono en `DOND_BETA.1.3.1` y el spec quedó viejo).
+- `src/application/use-cases/PurchaseSessionUpgradeUseCase.spec.ts` — costos derivados
+  del catálogo con `costOf(id)` en vez de hardcodeados (350/400/550 → 500/750/1000 reales).
+- `src/shared/i18n/LanguageManager.ts` — **bugfix**: `setLanguage()` persiste siempre la
+  elección manual, aunque coincida con el idioma activo (ver ADR-004).
+- `src/shared/i18n/LanguageManager.spec.ts` — removido un `eslint-disable` huérfano.
+- `tsconfig.json` — dejó de excluir `**/*.spec.ts` → `tsc --noEmit` valida los 34 specs.
+- `package.json` + `package-lock.json` + `eslint.config.mjs` — script `lint` con ESLint
+  mínimo (9 reglas, sin type-aware).
+
+**Verificación (los 3 gates):**
+`npm test` → 34/34 suites, 394/394 tests ✅ · `npm run typecheck` → 0 errores (34 specs
+incluidos) ✅ · `npm run lint` → 0 errores, 0 warnings ✅.
+
+**Estado inicial:** 3 suites rojas / 5 tests fallando (`PeriodicBonus`,
+`PurchaseSessionUpgradeUseCase`, `LanguageManager`) — **todos preexistentes al HEAD**,
+ninguno causado por el WIP sin commitear.
+
+**Deuda dejada / sin decidir:**
+- `npm audit`: `brace-expansion` (high, arreglable con `npm audit fix`) y
+  `esbuild`/`vite` (moderate, exige Vite 8 = breaking).
+- WIP del usuario sin commitear: 15 archivos + `AGENTS.md` + `speculation-game.zip`.
+- `main` local va adelante de `origin/main` (sin push).
