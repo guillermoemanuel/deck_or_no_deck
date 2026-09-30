@@ -7,6 +7,7 @@ import { LocalStorageOnboardingRepository } from './infrastructure/persistence/L
 import { LocalStorageRecordsRepository } from './infrastructure/persistence/LocalStorageRecordsRepository';
 import { LocalStorageDailyChallengeRepository } from './infrastructure/persistence/LocalStorageDailyChallengeRepository';
 import { GameOutcomeRecorder } from './application/records/GameOutcomeRecorder';
+import { ListAvailableUpgradesUseCase } from './application/use-cases/ListAvailableUpgradesUseCase';
 import { CryptoRandomProvider } from './infrastructure/services/CryptoRandomProvider';
 import { AudioService } from './infrastructure/audio/AudioService';
 import { BootScene } from './presentation/scenes/BootScene';
@@ -173,7 +174,8 @@ const services: GameServices = {
   onboardingRepository: new LocalStorageOnboardingRepository(),
   recordsRepository,
   dailyChallengeRepository,
-  outcomeRecorder: new GameOutcomeRecorder(recordsRepository, dailyChallengeRepository, progressionManager)
+  outcomeRecorder: new GameOutcomeRecorder(recordsRepository, dailyChallengeRepository, progressionManager),
+  listAvailableUpgrades: new ListAvailableUpgradesUseCase(crazyGamesService)
 };
 
 game.registry.set('services', services);

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getServices } from '../GameServices';
 import { getActiveSessionBridge } from '../ActiveSessionBridge';
-import { findSessionUpgradeDefinition, SESSION_UPGRADE_CATALOG, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
+import { findSessionUpgradeDefinition, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
 import { SessionUpgrades } from '../../domain/entities/SessionUpgrades';
 import { PurchaseSessionUpgradeUseCase } from '../../application/use-cases/PurchaseSessionUpgradeUseCase';
 import { DECK_SETUP_IDS, DeckSetupId, getDeckSetup } from '../../domain/value-objects/DeckSetups';
@@ -431,16 +431,12 @@ export class ShopScene extends Phaser.Scene {
       }).setOrigin(0.5)
     );
 
-    // Upgrades que dependen de un rewarded ad (Duplicar/Triplicar/Revivir):
-    // si hoy no se puede mostrar un rewarded (Basic Launch con ads
-    // deshabilitados, adblock, SDK ausente, sin fill reciente), NO se
-    // ofrecen — el jugador pagaría monedas por algo que no puede usar, y
-    // QA rechaza botones de rewarded sin efecto. Reaparecen solos cuando
-    // vuelve a haber anuncios (ver ICrazyGamesService.isRewardedAdAvailable).
-    // La lista de qué mejoras dependen de ads ya no se duplica acá: vive
-    // en el catálogo (SessionUpgradeDefinition.requiresRewardedAd).
-    const rewardedAdsUsable = getServices(this).crazyGamesService.isRewardedAdAvailable();
-    const visibleUpgrades = SESSION_UPGRADE_CATALOG.filter(u => rewardedAdsUsable || !u.requiresRewardedAd);
+    // Qué muestra la tienda lo decide la APLICACIÓN, no la escena:
+    // ListAvailableUpgradesUseCase oculta hoy Duplicar/Triplicar/Revivir
+    // si no se puede mostrar un rewarded ad (el porqué está ahí, en su
+    // JSDoc). La lista de cuáles dependen de ads vive en el catálogo
+    // (SessionUpgradeDefinition.requiresRewardedAd).
+    const visibleUpgrades = getServices(this).listAvailableUpgrades.execute();
 
     visibleUpgrades.forEach((definition, index) => {
       const column = Math.floor(index / ROWS_PER_COLUMN);

@@ -37,7 +37,8 @@ export interface SessionUpgradeDefinition {
    * estaría pagando por algo que no puede usar. Deja explícito que la
    * DISPONIBILIDAD de anuncios no es asunto del dominio — acá solo se
    * declara la necesidad; quién decide si el entorno puede mostrarlos es
-   * la infraestructura/presentación.
+   * la infraestructura (puerto ICrazyGamesService) vía el use-case de
+   * aplicación ListAvailableUpgradesUseCase.
    */
   readonly requiresRewardedAd?: boolean;
 }

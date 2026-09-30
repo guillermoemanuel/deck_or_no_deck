@@ -7,6 +7,63 @@
 
 ---
 
+## 2026-09-30 · Filtro de ads de la tienda bajado a un use-case
+
+**Tarea:** mover a `application` la decisión de ocultar Duplicar/Triplicar/Revivir cuando
+el entorno no puede mostrar rewarded ads, y cerrar documentalmente el movimiento.
+
+**Qué cambió y por qué:** la decisión vivía en `ShopScene.renderUpgradesTab()` — código de
+presentación, **sin test**. Con ads caídos (Basic Launch sin ads, adblock, SDK ausente, sin
+fill reciente) la tienda seguía ofreciendo esas 3 mejoras: QA rechaza botones de rewarded
+sin efecto y el jugador pagaría monedas por algo que no puede usar. Hoy la decide
+`ListAvailableUpgradesUseCase` (aplicación), que coordina el catálogo del dominio
+(`SessionUpgradeDefinition.requiresRewardedAd`) con el puerto `ICrazyGamesService`
+(`isRewardedAdAvailable()`) — el dominio solo **declara** la necesidad. La escena quedó
+"tonta": solo llama `getServices(this).listAvailableUpgrades.execute()`; el porqué
+documental migró al JSDoc del use-case. **Comportamiento idéntico**: mismo predicado
+(`rewardedAdsUsable || !u.requiresRewardedAd`), mismo orden y mismos objetos del catálogo.
+
+**Archivos tocados:**
+
+- **Código (6):** nuevos `src/application/use-cases/ListAvailableUpgradesUseCase.ts`
+  (29 L) y `ListAvailableUpgradesUseCase.spec.ts` (74 L); `src/presentation/GameServices.ts`
+  (campo `listAvailableUpgrades` en el bag, patrón idéntico a `outcomeRecorder`);
+  `src/main.ts` (instanciación); `src/presentation/scenes/ShopScene.ts` (ya no filtra
+  inline ni consulta `isRewardedAdAvailable()`; sacó `SESSION_UPGRADE_CATALOG` del import);
+  `src/domain/value-objects/SessionUpgradeCatalog.ts` (solo el JSDoc del campo apunta al
+  use-case nuevo).
+- **Docs (5):** `docs/testing.md` (conteos medidos **38 suites / 429 tests**; la fila de
+  deuda del filtro de ads se elimina y pasa a la tabla "ya resueltos"), `docs/MAP.md`
+  (censo refrescado: 148 archivos TS · 20.593 líneas · 110 fuente + 38 specs),
+  `docs/ARCHITECTURE.md` (invariante de rewarded, composition root de `main.ts`, 38 specs),
+  `AGENTS.md` (38 specs; fila de riesgo de `ShopScene`), `docs/LOG.md` (esta entrada).
+  `docs/PLAYBOOK.md` **sin cambios**: ni §1 ni §3 mencionaban este filtro ni el
+  `isRewardedAdAvailable()` de la escena.
+
+**Verificación:** `qa` **VERDE** — **38 suites / 429 tests** (medido: 38 `*.spec.ts` en
+`src`; 416 declaraciones `it(`/`test(` + 13 de un `it.each`), typecheck 0, lint 0,
+cobertura por capa verde y `ListAvailableUpgradesUseCase.spec.ts` al **100 %**.
+`reviewer` **APROBADO** con 4 hallazgos documentales, cerrados en esta entrada.
+
+**Deuda que queda registrada** (hallazgos del reviewer, **no corregidos** en esta vuelta):
+
+1. **Guard de compra latente**: `PurchaseSessionUpgradeUseCase` no consulta
+   `isRewardedAdAvailable()`, así que en teoría se podría comprar una mejora dependiente
+   de ads cuando el entorno no puede mostrarlos (p. ej. adblock activado con la tienda
+   abierta, o tras un rewarded fallido con cooldown). La tienda los oculta al renderizar,
+   así que el caso es difícil de alcanzar hoy, pero el guard no existe. Si se cierra, va en
+   el use-case de compra con un motivo nuevo en `PurchaseSessionUpgradeResult`
+   (+ i18n `en`/`es`).
+2. **Sin re-evaluación en vivo**: `execute()` recalcula la lista, pero la escena lo llama
+   al crear la escena / cambiar de tab; si los ads se cortan con la tienda ya abierta, los
+   botones quedan hasta el próximo render.
+
+**Pendientes heredados:** smoke manual de los ítems 1-4 de `docs/testing.md` §5 (la rama
+"oculta" del filtro ya está cubierta por spec, falta ejercitarla en el navegador);
+`README.md` sin corregir (`PLAYBOOK.md` §4); `npm audit` (`PLAYBOOK.md` §5).
+
+---
+
 ## 2026-09-30 · Smoke manual de la Fase 4 (verificación en navegador)
 
 **Tarea:** recorrer a mano en el navegador los comportamientos extraídos a `domain` en la

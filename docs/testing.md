@@ -1,6 +1,7 @@
 # Testing
 
-> Estado al 2026-09-30 (Fase 4, parte 2): **37 suites · 425 tests · todos verdes**.
+> Estado al 2026-09-30 (Fase 4, parte 2): **38 suites · 429 tests · todos verdes**
+> (medido: 38 `*.spec.ts` en `src`; 416 declaraciones `it(`/`test(` + 13 de un `it.each`).
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
@@ -39,7 +40,7 @@ npm run lint                  # eslint src
 | Capa | Specs | Cobertura real | Estado |
 |---|---|---|---|
 | `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
-| `application/` | 11 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
+| `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 4 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` |
 | `shared/` | 5 | buena | 🟢 |
 | `presentation/` | 1 | casi nada | 🔴 ver §5 |
@@ -55,7 +56,7 @@ npm run lint                  # eslint src
 | `FakeOnboardingRepository` | ídem | hints vistos/saltados |
 | `FakeCrazyGamesService` | `infrastructure/services/testing/` | `setNextAdResult()`, `setAvailable()`, contadores de llamadas, `emitAdLifecycle()` |
 | `DeterministicRandomProvider` | ídem | shuffle invertido o `fixedOrder` → tableros deterministas |
-| `collectEvents(bus)` | `application/use-cases/testing/` | acumula eventos para asserts de secuencia (usado en 6 de 7 specs de use-cases) |
+| `collectEvents(bus)` | `application/use-cases/testing/` | acumula eventos para asserts de secuencia (usado en 6 de 8 specs de use-cases) |
 | `installStorage()` | helper en `LocalStorageRecordsRepositories.spec.ts` | `window.localStorage` con Map |
 | `installFakeSdk()` + `flushMicrotasks()` | helper en `CrazyGamesService.spec.ts` | SDK falso con callbacks disparados a mano + fake timers |
 | `FakeLocalStorage` | helper en `LanguageManager.spec.ts` + `jest.resetModules()` | instancia fresca del singleton |
@@ -85,19 +86,12 @@ npm run lint                  # eslint src
 dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks.
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
-testearla ahí**. Sigue vivo en escenas sin ningún test:
+testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el
+único pendiente —el filtro de ads de la tienda (`ShopScene.renderUpgradesTab`)— migró a
+`ListAvailableUpgradesUseCase` (aplicación, 100 % de cobertura) y figura abajo, en la
+tabla de resueltos.
 
-| Lógica oculta en presentación | Archivo | Dónde debería vivir |
-|---|---|---|
-| Filtro de compras por disponibilidad de ads **(parcialmente resuelto)** | `ShopScene.renderUpgradesTab()` | use-case |
-
-Sobre esa fila: la lista de *qué* mejoras dependen de ads ya vive en dominio
-(`SessionUpgradeCatalog.requiresRewardedAd`, con spec que fija el set
-double/triple/revive), pero la decisión de *ocultarlas cuando no hay anuncios* —la
-disponibilidad— sigue en `ShopScene.renderUpgradesTab()`; moverla a un use-case queda
-pendiente.
-
-**Ya resueltos en Fase 4 (2026-09-30)** — mismo mecanismo (regla extraída a `domain` +
+**Ya resueltos en Fase 4 (2026-09-30)** — mismo mecanismo (regla extraída a `domain`/`application` +
 test ahí); quedan acá solo como contexto histórico:
 
 | Qué | Dónde vivía | Mecanismo |
@@ -107,6 +101,7 @@ test ahí); quedan acá solo como contexto histórico:
 | Penalidad de abandono (−5000) en 3 sitios | literal en `OpenCardUseCase` + constante en `GameAbandonGuard` (importada por `UIScene`/`main.ts`) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (spec propio) |
 | Umbral de carta alta (≥1000) — *Fase 4 parte 2, 2026-09-30* | `CardView.reveal()` (`value >= 1000`) | `HIGH_CASE_VALUE_MIN` + `isHighCaseValue()` en `domain/value-objects/CaseValues.ts`, spec en `CaseValues.spec.ts` (frontera 999/1000) |
 | Zonas de energía (>50 / >20, pulso crítico) — *Fase 4 parte 2, 2026-09-30* | `EnergyBarView` (`colorForPercentage`) | `EnergyZone` + `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts`, fronteras 50/20 con spec en `EnergyLevel.spec.ts`; la vista solo traduce zona → color |
+| Filtro de ads de la tienda (ocultar Duplicar/Triplicar/Revivir sin rewarded) — *2026-09-30* | `ShopScene.renderUpgradesTab()` (filtraba inline con `isRewardedAdAvailable()` y `requiresRewardedAd`) | `ListAvailableUpgradesUseCase` (aplicación) + `ListAvailableUpgradesUseCase.spec.ts` (100 %); la escena solo llama `getServices(this).listAvailableUpgrades.execute()` |
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 
@@ -124,9 +119,11 @@ puede dejar saldo negativo, bono periódico forzado). **No corridos en esta opor
 los 4 ítems largos: **1-2** (partida DEAL/no-deal + swap de mitad y final), **3** (revivir
 con anuncio) y **4** (tienda con/sin fondos, con conflicto y compra de mazo). Nota: la
 tienda en local muestra Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK
-real de CrazyGames e `isRewardedAdAvailable()` devuelve `true`; **la rama "oculta" del
-filtro de ads NO se ejercitó** (forzar bloqueando `*crazygames-sdk-v3.js*` en DevTools →
-Network y recargando).
+real de CrazyGames e `isRewardedAdAvailable()` devuelve `true` (hoy lo consulta
+`ListAvailableUpgradesUseCase`, no la escena); **la rama "oculta" del
+filtro NO se ejercitó en vivo** — el predicado sí está cubierto por
+`ListAvailableUpgradesUseCase.spec.ts`, falta solo el smoke en el navegador (forzar
+bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
 
 ---
 

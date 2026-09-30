@@ -39,7 +39,8 @@ shared/          i18n + EventEmitter + utils — consumible por todas las capas
 Hay **dos** lugares donde se instancian concretos:
 
 1. **`src/main.ts`** (global, una vez): `CrazyGamesService`, repositorios LocalStorage,
-   `ProgressionManager`, `CryptoRandomProvider`, `AudioService`, `GameOutcomeRecorder`.
+   `ProgressionManager`, `CryptoRandomProvider`, `AudioService`, `GameOutcomeRecorder`,
+   `ListAvailableUpgradesUseCase` (necesita solo el puerto de ads → se instancia global).
    Todo se guarda en `game.registry.set('services', services)`.
    También: init del SDK, locale detectado, `beforeunload` (gameplayStop + anti-cheat),
    manejo de fullscreen/orientación, mute durante anuncios.
@@ -142,7 +143,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
 | Costos de tienda | los define `SessionUpgradeCatalog.ts` | tests usan `costOf(id)`, no hardcodean |
 | Zonas de energía | crítico ≤20 · baja 21..50 · sana ≥51 | `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts` |
 | Carta alta | ≥1000 (`HIGH_CASE_VALUE_MIN`, un valor real del mazo) | `isHighCaseValue()` en `domain/value-objects/CaseValues.ts` |
-| Mejoras con rewarded ad | `requiresRewardedAd: true` en double_reward, triple_reward, revive | `SessionUpgradeCatalog.ts` (declara la necesidad; la disponibilidad la decide `ShopScene`) |
+| Mejoras con rewarded ad | `requiresRewardedAd: true` en double_reward, triple_reward, revive | `SessionUpgradeCatalog.ts` (declara la necesidad; la *disponibilidad* la decide `ListAvailableUpgradesUseCase` — la escena solo lista) |
 
 ---
 
@@ -212,7 +213,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 37 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 38 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

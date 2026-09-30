@@ -4,14 +4,16 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-09-30 (refrescado en Fase 4, parte 2) · 146 archivos TS · 20.486 líneas · 109 fuente + 37 specs
+> Fecha del censo: 2026-09-30 (refrescado tras bajar el filtro de ads de la tienda a un
+> use-case) · 148 archivos TS · 20.593 líneas · 110 fuente + 38 specs
 > (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
-> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`).
+> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; este cierre:
+> +`ListAvailableUpgradesUseCase.ts`/`.spec`).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.089 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.090 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -34,7 +36,7 @@
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
 | `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |
 | `CaseValues.ts` | 35 | ✅ 23 L | Valores posibles de carta + umbral de carta alta (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`) — consumido por `CardView`. |
-| `SessionUpgradeCatalog.ts` | 109 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la disponibilidad la decide `ShopScene`). 🟡 fuente única de precios. |
+| `SessionUpgradeCatalog.ts` | 110 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la *disponibilidad* la decide `ListAvailableUpgradesUseCase`). 🟡 fuente única de precios. |
 
 ### services/ · state/ · events/ · ports/
 | Archivo | LOC | Spec | Nota |
@@ -48,7 +50,7 @@
 
 ---
 
-## `src/application/` — 2.245 líneas · 11 specs · casi toda verde 🟢
+## `src/application/` — 2.348 líneas · 12 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -59,6 +61,7 @@
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
 | `use-cases/SwapFinalSecretCardUseCase.ts` | 37 | ✅ | — |
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |
+| `use-cases/ListAvailableUpgradesUseCase.ts` | 29 | ✅ 74 L | **Qué muestra la tienda ahora**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. |
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
@@ -86,14 +89,14 @@
 
 ---
 
-## `src/presentation/` — 10.700 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 10.701 líneas · 1 spec · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
 | `scenes/GameScene.ts` | 607 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. |
-| `scenes/ShopScene.ts` | 764 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; filtra el catálogo por `requiresRewardedAd` (la lista vive en dominio, la decisión de disponibilidad acá); compra de mazos sin use-case. |
+| `scenes/ShopScene.ts` | 760 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); compra de mazos sin use-case. |
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
@@ -122,7 +125,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 |---|---|---|
 | `GameAbandonGuard.ts` | 58 | Flag anti-cheat compartido con `beforeunload`. **Ya no contiene la penalidad**: `LOSS_PENALTY_AMOUNT` vive en `domain/value-objects/GamePenalties.ts` (Fase 4). |
 | `mobile/CompactTextFloor.ts` | 50 | Piso de tamaño de fuente en móvil. |
-| `GameServices.ts` | 39 | Service locator. **Única importación de infrastructure desde presentation.** |
+| `GameServices.ts` | 44 | Service locator (bag con `listAvailableUpgrades`). **Única importación de infrastructure desde presentation.** |
 | `GameMode.ts` | 35 | Payload consume-una-vez en registry (por `restart()` de Phaser). |
 | `PenaltyFreeProgression.ts` | 20 | Proxy que anula `applyLossPenalty` (Desafío Diario). |
 | `ActiveSessionBridge.ts` | 34 | Única pieza que expone `GameSession` + use-case a otra escena. |
@@ -148,7 +151,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (212) | Composition root global + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (214) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `index.html` | Carga **síncrona** del SDK v3 en `<head>` (sin eso `isAvailable()` es siempre false) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |
 | `jest.config.js` | `ts-jest`, `node` env, umbrales de cobertura **por capa** (Fase 4): `domain/` 88/80/90/88 y `application/` 88/82/90/88 (stmts/branches/functions/lines). |

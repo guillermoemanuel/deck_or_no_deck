@@ -6,6 +6,7 @@ import { IOnboardingRepository } from '../domain/ports/IOnboardingRepository';
 import { IRecordsRepository } from '../domain/ports/IRecordsRepository';
 import { IDailyChallengeRepository } from '../domain/ports/IDailyChallengeRepository';
 import { GameOutcomeRecorder } from '../application/records/GameOutcomeRecorder';
+import { ListAvailableUpgradesUseCase } from '../application/use-cases/ListAvailableUpgradesUseCase';
 
 /**
  * Contrato del "bag" de dependencias que viaja en game.registry.
@@ -28,6 +29,10 @@ export interface GameServices {
   readonly recordsRepository: IRecordsRepository;
   readonly dailyChallengeRepository: IDailyChallengeRepository;
   readonly outcomeRecorder: GameOutcomeRecorder;
+  // Qué muestra la tienda en este momento (oculta las mejoras dependientes
+  // de rewarded ads cuando no se pueden mostrar) — misma razón por la que
+  // outcomeRecorder viaja acá: única instancia compartida entre escenas.
+  readonly listAvailableUpgrades: ListAvailableUpgradesUseCase;
 }
 
 export function getServices(scene: Phaser.Scene): GameServices {
