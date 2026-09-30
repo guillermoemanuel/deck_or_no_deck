@@ -7,6 +7,41 @@
 
 ---
 
+## 2026-09-30 · Smoke manual de la Fase 4 (verificación en navegador)
+
+**Tarea:** recorrer a mano en el navegador los comportamientos extraídos a `domain` en la
+Fase 4 (partes 1 y 2) y dejar constancia de qué se verificó en vivo.
+
+**Archivos tocados:** `docs/LOG.md` (esta entrada) y `docs/testing.md` (§5: línea de
+estado del smoke bajo el checklist). **Ningún archivo de `src/`.**
+
+**Verificado en vivo** (dev server `http://localhost:5174`, todo ✅):
+
+- Banner del Desafío Diario anuncia **1.000 / racha 1** con racha rota.
+- Tienda: **Tanque Nivel II muestra "Requiere Nivel I" con botón de costo gris e inerte**
+  (caso `locked` de `SessionUpgrades.getState()`); Nivel I clickeable.
+- Barra de energía en las fronteras: **50 % → ámbar** (no verde), **20 % → rojo + texto
+  `#ff3366` + pulso**, **0 % → rojo sin pulso**, y **verde** al subir de 50 con Tanque
+  Nivel I.
+- Carta de **$1.000 roja** vs **$750 verde** (frontera `isHighCaseValue`).
+- Abandono: modal con **5.000** y el saldo baja exactamente 5.000 (puede quedar negativo).
+- Partida terminada: lo cobrado por el desafío diario **coincide con lo anunciado** → la
+  propiedad `previewDailyCompletion ≡ completeDaily` verificada en vivo.
+- Idioma EN↔ES y bono periódico forzado: sin anomalías.
+
+**No es un fallo — ads en local:** en local **aparecen** Duplicar/Triplicar/Revivir en la
+tienda porque `index.html:29` carga el SDK real de CrazyGames (`sdk.crazygames.com`) y
+`isRewardedAdAvailable()` devuelve `true` con el SDK inicializado. **La rama "oculta" del
+filtro NO se ejercitó en vivo**; queda como pendiente (se puede forzar bloqueando
+`*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
+
+**Pendientes del smoke (no corridos en esta oportunidad):** los 4 ítems largos del
+checklist de `docs/testing.md` §5 — partida con DEAL/no-deal + swap de mitad y final
+(ítems 1-2), revivir con anuncio (3), y tienda con/sin fondos, con conflicto y compra de
+mazo (4).
+
+---
+
 ## 2026-09-30 · Fase 4 (parte 2) — Umbrales de presentación al dominio
 
 **Tarea:** extraer a `domain` los 3 umbrales que vivían hardcodeados en presentation

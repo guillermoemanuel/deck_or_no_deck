@@ -118,6 +118,16 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 6. Salir al menú a mitad de partida → verificar penalidad y saldo.
 7. Bono periódico (forzar `periodicBonusCycleStart` en localStorage).
 
+**Estado — última ejecución 2026-09-30 (smoke manual en `http://localhost:5174`):**
+ítems **5, 6 y 7 verificados** en vivo (idioma EN↔ES, abandono con penalidad −5000 que
+puede dejar saldo negativo, bono periódico forzado). **No corridos en esta oportunidad**
+los 4 ítems largos: **1-2** (partida DEAL/no-deal + swap de mitad y final), **3** (revivir
+con anuncio) y **4** (tienda con/sin fondos, con conflicto y compra de mazo). Nota: la
+tienda en local muestra Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK
+real de CrazyGames e `isRewardedAdAvailable()` devuelve `true`; **la rama "oculta" del
+filtro de ads NO se ejercitó** (forzar bloqueando `*crazygames-sdk-v3.js*` en DevTools →
+Network y recargando).
+
 ---
 
 ## 6. Estado histórico reciente
