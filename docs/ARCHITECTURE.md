@@ -121,7 +121,9 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
   valores/roles **preservando IDs**.
 - **VO inmutables**: `Card`, `EnergyLevel`, `DeckCollection` (cada operación devuelve instancia nueva).
 - **`SessionUpgrades`**: flags de sesión (no se persisten): tanque 0|1|2, double, triple,
-  revive, escudo, negociador.
+  revive, escudo, negociador. Expone `getState()/isOwned()/canPurchase()` — **la única
+  fuente del estado visible**: la UI (`ShopScene.upgradeStatusFor`) y
+  `PurchaseSessionUpgradeUseCase` delegan en vez de reimplementar reglas.
 - **Dinero**: `number` crudo (no existe `Money` — ver ADR-002).
 
 ### Invariantes numéricos (no cambiar sin test que falle primero)
@@ -134,7 +136,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
 | Tope de la oferta | **nunca** supera el promedio puro del tablero | `OfferCalculator.ts` (`Math.min`) |
 | Descuento de riesgo | ×0.85 | `OfferCalculator.ts` |
 | Bonus Negociador | +15% (0.15) sobre la oferta, tope incluido | `GameSession.openCard` |
-| Penalidad por abandono/derrota | −5000 (puede dejar saldo negativo) | `ABANDON_PENALTY_AMOUNT` en `presentation/GameAbandonGuard.ts` |
+| Penalidad por abandono/derrota | −5000 (puede dejar saldo negativo) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (fuente única) |
 | Bono periódico | 12 h cooldown + 24 h ventana, 6 cartas `[500…5000]` | `domain/value-objects/PeriodicBonus.ts` |
 | Tank de energía | techo ×1.25 (nivel 1) / ×1.5 (nivel 2) | `GameSession.applyEnergyTankUpgrade` **y** `PurchaseSessionUpgradeUseCase` (dos lugares, deben sincronizarse) |
 | Costos de tienda | los define `SessionUpgradeCatalog.ts` | tests usan `costOf(id)`, no hardcodean |
@@ -143,7 +145,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
 
 ## 7. Presentación
 
-- **Escenas** (9, registradas en `main.ts:80`):
+- **Escenas** (9, registradas en `main.ts:81`):
   `Boot → Preload → MainMenu → HowToPlay / DeckSelection → GameScene + UIScene → Shop / Result`.
   Las escenas **no se importan entre sí**; se comunican por Scene Manager (payloads tipados
   en `*.types.ts`), por `game.registry` o por eventos.
@@ -207,7 +209,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 34 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 35 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

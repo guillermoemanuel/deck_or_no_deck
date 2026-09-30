@@ -4,6 +4,7 @@ import { GameEvent, GameEventListener } from '../../domain/events/GameEvents';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { IProgressionService } from '../../domain/ports/IProgressionService';
 import { TOP_CASE_VALUE } from '../../domain/value-objects/CaseValues';
+import { LOSS_PENALTY_AMOUNT } from '../../domain/value-objects/GamePenalties';
 
 /**
  * SRP: coordina UNA accion del jugador (abrir carta) y traduce
@@ -29,9 +30,10 @@ export class OpenCardUseCase {
 
     if (this.session.getStatus() === 'lost') {
       // REQ (penalización por pérdida): perder por agotamiento de energía
-      // descuenta 5000 puntos del acumulado global persistente — puede
-      // dejarlo en negativo (ver IProgressionService.applyLossPenalty).
-      this.progressionService?.applyLossPenalty(5000);
+      // descuenta la penalidad fija del dominio (LOSS_PENALTY_AMOUNT, −5000)
+      // del acumulado global persistente — puede dejarlo en negativo
+      // (ver IProgressionService.applyLossPenalty).
+      this.progressionService?.applyLossPenalty(LOSS_PENALTY_AMOUNT);
       this.eventBus.emit({ type: 'EnergyDepleted' });
       this.eventBus.emit({ type: 'GameLost' });
       return;

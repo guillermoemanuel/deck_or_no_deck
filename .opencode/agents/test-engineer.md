@@ -22,6 +22,9 @@ permissions:
     resource: "*"
     effect: deny
   - action: shell
+    resource: "npm test*"
+    effect: allow
+  - action: shell
     resource: "npx jest*"
     effect: allow
   - action: shell

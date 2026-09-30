@@ -1,4 +1,9 @@
+import { SessionUpgradeId } from '../value-objects/SessionUpgradeCatalog';
+
 export type EnergyTankLevel = 0 | 1 | 2;
+
+/** Estado visible/comprable de una mejora de partida (ver SessionUpgrades.getState). */
+export type SessionUpgradeState = 'acquired' | 'locked' | 'available';
 
 /**
  * Estado de las mejoras compradas DURANTE la partida actual.
@@ -100,5 +105,69 @@ export class SessionUpgrades {
 
   grantNegotiator(): void {
     this.negotiatorOwned = true;
+  }
+
+  /**
+   * ¿La mejora ya está adquirida en esta partida?
+   * Única fuente de verdad para "¿ya lo tengo?" (la consumen
+   * PurchaseSessionUpgradeUseCase y la UI de la tienda).
+   */
+  isOwned(upgradeId: SessionUpgradeId): boolean {
+    switch (upgradeId) {
+      case 'energy_tank_1':
+        return this.getEnergyTankLevel() >= 1;
+      case 'energy_tank_2':
+        return this.getEnergyTankLevel() >= 2;
+      case 'double_reward':
+        return this.doubleRewardOwned;
+      case 'triple_reward':
+        return this.tripleRewardOwned;
+      case 'revive':
+        return this.reviveOwned;
+      case 'secret_swap_final':
+        return this.secretSwapFinalOwned;
+      case 'negative_card_shield':
+        return this.negativeCardShieldOwned;
+      case 'negotiator':
+        return this.negotiatorOwned;
+    }
+  }
+
+  /**
+   * ¿Se puede comprar ahora mismo? Falso si ya se tiene, o si no se cumple
+   * el prerequisito (los tanques de energía son los únicos con prerequisito
+   * de nivel: el nivel N solo es comprable desde el nivel N−1).
+   */
+  canPurchase(upgradeId: SessionUpgradeId): boolean {
+    switch (upgradeId) {
+      case 'energy_tank_1':
+        return this.canPurchaseEnergyTankLevel(1);
+      case 'energy_tank_2':
+        return this.canPurchaseEnergyTankLevel(2);
+      case 'double_reward':
+        return !this.doubleRewardOwned;
+      case 'triple_reward':
+        return !this.tripleRewardOwned;
+      case 'revive':
+        return !this.reviveOwned;
+      case 'secret_swap_final':
+        return !this.secretSwapFinalOwned;
+      case 'negative_card_shield':
+        return !this.negativeCardShieldOwned;
+      case 'negotiator':
+        return !this.negotiatorOwned;
+    }
+  }
+
+  /**
+   * Estado visible/comprable de una mejora:
+   * 'acquired' = ya la tiene · 'locked' = prerequisito pendiente (solo
+   * energy_tank_2 sin energy_tank_1) · 'available' = comprable.
+   */
+  getState(upgradeId: SessionUpgradeId): SessionUpgradeState {
+    if (this.isOwned(upgradeId)) {
+      return 'acquired';
+    }
+    return this.canPurchase(upgradeId) ? 'available' : 'locked';
   }
 }

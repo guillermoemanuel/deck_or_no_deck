@@ -4,19 +4,20 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-09-30 · 142 archivos TS · ~20.000 líneas · 108 fuente + 34 specs.
+> Fecha del censo: 2026-09-30 (refrescado en Fase 4) · 144 archivos TS · 20.318 líneas · 109 fuente + 35 specs
+> (LOC = `wc -l`, **incluyen specs**; +`GamePenalties.ts` y +`GamePenalties.spec.ts` en la Fase 4).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 1.985 líneas · 13 specs · la capa más protegida 🟢
+## `src/domain/` — 3.925 líneas · 14 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
 | `GameSession.ts` | 282 | ✅ 592 L | Raíz de agregado. Contiene también `DefaultEnergyDrainRule` y la interfaz `EnergyDrainRule`. 🟡 |
 | `DeckManager.ts` | 148 | ✅ | Intercambio de roles preservando IDs. Las factories `fromValues*` solo las usa su spec. |
-| `SessionUpgrades.ts` | 104 | ✅ | Flags de sesión; `consumeRevive()` existe por el bug del revive infinito. |
+| `SessionUpgrades.ts` | 173 | ✅ 281 L | Flags de sesión + `getState()/isOwned()/canPurchase()`: **las 8 reglas de upgrades viven acá** (UI y use-case delegan). `consumeRevive()` existe por el bug del revive infinito. |
 | `DeckCollection.ts` | 78 | ✅ | Colección inmutable de mazos. |
 | `Card.ts` | 25 | — (cubierto por DeckManager) | VO, constructor privado + `Card.create()`. |
 
@@ -25,8 +26,9 @@
 |---|---|---|---|
 | `DeckSetups.ts` | 217 | ❌ | **10 mazos** con texturas/temas. 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
 | `EnergyDeltaTable.ts` | 64 | ✅ (vía `DefaultEnergyDrainRule.spec`) | Tabla de drenaje + chequeo de integridad al cargar. **Invariante.** |
-| `DailyChallenge.ts` | 112 | ✅ | Reglas del desafío diario. |
+| `DailyChallenge.ts` | 119 | ✅ 169 L | Reglas del desafío diario. `previewDailyCompletion()` es la vista previa de la recompensa y `completeDaily` delega en ella (test de propiedad). |
 | `EnergyLevel.ts` | 75 | ✅ | VO con clamp `[0, ceiling]`. |
+| `GamePenalties.ts` | 14 | ✅ 20 L | **Fuente única de la penalidad** (`LOSS_PENALTY_AMOUNT` = −5000); la consumen `OpenCardUseCase`, `UIScene` y `main.ts`. |
 | `PeriodicBonus.ts` | 65 | ✅ | Bono 12 h; rango `[500…5000]` (el 0 salió en 1.3.1). |
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
 | `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |
@@ -45,12 +47,12 @@
 
 ---
 
-## `src/application/` — 1.655 líneas · 11 specs · casi toda verde 🟢
+## `src/application/` — 2.245 líneas · 11 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `use-cases/PurchaseSessionUpgradeUseCase.ts` | 168 | ✅ 306 L | 3 switches paralelos sobre `SessionUpgradeId` + conflictos. 🟡 |
-| `use-cases/OpenCardUseCase.ts` | 92 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** 🟡 |
+| `use-cases/PurchaseSessionUpgradeUseCase.ts` | 130 | ✅ 306 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. 🟡 |
+| `use-cases/OpenCardUseCase.ts` | 94 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** Penalidad de derrota desde `GamePenalties`. 🟡 |
 | `use-cases/ReviveWithAdUseCase.ts` | 79 | ✅ | Orden: consumir revive → revivir. |
 | `use-cases/MultiplyRewardUseCase.ts` | 59 | ✅ | Flag `isProcessing` sincrónico (carrera de doble click). |
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
@@ -65,7 +67,7 @@
 
 ---
 
-## `src/infrastructure/` — 1.567 líneas · 4 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 2.008 líneas · 4 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -83,17 +85,17 @@
 
 ---
 
-## `src/presentation/` — 10.700 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 10.696 líneas · 1 spec · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
 | `scenes/GameScene.ts` | 607 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. |
-| `scenes/ShopScene.ts` | 776 | ❌ | `upgradeStatusFor()` reimplementa reglas de dominio; filtra catálogo por disponibilidad de ads; compra de mazos sin use-case. |
+| `scenes/ShopScene.ts` | 770 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; filtra catálogo por disponibilidad de ads; compra de mazos sin use-case. |
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
-| `scenes/UIScene.ts` | 506 | ❌ | 3 modales, aplica penalidad −5000, único `setInterval`-like (timer de 30 s del bono). |
+| `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
 | `scenes/ResultScene.ts` | 483 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. |
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
 
@@ -101,7 +103,8 @@
 `BankerOfferPanel` 305 · `CardView` 293 (umbrales de color/valor en la vista ⚠) ·
 `PeriodicBonusModal` 272 · `HudIconButton` 263 · `SwapEventModal` 241 ·
 `EnergyBarView` 239 (umbrales >50/>20 y pulso crítico ⚠) · `SoundFullscreenControls` 212 ·
-`OnboardingCoach` 200 · `ConfirmDialog` 165 · `DailyChallengeBanner` 121 (regla de reward +1 ⚠) ·
+`OnboardingCoach` 200 · `ConfirmDialog` 165 · `DailyChallengeBanner` 121 (usa
+`previewDailyCompletion` del dominio) ·
 `PayoutBoardView` 129 · `ParticleManager` 97 · `LocalizedText` 78 (auto-suscripción).
 
 ### Efectos de celebración de mazo (~2.760 líneas, 15 archivos)
@@ -114,7 +117,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 ### Bridges / utilidades de presentación
 | Archivo | LOC | Nota |
 |---|---|---|
-| `GameAbandonGuard.ts` | 67 | Flag anti-cheat compartido con `beforeunload`. **Contiene `ABANDON_PENALTY_AMOUNT = 5000`** (constante de dominio viviendo en presentación). |
+| `GameAbandonGuard.ts` | 58 | Flag anti-cheat compartido con `beforeunload`. **Ya no contiene la penalidad**: `LOSS_PENALTY_AMOUNT` vive en `domain/value-objects/GamePenalties.ts` (Fase 4). |
 | `mobile/CompactTextFloor.ts` | 50 | Piso de tamaño de fuente en móvil. |
 | `GameServices.ts` | 39 | Service locator. **Única importación de infrastructure desde presentation.** |
 | `GameMode.ts` | 35 | Payload consume-una-vez en registry (por `restart()` de Phaser). |
@@ -125,7 +128,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.165 líneas · 5 specs 🟢
+## `src/shared/` — 1.232 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -142,9 +145,9 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (211) | Composition root global + `beforeunload` (gameplayStop + penalidad de abandono). |
+| `main.ts` (212) | Composition root global + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `index.html` | Carga **síncrona** del SDK v3 en `<head>` (sin eso `isAvailable()` es siempre false) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |
-| `jest.config.js` | `ts-jest`, `node` env, umbrales de cobertura **solo sobre `src/domain/`** (80/85/85). |
+| `jest.config.js` | `ts-jest`, `node` env, umbrales de cobertura **por capa** (Fase 4): `domain/` 88/80/90/88 y `application/` 88/82/90/88 (stmts/branches/functions/lines). |
 | `tsconfig.json` | `strict` + `noUnused*` + `noImplicitReturns`; **incluye specs** desde la Fase 0. |
 | `eslint.config.mjs` | Config mínima (9 reglas). Ver comentarios del archivo antes de agregar reglas. |

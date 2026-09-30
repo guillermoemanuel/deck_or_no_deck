@@ -36,9 +36,12 @@ distintas estrategias de seguridad.
 ### 🔁 Pausar `GameScene` detrás de un modal (2 copias)
 `UIScene` (con red de seguridad en SHUTDOWN) vs `ShopScene` (sin ella).
 
-### 🔁 Penalidad de abandono aplicada en 2 lugares
-`UIScene.confirmExitToMainMenu` (voluntaria) y `main.ts` `beforeunload` (forzada).
-La constante `ABANDON_PENALTY_AMOUNT = 5000` vive en `presentation/GameAbandonGuard.ts`.
+### 🔁 Penalidad de abandono/derrota aplicada en 3 call sites (constante única)
+`UIScene.confirmExitToMainMenu` (voluntaria), `main.ts` `beforeunload` (forzada) y
+`OpenCardUseCase` (derrota normal). La cifra vive en **un solo lugar**:
+`LOSS_PENALTY_AMOUNT` (`domain/value-objects/GamePenalties.ts`) — hasta la Fase 4 había
+un literal `5000` en `OpenCardUseCase` más una constante de penalidad duplicada en
+`presentation/GameAbandonGuard.ts`. No re-hardcodear 5000 en ningún call site nuevo.
 
 ### 🔁 Regla del tanque de energía calculada en 2 lugares
 `GameSession.applyEnergyTankUpgrade` (`level === 1 ? 1.25 : 1.5`) **y**
@@ -96,17 +99,20 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 
 ---
 
-## 4. Deriva documental detectada (⚠ README/AGENTS.md vs realidad)
+## 4. Deriva documental detectada (⚠ README vs realidad)
 
-- `AGENTS.md` menciona `npx vitest` → el runner es **Jest**.
-- `AGENTS.md` decía `npm run lint` inexistente → **creado en la Fase 0** (`fa036a3`).
-- `AGENTS.md`/`README` nombran `Money` y `EnergyBar` como entidades de dominio → **no existen** (ADR-002).
+**Corregido en la Fase 2** (reescritura de `AGENTS.md`): `npx vitest` → **Jest**;
+`npm run lint` inexistente → **creado en la Fase 0** (`fa036a3`); referencias a `Money`
+y `EnergyBar` como entidades de dominio → **no existen** (ADR-002).
+
+**Sigue abierto (`README.md`, doc histórica):**
+
 - `README` §4.2 describe `ProgressionManager.getShopCatalog()` / `purchaseUpgrade()` → API **eliminada**.
 - `README` §5 marca `CryptoRandomProvider` como "pendiente" → **implementado**.
 - `README` §13.1 dice "6 mazos" → hay **10**.
 - `README` §14.2 dice "57 claves i18n" → hay **142**.
 - `README` describe el evento `UpgradePurchased` como vivo → **nunca se emite**.
-- **Estado:** pendiente de corregir en la Fase 2 (reescritura de `AGENTS.md`).
+- El árbol de directorios del `README` nombra `Money`, `EnergyBar`, `Upgrade` → no existen (ADR-002).
 
 ---
 

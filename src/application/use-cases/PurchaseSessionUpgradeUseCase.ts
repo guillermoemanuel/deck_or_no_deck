@@ -3,7 +3,6 @@ import { IProgressionService } from '../../domain/ports/IProgressionService';
 import { GameEvent } from '../../domain/events/GameEvents';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { SessionUpgradeId, findSessionUpgradeDefinition } from '../../domain/value-objects/SessionUpgradeCatalog';
-import { SessionUpgrades } from '../../domain/entities/SessionUpgrades';
 
 export type PurchaseSessionUpgradeResult =
   | { success: true }
@@ -64,51 +63,14 @@ export class PurchaseSessionUpgradeUseCase {
       return null;
     }
     const upgrades = this.session.getSessionUpgrades();
-    return candidates.find(id => this.isOwned(upgrades, id)) ?? null;
+    // Delegado en SessionUpgrades.isOwned: única fuente de verdad de
+    // "¿ya lo tengo?" (compartida con getState, que consume la UI).
+    return candidates.find(id => upgrades.isOwned(id)) ?? null;
   }
 
-  /** Mismos getters que isApplicable(), pero en sentido positivo ("¿ya lo tiene?") — usado solo para resolver conflictos declarados en el catálogo. */
-  private isOwned(upgrades: SessionUpgrades, upgradeId: SessionUpgradeId): boolean {
-    switch (upgradeId) {
-      case 'energy_tank_1':
-        return upgrades.getEnergyTankLevel() >= 1;
-      case 'energy_tank_2':
-        return upgrades.getEnergyTankLevel() >= 2;
-      case 'double_reward':
-        return upgrades.hasDoubleReward();
-      case 'triple_reward':
-        return upgrades.hasTripleReward();
-      case 'revive':
-        return upgrades.hasRevive();
-      case 'secret_swap_final':
-        return upgrades.hasSecretSwapFinal();
-      case 'negative_card_shield':
-        return upgrades.hasNegativeCardShield();
-      case 'negotiator':
-        return upgrades.hasNegotiator();
-    }
-  }
-
+  /** Delegado en SessionUpgrades.canPurchase: falso si ya se tiene o si no se cumple el prerequisito (tanques de energía). */
   private isApplicable(upgradeId: SessionUpgradeId): boolean {
-    const upgrades = this.session.getSessionUpgrades();
-    switch (upgradeId) {
-      case 'energy_tank_1':
-        return upgrades.canPurchaseEnergyTankLevel(1);
-      case 'energy_tank_2':
-        return upgrades.canPurchaseEnergyTankLevel(2);
-      case 'double_reward':
-        return !upgrades.hasDoubleReward();
-      case 'triple_reward':
-        return !upgrades.hasTripleReward();
-      case 'revive':
-        return !upgrades.hasRevive();
-      case 'secret_swap_final':
-        return !upgrades.hasSecretSwapFinal();
-      case 'negative_card_shield':
-        return !upgrades.hasNegativeCardShield();
-      case 'negotiator':
-        return !upgrades.hasNegotiator();
-    }
+    return this.session.getSessionUpgrades().canPurchase(upgradeId);
   }
 
   private applyEffect(upgradeId: SessionUpgradeId): void {

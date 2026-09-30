@@ -1,6 +1,6 @@
 # Testing
 
-> Estado al 2026-09-30: **34 suites · 394 tests · todos verdes** (commit `fa036a3`).
+> Estado al 2026-09-30 (Fase 4): **35 suites · 411 tests · todos verdes**.
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
@@ -29,13 +29,17 @@ npm run lint                  # eslint src
 
 `jest.config.js`:
 - **Colecciona** de `src/domain/**`, `src/application/**` y `infrastructure/persistence/ProgressionManager.ts`.
-- **Umbrales exigidos solo en `src/domain/`**: branches 80 · functions 85 · lines 85.
+- **Umbrales por capa** (fijados en la Fase 4, 2026-09-30):
+  `domain/` stmts 88 · branches 80 · functions 90 · lines 88 ·
+  `application/` stmts 88 · branches 82 · functions 90 · lines 88.
+  (Medido ese día: domain 92.2/81.5/94.5/92.0 · application 93.4/88.6/95.5/93.3 —
+  el margen y la regla "si bajás un umbral, justificá en `LOG.md`" están en el propio `jest.config.js`.)
 - Excluye `*.spec.ts` y `**/testing/**`.
 
 | Capa | Specs | Cobertura real | Estado |
 |---|---|---|---|
-| `domain/` | 13 | alta (con umbral) | 🟢 |
-| `application/` | 11 | alta (sin umbral todavía) | 🟢 objetivo: sumar umbral |
+| `domain/` | 14 | alta (umbral 88/80/90/88) | 🟢 |
+| `application/` | 11 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 4 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` |
 | `shared/` | 5 | buena | 🟢 |
 | `presentation/` | 1 | casi nada | 🔴 ver §5 |
@@ -81,16 +85,22 @@ npm run lint                  # eslint src
 dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks.
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
-testearla ahí**. Hoy vive en escenas sin ningún test:
+testearla ahí**. Sigue vivo en escenas sin ningún test:
 
 | Lógica oculta en presentación | Archivo | Dónde debería vivir |
 |---|---|---|
-| Estado de mejora (poseída/bloqueada/nivel) | `ShopScene.upgradeStatusFor()` | catálogo/servicio de dominio |
 | Filtro de compras por disponibilidad de ads | `ShopScene.renderUpgradesTab()` | use-case |
 | Umbrales de color/valor de carta | `CardView.reveal()` (`value >= 1000`) | value-object |
 | Umbrales de energía (>50 / >20, pulso crítico) | `EnergyBarView` | `EnergyLevel` o constante de dominio |
-| Regla de recompensa diaria (+1 racha) | `DailyChallengeBanner` | `DailyChallenge` |
-| Penalidad de abandono (−5000) | `GameAbandonGuard` + `UIScene` + `main.ts` | dominio (una sola vez) |
+
+**Ya resueltos en Fase 4 (2026-09-30)** — mismo mecanismo (regla extraída a `domain` +
+test ahí); quedan acá solo como contexto histórico:
+
+| Qué | Dónde vivía | Mecanismo |
+|---|---|---|
+| Estado de mejora (poseída/bloqueada/nivel) | `ShopScene.upgradeStatusFor()` (~70 L) | `SessionUpgrades.getState()` (+ `isOwned`/`canPurchase`); la vista quedó en ~32 L, solo presentación |
+| Regla de recompensa diaria (+1 racha) | `DailyChallengeBanner` | `previewDailyCompletion()`; `completeDaily` delega en ella — test de propiedad: preview ≡ lo que paga |
+| Penalidad de abandono (−5000) en 3 sitios | literal en `OpenCardUseCase` + constante en `GameAbandonGuard` (importada por `UIScene`/`main.ts`) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (spec propio) |
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { getServices } from '../GameServices';
 import { getUtcDateKey, msUntilNextUtcDay } from '../../domain/value-objects/DailyBoard';
-import { DailyChallengeState, DailyStatus, getActiveStreak, getDailyReward, getDailyStatus } from '../../domain/value-objects/DailyChallenge';
+import { DailyChallengeState, DailyStatus, getDailyStatus, previewDailyCompletion } from '../../domain/value-objects/DailyChallenge';
 import { getWinRatePercent } from '../../domain/value-objects/PlayerRecords';
 import { formatShortDuration } from '../../shared/utils/TimeFormat';
 import { requestDailyChallenge } from '../GameMode';
@@ -97,14 +97,14 @@ export class DailyChallengeBanner {
     now: number
   ): LocalizedText {
     if (status === 'available') {
-      const streak = getActiveStreak(dailyState, todayKey) + 1;
+      const preview = previewDailyCompletion(dailyState, todayKey);
       return new LocalizedText(
         scene,
         0,
         0,
         'DAILY_CHALLENGE_AVAILABLE',
         { fontFamily: 'Arial, sans-serif', fontSize: '14px', color: '#ffffff' },
-        { reward: getDailyReward(streak).toLocaleString(), streak }
+        { reward: preview.reward.toLocaleString(), streak: preview.streak }
       );
     }
     const time = formatShortDuration(msUntilNextUtcDay(now));

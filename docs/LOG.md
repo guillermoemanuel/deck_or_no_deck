@@ -7,6 +7,63 @@
 
 ---
 
+## 2026-09-30 · Fase 4 — Testing y extracción de lógica a dominio
+
+**Tarea:** bajar la lógica de negocio atrapada en presentation/application al dominio y
+fijar umbrales de cobertura por capa.
+
+**Archivos tocados (18 en código/config + docs de cierre):**
+
+- `jest.config.js` — umbrales por capa.
+- `src/` (13), por capa:
+  - **domain** (6): `value-objects/GamePenalties.ts` + `GamePenalties.spec.ts` (**nuevos**),
+    `value-objects/DailyChallenge.ts` + spec, `entities/SessionUpgrades.ts` + spec.
+  - **application** (2): `use-cases/OpenCardUseCase.ts`, `use-cases/PurchaseSessionUpgradeUseCase.ts`.
+  - **presentation** (4): `GameAbandonGuard.ts`, `scenes/ShopScene.ts`, `scenes/UIScene.ts`,
+    `components/DailyChallengeBanner.ts`.
+  - **raíz** (1): `main.ts`.
+- `.opencode/agents/` (4, corrección de permisos de shell): `domain-builder`, `infra-builder`,
+  `test-engineer`, `ui-builder`.
+- `docs/` (cierre de los hallazgos del reviewer): `AGENTS.md`, `docs/ARCHITECTURE.md`,
+  `docs/MAP.md`, `docs/PLAYBOOK.md`, `docs/testing.md`, `docs/LOG.md` (esta entrada).
+  Desincronizaciones nuevas detectadas mientras se corregía todo y también corregidas:
+  los totales LOC por capa de `MAP.md` no eran reproducibles → pasados a `wc -l` medido;
+  `PLAYBOOK.md` §4 decía "pendiente corregir en la Fase 2" (ya hecha) → separada la deriva
+  resuelta de la que sigue abierta (solo `README`); `ARCHITECTURE.md` apuntaba a
+  `main.ts:80` para las escenas (hoy es `:81` por el import nuevo).
+
+**Qué se ganó:**
+
+- Penalidad en **1 lugar** en vez de 3 (un literal `5000` + una constante duplicada en
+  `GameAbandonGuard`): ahora `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts`,
+  consumida por `OpenCardUseCase`, `UIScene` y `main.ts`.
+- Regla de recompensa del desafío diario en **1 función** con test de propiedad
+  (`previewDailyCompletion` ≡ lo que paga `completeDaily`); `DailyChallengeBanner` consume el preview.
+- Las 8 reglas de upgrades en **1 entidad** con **10 specs** (`SessionUpgrades.getState` /
+  `isOwned` / `canPurchase`), en vez de 3 switches (2 privados en `PurchaseSessionUpgradeUseCase`
+  + 1 en `ShopScene`).
+- `ShopScene.upgradeStatusFor()` de ~70 a ~32 líneas, solo presentación (campo `owned` →
+  `buttonDisabled`); además usa `findSessionUpgradeDefinition()` en vez de `.find(…)!)`.
+- Umbrales `application` **nuevos** (88/82/90/88 stmts/branches/functions/lines) y `domain`
+  subidos (80/85/85 branches/functions/lines → 88/80/90/88).
+- Código muerto eliminado: `getActiveStreak()` (había quedado sin consumidores).
+
+**Verificación:** gates en verde delegados en los agentes `qa` y `reviewer` de `.opencode/` —
+**35 suites / 411 tests**, typecheck 0 errores, lint 0, cobertura por capa OK. El reviewer
+marcó 2 hallazgos bloqueantes (docs desfasados respecto de la Fase 4 y código muerto) y
+**ambos se cerraron**: docs corregidos en esta entrada (grep por la constante vieja de
+penalidad en `docs/` y `AGENTS.md` → 0 resultados; `getActiveStreak` ya no existe en `src/`).
+
+**Nota de proceso:** primera ejecución del flujo agéntico completo
+`/plan` → builders → `/review` → `/qa` → `/log`. Un hallazgo del reviewer fueron permisos
+de shell mal acotados en 4 builders (faltaba `npm test*`) — corregido en `.opencode/agents/`.
+
+**Pendiente:** Fase 4 restante (opcional) — extraer a dominio los umbrales de
+`EnergyBarView`/`CardView`. Sigue abierta la deuda de `npm audit` (3 vulnerabilidades en
+devDependencies — `PLAYBOOK.md` §5).
+
+---
+
 ## 2026-09-30 · Fase 3 — Arquitectura agéntica (OpenCode)
 
 **Tarea:** definir agentes especializados y comandos del flujo en OpenCode.

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { getServices } from '../GameServices';
 import { ProgressionEvent } from '../../domain/events/ProgressionEvents';
-import { ABANDON_PENALTY_AMOUNT, deactivateGameAbandonGuard, isGameAbandonGuardActive } from '../GameAbandonGuard';
+import { deactivateGameAbandonGuard, isGameAbandonGuardActive } from '../GameAbandonGuard';
+import { LOSS_PENALTY_AMOUNT } from '../../domain/value-objects/GamePenalties';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import languageManager from '../../shared/i18n/LanguageManager';
@@ -367,7 +368,7 @@ export class UIScene extends Phaser.Scene {
     })
       .setOrigin(0.5);
     const bodyMessage = willBePenalized
-      ? 'GAME_ABANDON_SUBTITLE_PENALIZATION'//`Perderás ${ABANDON_PENALTY_AMOUNT.toLocaleString()} puntos de tu saldo\npor abandonar la partida en curso.`
+      ? 'GAME_ABANDON_SUBTITLE_PENALIZATION'//`Perderás ${LOSS_PENALTY_AMOUNT.toLocaleString()} puntos de tu saldo\npor abandonar la partida en curso.`
       : 'GAME_ABANDON_SUBTITLE_GO';
 
     // QA de legibilidad (fontSize 14px -> 17px) destapó un bug previo:
@@ -388,7 +389,7 @@ export class UIScene extends Phaser.Scene {
       wordWrap: { width: 400 }
     },
       {
-        amount: ABANDON_PENALTY_AMOUNT.toLocaleString()
+        amount: LOSS_PENALTY_AMOUNT.toLocaleString()
       })
       .setOrigin(0.5);
     const buttonY = cy + (willBePenalized ? 55 : 40);
@@ -418,7 +419,7 @@ export class UIScene extends Phaser.Scene {
    * `GameAbandonGuard` indica que había algo real que abandonar — ver
    * GameAbandonGuard.ts), detiene la música/efectos activos, y transiciona
    * a MainMenuScene. Mismo mecanismo (`applyLossPenalty`, misma cifra
-   * `ABANDON_PENALTY_AMOUNT`) y misma secuencia de detención de audio que
+   * `LOSS_PENALTY_AMOUNT`) y misma secuencia de detención de audio que
    * ya usa `ResultScene.exitToMainMenu()`.
    */
   private confirmExitToMainMenu(): void {
@@ -428,7 +429,7 @@ export class UIScene extends Phaser.Scene {
       // monto y mecanismo que OpenCardUseCase aplica al perder por
       // energía — acá se dispara porque el jugador elige salir con una
       // partida REALMENTE en curso, no por el flujo normal del juego.
-      services.progressionManager.applyLossPenalty(ABANDON_PENALTY_AMOUNT);
+      services.progressionManager.applyLossPenalty(LOSS_PENALTY_AMOUNT);
       // Trazabilidad del flag: se desactiva de inmediato para que un
       // eventual segundo click, o el listener 'beforeunload' si el
       // jugador cierra la pestaña en el instante siguiente, nunca vuelvan

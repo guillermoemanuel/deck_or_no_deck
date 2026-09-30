@@ -4,11 +4,12 @@ import {
   DAILY_REWARD_MAX_STREAK,
   DAILY_REWARD_STREAK_STEP,
   EMPTY_DAILY_STATE,
-  getActiveStreak,
   getDailyReward,
   getDailyStatus,
   getNextStreak,
-  markDailyStarted
+  markDailyStarted,
+  previewDailyCompletion,
+  DailyChallengeState
 } from './DailyChallenge';
 
 describe('DailyChallenge', () => {
@@ -80,19 +81,89 @@ describe('DailyChallenge', () => {
     expect(worse.state.bestPayout).toBe(800);
   });
 
-  it('getActiveStreak muestra la racha solo si sigue viva (hoy o ayer)', () => {
-    const state = completeDaily(EMPTY_DAILY_STATE, '2026-09-28', 100).state;
-
-    expect(getActiveStreak(state, '2026-09-28')).toBe(1);
-    expect(getActiveStreak(state, '2026-09-29')).toBe(1);
-    expect(getActiveStreak(state, '2026-09-30')).toBe(0);
-  });
-
   it('getNextStreak anuncia la racha que se lograría al completar hoy', () => {
     const state = completeDaily(EMPTY_DAILY_STATE, '2026-09-28', 100).state;
 
     expect(getNextStreak(EMPTY_DAILY_STATE, '2026-09-28')).toBe(1);
     expect(getNextStreak(state, '2026-09-29')).toBe(2);
     expect(getNextStreak(state, '2026-10-05')).toBe(1);
+  });
+});
+
+describe('previewDailyCompletion', () => {
+  const TODAY = '2026-09-28';
+
+  const stateWith = (overrides: Partial<DailyChallengeState>): DailyChallengeState => ({
+    ...EMPTY_DAILY_STATE,
+    ...overrides
+  });
+
+  /** Propiedad clave: el preview debe coincidir con lo que pagaría completeDaily. */
+  const expectPreviewMatchesCompletion = (state: DailyChallengeState): void => {
+    expect(getDailyStatus(state, TODAY)).not.toBe('completed');
+
+    const { reward, streak } = completeDaily(state, TODAY, 9999);
+
+    expect(previewDailyCompletion(state, TODAY)).toEqual({ reward, streak });
+  };
+
+  it('coincide con completeDaily cuando la racha está rota (varios días sin completar)', () => {
+    const broken = stateWith({
+      lastStartedDate: '2026-09-20',
+      lastCompletedDate: '2026-09-20',
+      currentStreak: 4,
+      bestStreak: 6,
+      totalCompleted: 4
+    });
+
+    expectPreviewMatchesCompletion(broken);
+    expect(previewDailyCompletion(broken, TODAY)).toEqual({ reward: DAILY_REWARD_BASE, streak: 1 });
+  });
+
+  it('coincide con completeDaily cuando la racha sigue viva (completó ayer)', () => {
+    const alive = stateWith({
+      lastStartedDate: '2026-09-27',
+      lastCompletedDate: '2026-09-27',
+      currentStreak: 3
+    });
+
+    expectPreviewMatchesCompletion(alive);
+    expect(previewDailyCompletion(alive, TODAY)).toEqual({
+      reward: DAILY_REWARD_BASE + 3 * DAILY_REWARD_STREAK_STEP,
+      streak: 4
+    });
+  });
+
+  it('coincide con completeDaily cuando la racha supera el tope de recompensa', () => {
+    const overCap = stateWith({
+      lastCompletedDate: '2026-09-27',
+      currentStreak: DAILY_REWARD_MAX_STREAK + 5
+    });
+
+    expect(overCap.currentStreak).toBeGreaterThan(DAILY_REWARD_MAX_STREAK);
+    expectPreviewMatchesCompletion(overCap);
+
+    const preview = previewDailyCompletion(overCap, TODAY);
+    expect(preview.streak).toBe(DAILY_REWARD_MAX_STREAK + 6);
+    expect(preview.reward).toBe(getDailyReward(preview.streak));
+    expect(preview.reward).toBe(getDailyReward(DAILY_REWARD_MAX_STREAK));
+  });
+
+  it('ya completado hoy devuelve { reward: 0, streak: 0 }', () => {
+    const doneToday = stateWith({
+      lastStartedDate: TODAY,
+      lastCompletedDate: TODAY,
+      currentStreak: 5
+    });
+
+    expect(getDailyStatus(doneToday, TODAY)).toBe('completed');
+    expect(previewDailyCompletion(doneToday, TODAY)).toEqual({ reward: 0, streak: 0 });
+  });
+
+  it('estado vacío anuncia racha 1 y recompensa base', () => {
+    expect(previewDailyCompletion(EMPTY_DAILY_STATE, TODAY)).toEqual({
+      reward: DAILY_REWARD_BASE,
+      streak: 1
+    });
   });
 });

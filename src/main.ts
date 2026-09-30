@@ -19,7 +19,8 @@ import { UIScene } from './presentation/scenes/UIScene';
 import { ShopScene } from './presentation/scenes/ShopScene';
 import { ResultScene } from './presentation/scenes/ResultScene';
 import { GameServices } from './presentation/GameServices';
-import { ABANDON_PENALTY_AMOUNT, isGameAbandonGuardActive, deactivateGameAbandonGuard } from './presentation/GameAbandonGuard';
+import { isGameAbandonGuardActive, deactivateGameAbandonGuard } from './presentation/GameAbandonGuard';
+import { LOSS_PENALTY_AMOUNT } from './domain/value-objects/GamePenalties';
 import languageManager from './shared/i18n/LanguageManager';
 
 // --- Composition Root: unica zona del proyecto donde se instancian concretos ---
@@ -206,7 +207,7 @@ window.addEventListener('beforeunload', () => {
   // por trabajo asíncrono, así que cualquier lógica basada en Promises no
   // llegaría a completarse antes de que la página se descargue.
   if (isGameAbandonGuardActive(game.registry)) {
-    progressionManager.applyLossPenalty(ABANDON_PENALTY_AMOUNT);
+    progressionManager.applyLossPenalty(LOSS_PENALTY_AMOUNT);
     deactivateGameAbandonGuard(game.registry);
   }
 });

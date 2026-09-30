@@ -3,15 +3,6 @@ import Phaser from 'phaser';
 const REGISTRY_KEY = 'gameAbandonGuard:isActive';
 
 /**
- * Monto de la penalización por abandono de partida (voluntario desde el
- * botón "Salir" de UIScene, o forzado por cierre/recarga del navegador).
- * Mismo valor y mismo mecanismo (`IProgressionService.applyLossPenalty`,
- * puede dejar el saldo en negativo) que `OpenCardUseCase` ya aplica al
- * perder por agotamiento de energía.
- */
-export const ABANDON_PENALTY_AMOUNT = 5000;
-
-/**
  * GameAbandonGuard: flag booleano persistido en `registry` (el mismo
  * mecanismo que ya usan GameServices y ActiveSessionBridge) que responde
  * a una única pregunta: **¿hay una partida REALMENTE en curso tal que

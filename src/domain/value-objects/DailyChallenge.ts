@@ -52,14 +52,6 @@ export function getDailyStatus(state: DailyChallengeState, todayKey: string): Da
   return 'available';
 }
 
-/** Racha vigente a efectos de mostrar: se corta si ni hoy ni ayer se completó. */
-export function getActiveStreak(state: DailyChallengeState, todayKey: string): number {
-  if (state.lastCompletedDate === todayKey || state.lastCompletedDate === shiftDateKey(todayKey, -1)) {
-    return state.currentStreak;
-  }
-  return 0;
-}
-
 /** Racha que tendría el jugador si completara el desafío hoy (para anunciar la recompensa antes de jugar). */
 export function getNextStreak(state: DailyChallengeState, todayKey: string): number {
   if (state.lastCompletedDate === todayKey) {
@@ -71,6 +63,20 @@ export function getNextStreak(state: DailyChallengeState, todayKey: string): num
 export function getDailyReward(streak: number): number {
   const effective = Math.min(Math.max(streak, 1), DAILY_REWARD_MAX_STREAK);
   return DAILY_REWARD_BASE + (effective - 1) * DAILY_REWARD_STREAK_STEP;
+}
+
+export interface DailyPreview {
+  readonly reward: number;
+  readonly streak: number;
+}
+
+/** Lo que cobraría el jugador si completara el desafío hoy (vista previa para anunciarlo antes de jugar). */
+export function previewDailyCompletion(state: DailyChallengeState, todayKey: string): DailyPreview {
+  if (state.lastCompletedDate === todayKey) {
+    return { reward: 0, streak: 0 };
+  }
+  const streak = getNextStreak(state, todayKey);
+  return { reward: getDailyReward(streak), streak };
 }
 
 /** Consume el intento de hoy. Idempotente. */
@@ -88,16 +94,17 @@ export interface DailyCompletion {
 
 /** Completa el desafío de hoy. Si ya estaba completado devuelve el mismo estado con recompensa 0. */
 export function completeDaily(state: DailyChallengeState, todayKey: string, payout: number): DailyCompletion {
+  // Ojo: si ya estaba completado hoy el streak informado es el actual (NO 0 como
+  // previewDailyCompletion); por eso se resuelve antes de delegar en el preview.
   if (state.lastCompletedDate === todayKey) {
     return { state, reward: 0, streak: state.currentStreak, isNewBestPayout: false };
   }
 
-  const continuesStreak = state.lastCompletedDate === shiftDateKey(todayKey, -1);
-  const streak = continuesStreak ? state.currentStreak + 1 : 1;
+  const { reward, streak } = previewDailyCompletion(state, todayKey);
   const safePayout = Math.max(0, Math.floor(payout));
 
   return {
-    reward: getDailyReward(streak),
+    reward,
     streak,
     isNewBestPayout: state.bestPayout > 0 && safePayout > state.bestPayout,
     state: {

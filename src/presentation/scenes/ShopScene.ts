@@ -458,7 +458,7 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private renderUpgradeRow(upgradeId: SessionUpgradeId, textOffsetX: number, buttonOffsetX: number, y: number): void {
-    const definition = SESSION_UPGRADE_CATALOG.find(u => u.id === upgradeId)!;
+    const definition = findSessionUpgradeDefinition(upgradeId)!;
     const cx = this.cameras.main.centerX;
     const textX = cx + textOffsetX;
     const buttonX = cx + buttonOffsetX;
@@ -558,83 +558,77 @@ export class ShopScene extends Phaser.Scene {
 
     refs.levelOrOwnedText.setText(status.statusLabel);
     refs.actionButton.text.setText(status.buttonLabel);
-    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, status.owned ? COLOR_OWNED : COLOR_BUY);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, status.buttonDisabled ? COLOR_OWNED : COLOR_BUY);
 
-    if (status.owned) {
+    if (status.buttonDisabled) {
       refs.actionButton.hitZone.disableInteractive();
     } else {
       refs.actionButton.hitZone.setInteractive({ useHandCursor: true });
     }
   }
 
+  /**
+   * Texto de estado/botón de una fila de mejora, derivado del estado de
+   * dominio `SessionUpgrades.getState()` — antes había un switch de 8
+   * casos que repetía a mano la lógica de "¿lo tengo?/¿está bloqueado?"
+   * que ya vive en el dominio (isOwned/canPurchase), con el riesgo de
+   * que las dos versiones diverjan.
+   *
+   * `buttonDisabled`: en 'locked' el botón muestra el costo pero queda
+   * INERTE (el caller lo deja sin interactividad) — solo 'available'
+   * habilita la compra.
+   */
   private upgradeStatusFor(
     upgradeId: SessionUpgradeId,
     upgrades: SessionUpgrades
-  ): { statusLabel: string; buttonLabel: string; owned: boolean } {
-    const definition = SESSION_UPGRADE_CATALOG.find(u => u.id === upgradeId)!;
+  ): { statusLabel: string; buttonLabel: string; buttonDisabled: boolean } {
+    const definition = findSessionUpgradeDefinition(upgradeId)!;
     const cost = languageManager.getText('SHOP_BUY_BUTTON', { price: `$${definition.cost.toLocaleString()}` });
     const ownedLabel = languageManager.getText('SHOP_OWNED_LABEL');
-    const notPurchased = languageManager.getText('SHOP_UPGRADE_NOT_PURCHASED');
-    const activeThisGame = languageManager.getText('SHOP_UPGRADE_ACTIVE_THIS_GAME');
 
+    switch (upgrades.getState(upgradeId)) {
+      case 'acquired':
+        return {
+          statusLabel: languageManager.getText(this.acquiredLabelKeyFor(upgradeId)),
+          buttonLabel: ownedLabel,
+          buttonDisabled: true
+        };
+      case 'locked':
+        // Solo energy_tank_2 sin energy_tank_1 llega acá: la etiqueta
+        // pide el prerequisito y el botón muestra el costo pero no
+        // responde al click (buttonDisabled → disableInteractive).
+        return {
+          statusLabel: languageManager.getText('SHOP_UPGRADE_REQUIRES_LEVEL_1'),
+          buttonLabel: cost,
+          buttonDisabled: true
+        };
+      case 'available':
+        return {
+          statusLabel: languageManager.getText('SHOP_UPGRADE_NOT_PURCHASED'),
+          buttonLabel: cost,
+          buttonDisabled: false
+        };
+    }
+  }
+
+  /**
+   * Clave i18n de la etiqueta "activo" al adquirir una mejora — única
+   * parte del texto que depende del id, y es presentación (i18n), no
+   * regla de negocio: por eso vive acá y no en el dominio.
+   */
+  private acquiredLabelKeyFor(upgradeId: SessionUpgradeId): TranslationKey {
     switch (upgradeId) {
-      case 'energy_tank_1': {
-        const owned = upgrades.getEnergyTankLevel() >= 1;
-        return {
-          statusLabel: owned ? languageManager.getText('SHOP_UPGRADE_LEVEL_1_ACTIVE') : notPurchased,
-          buttonLabel: owned ? ownedLabel : cost,
-          owned
-        };
-      }
-      case 'energy_tank_2': {
-        const owned = upgrades.getEnergyTankLevel() >= 2;
-        const locked = upgrades.getEnergyTankLevel() < 1;
-        return {
-          statusLabel: owned
-            ? languageManager.getText('SHOP_UPGRADE_LEVEL_2_ACTIVE')
-            : locked
-              ? languageManager.getText('SHOP_UPGRADE_REQUIRES_LEVEL_1')
-              : notPurchased,
-          buttonLabel: owned ? ownedLabel : cost,
-          owned: owned || locked
-        };
-      }
-      case 'negative_card_shield':
-        return {
-          statusLabel: upgrades.hasNegativeCardShield() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasNegativeCardShield() ? ownedLabel : cost,
-          owned: upgrades.hasNegativeCardShield()
-        };
-      case 'negotiator':
-        return {
-          statusLabel: upgrades.hasNegotiator() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasNegotiator() ? ownedLabel : cost,
-          owned: upgrades.hasNegotiator()
-        };
+      case 'energy_tank_1':
+        return 'SHOP_UPGRADE_LEVEL_1_ACTIVE';
+      case 'energy_tank_2':
+        return 'SHOP_UPGRADE_LEVEL_2_ACTIVE';
       case 'double_reward':
-        return {
-          statusLabel: upgrades.hasDoubleReward() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasDoubleReward() ? ownedLabel : cost,
-          owned: upgrades.hasDoubleReward()
-        };
       case 'triple_reward':
-        return {
-          statusLabel: upgrades.hasTripleReward() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasTripleReward() ? ownedLabel : cost,
-          owned: upgrades.hasTripleReward()
-        };
       case 'revive':
-        return {
-          statusLabel: upgrades.hasRevive() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasRevive() ? ownedLabel : cost,
-          owned: upgrades.hasRevive()
-        };
       case 'secret_swap_final':
-        return {
-          statusLabel: upgrades.hasSecretSwapFinal() ? activeThisGame : notPurchased,
-          buttonLabel: upgrades.hasSecretSwapFinal() ? ownedLabel : cost,
-          owned: upgrades.hasSecretSwapFinal()
-        };
+      case 'negative_card_shield':
+      case 'negotiator':
+        return 'SHOP_UPGRADE_ACTIVE_THIS_GAME';
     }
   }
 
