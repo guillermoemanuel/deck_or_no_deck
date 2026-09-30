@@ -208,6 +208,16 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_USED: 'In progress. Finish it or come back in {time}',
     STATS_LINE: '🏆 {games} games · {winRate}% wins · Best: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Already active: {other}. Only one reward multiplier per game.',
+
+    // --- Bono Periódico (PeriodicBonusModal) ---
+    PERIODIC_BONUS_TITLE: '🎁 Periodic Bonus',
+    PERIODIC_BONUS_SUBTITLE: 'Pick a card — you win whatever it holds.',
+    PERIODIC_BONUS_WON: 'You won ${amount}!',
+    PERIODIC_BONUS_NO_PRIZE: 'No prize this time — try again in {hours}h.',
+    PERIODIC_BONUS_CLOSE_BUTTON: 'Close',
+
+    // --- Celebración de carta máxima (SpotlightSweepEffect) ---
+    SPOTLIGHT_TOP_CARD_TITLE: 'TOP CARD REVEALED!',
     RESULT_NEW_RECORD: '🏆 New personal best!',
     RESULT_DAILY_REWARD: '📅 Daily Challenge: +{reward} coins (streak: {streak})',
   },
@@ -391,6 +401,16 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_USED: 'En curso. Terminalo o volvé en {time}',
     STATS_LINE: '🏆 {games} partidas · {winRate}% victorias · Mejor: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Ya tenés activo: {other}. Solo un multiplicador de premio por partida.',
+
+    // --- Bono Periódico (PeriodicBonusModal) ---
+    PERIODIC_BONUS_TITLE: '🎁 Bono Periódico',
+    PERIODIC_BONUS_SUBTITLE: 'Elegí una carta — te llevás lo que tenga.',
+    PERIODIC_BONUS_WON: '¡Ganaste ${amount}!',
+    PERIODIC_BONUS_NO_PRIZE: 'Sin premio esta vez — probá en {hours}hs.',
+    PERIODIC_BONUS_CLOSE_BUTTON: 'Cerrar',
+
+    // --- Celebración de carta máxima (SpotlightSweepEffect) ---
+    SPOTLIGHT_TOP_CARD_TITLE: '¡CARTA MÁXIMA REVELADA!',
     RESULT_NEW_RECORD: '🏆 ¡Nuevo récord personal!',
     RESULT_DAILY_REWARD: '📅 Desafío Diario: +{reward} monedas (racha: {streak})',
   }

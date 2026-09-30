@@ -21,7 +21,13 @@ export type GameEvent =
   | { type: 'DealRejected' }
   | { type: 'MidgameSwapAvailable' }
   | { type: 'SecretCardSwapped'; newSecretCard: Card; oldSecretCard?: Card }
-  | { type: 'LastCardRevealed'; lastBoardCard: Card; secretCard: Card }
+  // `lastBoardCard` es opcional: ningún listener actual lo lee (solo
+  // `secretCard` importa para la animación de revelado), y el caso de
+  // victoria inmediata al revivir con el tablero ya vacío (ver
+  // GameSession.reviveWithFullEnergy) no tiene una carta de tablero
+  // recién abierta para informar — esa carta ya se había abierto (y
+  // animado) ANTES de la derrota que llevó al revive.
+  | { type: 'LastCardRevealed'; lastBoardCard?: Card; secretCard: Card }
   | { type: 'GameRevived'; energyPercentage: number }
   | { type: 'GameWon'; finalAmount: number }
   | { type: 'GameLost' }

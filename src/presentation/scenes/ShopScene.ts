@@ -124,6 +124,7 @@ const DECK_FIRST_ROW_OFFSET_Y = -170;
 export class ShopScene extends Phaser.Scene {
   private activeTab: ShopTab = 'upgrades';
   private tabContainer!: Phaser.GameObjects.Container;
+  private coinsLabel: LocalizedText | null = null;
 
   private upgradeRowRefs = new Map<SessionUpgradeId, UpgradeRowRefs>();
   private deckRowRefs = new Map<DeckSetupId, DeckRowRefs>();
@@ -208,6 +209,36 @@ export class ShopScene extends Phaser.Scene {
       fontStyle: 'bold',
       color: '#ffffff'
     }).setOrigin(0.5);
+
+    // Saldo de monedas, visible mientras se compra: antes de esto, la
+    // única forma de ver el saldo era cerrar la Tienda y volver al Menú
+    // Principal. Mismo lado (izquierda) y misma fila que el título/✕
+    // (espejo del ✕ a la derecha), y con LIVE UPDATE vía
+    // progressionManager.onEvent('CoinsChanged') — a diferencia del
+    // contador de MainMenuScene (que se arma una sola vez porque esa
+    // escena se reconstruye entera cada vez que se vuelve a ella), acá el
+    // jugador puede comprar varias cosas SIN cerrar esta pantalla, así
+    // que un valor estático quedaría desactualizado tras la primera compra.
+    this.coinsLabel = new LocalizedText(
+      this,
+      modalX + 90,
+      height / 2 - 270,
+      'MENU_COINS_LABEL',
+      {
+        fontFamily: 'Georgia, "Times New Roman", serif',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: COLOR_GOLD_HEX
+      },
+      { amount: getServices(this).progressionManager.getCoins().toLocaleString() }
+    ).setOrigin(0, 0.5);
+
+    const unsubscribeCoins = getServices(this).progressionManager.onEvent(event => {
+      if (event.type === 'CoinsChanged') {
+        this.coinsLabel?.setParams({ amount: event.newTotal.toLocaleString() });
+      }
+    });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribeCoins);
 
     this.createCloseButton(width / 2 + 440, height / 2 - 270);
 

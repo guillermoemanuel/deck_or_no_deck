@@ -82,6 +82,38 @@ describe('SessionUpgrades', () => {
       expect(upgrades.hasRevive()).toBe(true);
     });
 
+    // BUGFIX (revive infinito): sin consumeRevive(), hasRevive() se quedaba
+    // en true para siempre tras comprarlo una vez, permitiendo revivir sin
+    // límite en la misma partida (ver el comentario en consumeRevive() y en
+    // ReviveWithAdUseCase.execute()).
+    it('consumeRevive makes hasRevive false again after granting it', () => {
+      const upgrades = new SessionUpgrades();
+      upgrades.grantRevive();
+
+      upgrades.consumeRevive();
+
+      expect(upgrades.hasRevive()).toBe(false);
+    });
+
+    it('consumeRevive without ever granting it is a harmless no-op', () => {
+      const upgrades = new SessionUpgrades();
+
+      expect(() => upgrades.consumeRevive()).not.toThrow();
+      expect(upgrades.hasRevive()).toBe(false);
+    });
+
+    it('consumeRevive does not affect other upgrades', () => {
+      const upgrades = new SessionUpgrades();
+      upgrades.grantRevive();
+      upgrades.grantDoubleReward();
+      upgrades.grantNegotiator();
+
+      upgrades.consumeRevive();
+
+      expect(upgrades.hasDoubleReward()).toBe(true);
+      expect(upgrades.hasNegotiator()).toBe(true);
+    });
+
     it('grantSecretSwapFinal makes hasSecretSwapFinal true', () => {
       const upgrades = new SessionUpgrades();
       upgrades.grantSecretSwapFinal();

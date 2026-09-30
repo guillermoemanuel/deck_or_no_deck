@@ -274,6 +274,64 @@ describe('GameSession', () => {
 
       expect(() => session.openCard('card_1')).not.toThrow();
     });
+
+    it('returns { wonImmediately: false } for a normal revive (cards still closed)', () => {
+      const session = createSession([100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], new FixedDrainRule());
+      session.openCard('card_0');
+
+      const outcome = session.reviveWithFullEnergy();
+
+      expect(outcome).toEqual({ wonImmediately: false });
+    });
+
+    // BUGFIX (partida trabada al revivir con el tablero ya vacío): si la
+    // carta que causó la derrota era la ÚLTIMA cerrada del tablero,
+    // openCard() la abre/quita del tablero ANTES de detectar el
+    // agotamiento de energía, así que su chequeo de "tablero limpio →
+    // victoria" nunca llega a correr — sin este caso en
+    // reviveWithFullEnergy(), la partida quedaba en 'playing' para
+    // siempre, sin ninguna carta más para abrir y sin forma de ganar.
+    // Abre una carta y, si dispara una oferta del Banquero de paso (cada 3
+    // cartas — ver Banker.OFFER_INTERVAL), la rechaza para poder seguir
+    // abriendo. Deja 'card_0' como la ÚNICA carta cerrada del tablero.
+    function openLeavingOnlyCardZero(session: GameSession): void {
+      for (let i = 1; i <= 11; i++) {
+        session.openCard(`card_${i}`);
+        if (session.getStatus() === 'awaiting_offer_response') {
+          session.rejectDeal();
+        }
+      }
+    }
+
+    it('resolves as an immediate win when the card that caused the loss was the LAST closed board card', () => {
+      // 'card_0' vale 100 (agota la energía en la última jugada posible);
+      // el resto del tablero vale 0 (no daña) para poder llegar hasta ahí
+      // sin perder antes de tiempo. Secreta en 250.
+      const values = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 250];
+      const session = createSession(values);
+      openLeavingOnlyCardZero(session);
+      expect(session.getStatus()).toBe('playing');
+
+      session.openCard('card_0'); // agota la energía Y vacía el tablero, a la vez
+      expect(session.getStatus()).toBe('lost');
+
+      const outcome = session.reviveWithFullEnergy();
+
+      expect(outcome.wonImmediately).toBe(true);
+      expect(outcome.secretCard?.value).toBe(250);
+      expect(session.getStatus()).toBe('won');
+    });
+
+    it('does not leave any way to keep playing after resolving as an immediate win', () => {
+      const values = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 250];
+      const session = createSession(values);
+      openLeavingOnlyCardZero(session);
+      session.openCard('card_0');
+
+      session.reviveWithFullEnergy();
+
+      expect(() => session.openCard('card_1')).toThrow();
+    });
   });
 
   describe('starting energy bonus — comparative behavior', () => {

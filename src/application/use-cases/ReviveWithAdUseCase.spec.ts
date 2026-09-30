@@ -16,11 +16,22 @@ class FixedDrainRule implements EnergyDrainRule {
   }
 }
 
-function buildLostSession(): GameSession {
-  const values = [100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+// BUGFIX (revive infinito): ReviveWithAdUseCase ahora exige `hasRevive()`
+// además de `status === 'lost'` (ver el comentario en execute()), así que
+// toda sesión de prueba que deba llegar hasta el anuncio necesita el
+// upgrade concedido — de lo contrario CUALQUIER test de este archivo que
+// antes pasaba de largo el chequeo de elegibilidad ahora cortaría antes de
+// tiempo con 'not_eligible'. `grantRevive: boolean` por defecto en `true`
+// para no repetir `session.getSessionUpgrades().grantRevive()` en cada test;
+// el único caso que lo pasa en `false` es el que prueba el fix en sí.
+function buildLostSession(grantRevive = true): GameSession {
+  const values = [100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const boardCards = values.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', values[12], true);
   const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new FixedDrainRule());
+  if (grantRevive) {
+    session.getSessionUpgrades().grantRevive();
+  }
   session.openCard('card_0');
   return session;
 }
@@ -47,6 +58,23 @@ describe('ReviveWithAdUseCase', () => {
 
     expect(result).toEqual({ revived: false, reason: 'not_eligible' });
     expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // BUGFIX (revive infinito): este es el test que habría atrapado el bug
+  // reportado — antes del fix, execute() nunca miraba hasRevive() y este
+  // caso (perdido, pero SIN el upgrade comprado) igual mostraba el
+  // anuncio y revivía gratis.
+  it('returns { revived: false, reason: "not_eligible" } if the game is lost but "revive" was never purchased', async () => {
+    const session = buildLostSession(/* grantRevive */ false);
+    const crazyGamesService = new FakeCrazyGamesService();
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus);
+
+    const result = await useCase.execute();
+
+    expect(result).toEqual({ revived: false, reason: 'not_eligible' });
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+    expect(session.getStatus()).toBe('lost');
   });
 
   it('returns { revived: false, reason: "sdk_unavailable" } if the SDK is not available', async () => {
@@ -103,6 +131,57 @@ describe('ReviveWithAdUseCase', () => {
 
     await useCase.execute();
 
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+  });
+
+  it('consumes "revive" on a successful revive, so hasRevive() is false right after', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus);
+
+    expect(session.getSessionUpgrades().hasRevive()).toBe(true);
+    await useCase.execute();
+
+    expect(session.getSessionUpgrades().hasRevive()).toBe(false);
+  });
+
+  it('does NOT consume "revive" when the ad fails (the player keeps their purchase to retry)', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setNextAdResult({ success: false, reason: 'user_cancelled' });
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus);
+
+    await useCase.execute();
+
+    expect(session.getSessionUpgrades().hasRevive()).toBe(true);
+  });
+
+  // BUGFIX (revive infinito) — reproduce el exploit reportado de punta a
+  // punta con la API pública real: comprar "Revivir" UNA vez alcanzaba
+  // para revivir sin límite en la misma partida, viendo un anuncio cada
+  // vez. Con el fix, la SEGUNDA derrota de la misma partida ya no ofrece
+  // revivir ni vuelve a pedir un anuncio.
+  it('does not allow reviving a second time in the same game without buying "revive" again', async () => {
+    const session = buildLostSession(); // "revive" comprado una vez
+    const crazyGamesService = new FakeCrazyGamesService();
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus);
+
+    const first = await useCase.execute();
+    expect(first).toEqual({ revived: true });
+
+    // El jugador sigue jugando tras revivir y pierde POR SEGUNDA VEZ en
+    // la misma partida (card_1 también vale 100, como card_0).
+    session.openCard('card_1');
+    expect(session.getStatus()).toBe('lost');
+
+    const second = await useCase.execute();
+
+    expect(second).toEqual({ revived: false, reason: 'not_eligible' });
+    expect(session.getStatus()).toBe('lost');
+    // El punto central del bug: el anuncio NO se vuelve a mostrar la segunda vez.
     expect(crazyGamesService.rewardedAdCallCount).toBe(1);
   });
 });

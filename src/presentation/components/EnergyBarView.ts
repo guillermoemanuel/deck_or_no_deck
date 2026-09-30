@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
+import { LocalizedText } from './LocalizedText';
 
 /**
  * EnergyBarView: Barra de energía HUD.
@@ -23,7 +24,13 @@ import { TranslationKey } from '../../shared/i18n/LanguageData';
 export class EnergyBarView extends Phaser.GameObjects.Container {
   private readonly bg: Phaser.GameObjects.Image;
   private readonly fill: Phaser.GameObjects.Image;
-  private readonly labelText: Phaser.GameObjects.Text;
+  // BUGFIX (i18n hardcodeado): esta clase YA tenía la clave 'ENERGY_BAR_LABEL'
+  // en LanguageData.ts (con su {percent}), pero nunca se usaba acá — el
+  // texto seguía escrito en español a mano, sin traducir. `LocalizedText`
+  // (en vez de un `Text` plano + `setText` manual) resuelve esto solo:
+  // reacciona a un cambio de idioma en caliente por sí misma, sin que
+  // este componente tenga que suscribirse/desuscribirse a mano.
+  private readonly labelText: LocalizedText;
   private readonly bankerOfferText: Phaser.GameObjects.Text;
   private readonly baseMaxWidth: number;
   private capacityMultiplier = 1;
@@ -52,14 +59,19 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
 
     // Centrado sobre la barra (antes anclado a la izquierda en x=4, lo
     // que quedaba descentrado respecto del nuevo marco simétrico).
-    this.labelText = scene.add
-      .text(0, -24, 'ENERGÍA: 100%', {
+    this.labelText = new LocalizedText(
+      scene,
+      0,
+      -24,
+      'ENERGY_BAR_LABEL',
+      {
         fontSize: '17px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#00e5ff'
-      })
-      .setOrigin(0.5, 0.5);
+      },
+      { percent: 100 }
+    ).setOrigin(0.5, 0.5);
 
     // Justo debajo de la barra (labelText va arriba, en -24 — este va
     // simétricamente abajo). Dorado en vez de cian: se lee como
@@ -109,7 +121,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     const color = this.colorForPercentage(clamped);
 
     this.fill.setTint(color);
-    this.labelText.setText(`ENERGÍA: ${Math.round(clamped)}%`);
+    this.labelText.setParams({ percent: Math.round(clamped) });
     this.labelText.setColor(clamped <= 20 ? '#ff3366' : '#00e5ff');
 
     this.scene.tweens.add({

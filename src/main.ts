@@ -98,7 +98,7 @@ renderRotateOverlayText();
 languageManager.onLanguageChanged(renderRotateOverlayText);
 
 // iOS informa el tamaño del viewport con retraso tras girar: se vuelve a medir.
-const refreshScale = (): void => game.scale.refresh();
+const refreshScale = (): void => {game.scale.refresh()};
 window.addEventListener('orientationchange', () => window.setTimeout(refreshScale, 300));
 window.visualViewport?.addEventListener('resize', refreshScale);
 

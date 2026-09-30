@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Card } from '../../../domain/entities/Card';
 import { DeckCelebrationEffect } from './DeckCelebrationEffect';
+import { LocalizedText } from '../../components/LocalizedText';
 
 /**
  * Efecto genérico de "reflectores cruzando la pantalla": se reproduce
@@ -46,18 +47,27 @@ export class SpotlightSweepEffect implements DeckCelebrationEffect {
       });
     }
 
-    // Título celebratorio breve. Texto fijo (no LocalizedText a propósito,
-    // igual que el título de MainMenuScene): es una interjección de
-    // impacto puntual, no contenido funcional del juego.
-    const celebrationText = scene.add
-      .text(width / 2, height / 2 - 40, '¡CARTA MÁXIMA REVELADA!', {
+    // BUGFIX (i18n hardcodeado): a diferencia del título de MainMenuScene
+    // ("DECK OR NO DECK", un nombre de marca que no se traduce en ningún
+    // idioma), este es un mensaje de contenido real ("¡carta máxima
+    // revelada!") — un jugador no hispanohablante lo veía siempre en
+    // español sin importar el idioma elegido. `LocalizedText` resuelve
+    // esto; el efecto es de un solo uso (se destruye a los ~2.9s), así
+    // que no hace falta suscripción en caliente al cambio de idioma.
+    const celebrationText = new LocalizedText(
+      scene,
+      width / 2,
+      height / 2 - 40,
+      'SPOTLIGHT_TOP_CARD_TITLE',
+      {
         fontSize: '34px',
         fontFamily: 'Georgia, "Times New Roman", serif',
         fontStyle: 'bold',
         color: '#ffd76a',
         stroke: '#000000',
         strokeThickness: 6
-      })
+      }
+    )
       .setOrigin(0.5)
       .setScale(0.3)
       .setAlpha(0);

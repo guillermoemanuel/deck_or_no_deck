@@ -46,6 +46,17 @@ export interface OpenCardResult {
   readonly secretCard?: Card;
 }
 
+/**
+ * Resultado de `reviveWithFullEnergy()`. Casi siempre `wonImmediately` es
+ * `false` (el jugador sigue jugando con energía restaurada). Es `true` en
+ * el caso límite donde la carta que causó la derrota era la última cerrada
+ * del tablero — ver el comentario dentro de `reviveWithFullEnergy()`.
+ */
+export interface ReviveOutcome {
+  readonly wonImmediately: boolean;
+  readonly secretCard?: Card;
+}
+
 export class GameSession {
   private readonly deckManager: DeckManager;
   private readonly stateMachine: GameStateMachine;
@@ -204,7 +215,7 @@ export class GameSession {
     this.currentOffer = null;
   }
 
-  reviveWithFullEnergy(): void {
+  reviveWithFullEnergy(): ReviveOutcome {
     if (!this.stateMachine.is('lost')) {
       throw new Error('Revive is only available after losing');
     }
@@ -213,6 +224,25 @@ export class GameSession {
     // revivir no debe borrar esa mejora ya pagada en esta misma partida.
     this.energy = EnergyLevel.full(this.startingEnergyBonus, this.energy.getCeiling());
     this.stateMachine.revive();
+
+    // BUGFIX (partida trabada al revivir con el tablero ya vacío): si la
+    // carta que causó la derrota era la ÚLTIMA cerrada del tablero,
+    // openCard() ya la había abierto/quitado de `deckManager` ANTES de
+    // detectar el agotamiento de energía (ver el `return` temprano más
+    // arriba, en el bloque `if (this.energy.isDepleted())`) — así que su
+    // chequeo de "tablero limpio → victoria" nunca llegó a correr. Al
+    // revivir no queda ninguna carta más para abrir, y como ese chequeo
+    // solo vive dentro de openCard(), ningún evento futuro de "abrir
+    // carta" iba a volver a dispararlo: la partida quedaba en 'playing'
+    // para siempre, sin ninguna jugada posible. Se repite acá la MISMA
+    // regla ("sin cartas cerradas → se revela la secreta y se gana").
+    if (this.deckManager.getClosedCards().length === 0) {
+      const revealedSecret = this.deckManager.openSecretCard();
+      this.stateMachine.win();
+      return { wonImmediately: true, secretCard: revealedSecret };
+    }
+
+    return { wonImmediately: false };
   }
 
   getStatus(): GameStatus {

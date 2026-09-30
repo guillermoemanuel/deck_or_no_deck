@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import languageManager from '../../shared/i18n/LanguageManager';
+import { PERIODIC_BONUS_COOLDOWN_MS } from '../../domain/value-objects/PeriodicBonus';
+import { LocalizedText } from './LocalizedText';
 
 /** Misma paleta "Casino de Lujo" que el resto de los modales del juego. */
 const COLOR_GOLD = 0xffd76a;
@@ -54,29 +57,32 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
 
     const panelWidth = Math.min(620, scene.cameras.main.width - 60);
     const panelBg = scene.add
-      .rectangle(0, 0, panelWidth, 360, COLOR_PANEL_BG, 0.98)
+      .rectangle(0, 0, panelWidth, 300, COLOR_PANEL_BG, 0.98)
       .setStrokeStyle(3, COLOR_GOLD_DIM, 0.9);
 
     const innerFrame = scene.add
       .rectangle(0, 0, panelWidth - 20, 280, 0x000000, 0)
       .setStrokeStyle(1, COLOR_GOLD, 0.35);
 
-    const titleText = scene.add
-      .text(0, -115, '🎁 Bono Periódico', {
-        fontSize: '24px',
-        fontFamily: FONT_FAMILY,
-        fontStyle: 'bold',
-        color: COLOR_GOLD_HEX
-      })
-      .setOrigin(0.5);
+    // BUGFIX (i18n hardcodeado): este modal quedó afuera cuando el resto
+    // de la UI migró a LocalizedText/languageManager — todos sus textos
+    // estaban escritos en español a mano, sin traducir. Al ser un modal
+    // efímero (se construye de cero cada vez que se abre, nunca queda
+    // abierto entre cambios de idioma), alcanza con resolver el texto
+    // UNA vez al crearlo — no hace falta la suscripción en caliente que
+    // sí usa EnergyBarView (que vive durante toda la partida).
+    const titleText = new LocalizedText(scene, 0, -115, 'PERIODIC_BONUS_TITLE', {
+      fontSize: '24px',
+      fontFamily: FONT_FAMILY,
+      fontStyle: 'bold',
+      color: COLOR_GOLD_HEX
+    }).setOrigin(0.5);
 
-    const subtitleText = scene.add
-      .text(0, -82, 'Elegí una carta — te llevás lo que tenga.', {
-        fontSize: '17px',
-        fontFamily: FONT_FAMILY,
-        color: '#cbd5e1'
-      })
-      .setOrigin(0.5);
+    const subtitleText = new LocalizedText(scene, 0, -82, 'PERIODIC_BONUS_SUBTITLE', {
+      fontSize: '17px',
+      fontFamily: FONT_FAMILY,
+      color: '#cbd5e1'
+    }).setOrigin(0.5);
 
     this.add([backdrop, panelBg, innerFrame, titleText, subtitleText]);
 
@@ -202,8 +208,12 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
   }
 
   private showResult(scene: Phaser.Scene, value: number, onClose: () => void): void {
+    const resultMessage =
+      value > 0
+        ? languageManager.getText('PERIODIC_BONUS_WON', { amount: value.toLocaleString() })
+        : languageManager.getText('PERIODIC_BONUS_NO_PRIZE', { hours: PERIODIC_BONUS_COOLDOWN_MS / (60 * 60 * 1000) });
     const resultText = scene.add
-      .text(0, 120, value > 0 ? `¡Ganaste $${value.toLocaleString()}!` : 'Sin premio esta vez — probá en 12hs.', {
+      .text(0, 120, resultMessage, {
         fontSize: '18px',
         fontFamily: FONT_FAMILY,
         fontStyle: 'bold',
@@ -234,9 +244,12 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
     bg.lineStyle(2, COLOR_GOLD_DIM, 0.9);
     bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 10);
 
-    const label = scene.add
-      .text(0, 0, 'Cerrar', { fontFamily: FONT_FAMILY, fontSize: '16px', fontStyle: 'bold', color: COLOR_WHITE_HEX })
-      .setOrigin(0.5);
+    const label = new LocalizedText(scene, 0, 0, 'PERIODIC_BONUS_CLOSE_BUTTON', {
+      fontFamily: FONT_FAMILY,
+      fontSize: '16px',
+      fontStyle: 'bold',
+      color: COLOR_WHITE_HEX
+    }).setOrigin(0.5);
 
     container.add([glow, bg, label]);
 

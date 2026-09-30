@@ -329,7 +329,13 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     const openCardUseCase = new OpenCardUseCase(session, eventBus, progressionForSession);
     const resolveDealUseCase = new ResolveDealUseCase(session, progressionForSession, eventBus);
     const swapSecretCardUseCase = new SwapSecretCardUseCase(session, eventBus);
-    const reviveWithAdUseCase = new ReviveWithAdUseCase(session, services.crazyGamesService, eventBus);
+    // `progressionForSession` (no `services.progressionManager` directo):
+    // necesario para el caso límite de "victoria inmediata al revivir" con
+    // el tablero ya vacío (ver ReviveWithAdUseCase/GameSession), que
+    // acredita el premio — en el Desafío Diario eso debe pasar por la
+    // versión sin penalización, igual que el resto de los use-cases de
+    // esta partida.
+    const reviveWithAdUseCase = new ReviveWithAdUseCase(session, services.crazyGamesService, eventBus, progressionForSession);
     const swapFinalSecretCardUseCase = new SwapFinalSecretCardUseCase(session, progressionForSession, eventBus);
     const purchaseSessionUpgradeUseCase = new PurchaseSessionUpgradeUseCase(session, progressionForSession, eventBus);
 

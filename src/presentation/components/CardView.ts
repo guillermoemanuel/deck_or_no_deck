@@ -203,10 +203,36 @@ export class CardView extends Phaser.GameObjects.Container {
     this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
     this.positionLabel.setVisible(false);
 
+    // BUGFIX (glitch de flip — CardView.ts:L215): antes del click en esta
+    // MISMA carta pasar por aquí una segunda vez ya estaba cubierto por el
+    // guard `isRevealed` de revealValue()/applyState(), pero el sprite
+    // seguía interactivo durante los ~360ms del giro entero (esta función
+    // nunca llamaba a disableInteractive() por sí misma — solo lo hacía
+    // applyState() DESPUÉS, en un ciclo de sync posterior). Se deshabilita
+    // ya mismo, al arrancar el giro, en vez de esperar a ese sync externo.
+    this.cardSprite.disableInteractive();
+
     this.scene.tweens.add({
-      targets: this.cardSprite,
+      // BUGFIX (glitch de flip): se tweenea el CONTENEDOR entero (`this`),
+      // no solo `cardSprite`. `valueText` es un HERMANO de `cardSprite`
+      // dentro de este mismo Container (ver el `this.add([...])` del
+      // constructor) — al animar solo `cardSprite`, `valueText` quedaba
+      // siempre a escala 1:1 fija. Cuando `onComplete` lo hacía visible
+      // (exactamente al terminar esta primera mitad del giro, con el
+      // contenedor en su punto más colapsado), aparecía de golpe a tamaño
+      // completo sobre una carta invisible/de canto — un artefacto visual
+      // de este mismo tramo de 160ms. Tweeneando el contenedor, `valueText`
+      // escala EN SINCRONÍA con `cardSprite` sin código extra.
+      //
+      // Los valores respetan `initialScale` (la escala de reposo real del
+      // layout — 0.82 en la grilla de selección, 0.88 en el tablero, 0.9
+      // en el pedestal — ver setBaseScale()), igual que ya hace el tween
+      // de hover más arriba: tweenear el contenedor a scaleX/scaleY
+      // absolutos de 0/1 lo habría reseteado a esa escala fija de 1.0 al
+      // terminar el giro, deshaciendo el layout.
+      targets: this,
       scaleX: 0,
-      scaleY: 1.12,
+      scaleY: this.initialScale * 1.12,
       duration: 160,
       ease: 'Quad.easeIn',
       onComplete: () => {
@@ -218,9 +244,9 @@ export class CardView extends Phaser.GameObjects.Container {
         this.valueText.setColor(isHigh ? '#ff4d6d' : '#38ef7d');
 
         this.scene.tweens.add({
-          targets: this.cardSprite,
-          scaleX: 1,
-          scaleY: 1,
+          targets: this,
+          scaleX: this.initialScale,
+          scaleY: this.initialScale,
           duration: 200,
           ease: 'Back.easeOut',
           onComplete: () => {
@@ -241,10 +267,17 @@ export class CardView extends Phaser.GameObjects.Container {
 
   resetAsFaceDown(): void {
     this.isRevealed = false;
+    // BUGFIX (flip ahora anima el contenedor, no cardSprite): si esto se
+    // llama mientras el giro de reveal() todavía está animando `this`
+    // (p. ej. una baraja que reutiliza CardViews), hay que cortar ese
+    // tween y devolver el contenedor a su escala de REPOSO real — nunca a
+    // 1.0 fijo, que rompería el tamaño de layout en grillas con escala
+    // distinta de 1 (selección/tablero/pedestal — ver setBaseScale()).
+    this.scene.tweens.killTweensOf(this);
+    this.setScale(this.initialScale);
     this.cardSprite.setTexture('card-back');
     this.valueText.setVisible(false);
     this.positionLabel.setVisible(this.displayNumber !== null);
-    this.cardSprite.setScale(1);
     this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
     this.cardSprite.setInteractive({ useHandCursor: true });
   }

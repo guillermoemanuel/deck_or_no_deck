@@ -50,6 +50,20 @@ export class SessionUpgrades {
     return this.reviveOwned;
   }
 
+  /**
+   * Consume el "Revivir" tras usarlo. SIN esto, `reviveOwned` queda en
+   * `true` para siempre: como `buildUpgradeFlagsForResultScene()` llama a
+   * `hasRevive()` de nuevo en cada NUEVA derrota de la misma partida (no
+   * solo una vez al principio), el botón "Revivir" reaparecía en cada
+   * pantalla de derrota posterior — bastaba una sola compra de 1.250
+   * monedas para revivir un número ilimitado de veces en la misma
+   * partida (viendo un anuncio cada vez), haciendo la derrota imposible.
+   * Llamar SOLO tras un revive exitoso (ver ReviveWithAdUseCase.execute).
+   */
+  consumeRevive(): void {
+    this.reviveOwned = false;
+  }
+
   hasSecretSwapFinal(): boolean {
     return this.secretSwapFinalOwned;
   }
