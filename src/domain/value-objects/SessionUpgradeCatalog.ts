@@ -30,6 +30,16 @@ export interface SessionUpgradeDefinition {
    * búsqueda en el catálogo, sin necesitar un grafo bidireccional.
    */
   readonly conflictsWith?: readonly SessionUpgradeId[];
+  /**
+   * true cuando el EFECTO de esta mejora se entrega vía rewarded ad
+   * (anuncio recompensado) y no de forma automática. Si el entorno no
+   * puede mostrar anuncios, la mejora no debe ofrecerse: el jugador
+   * estaría pagando por algo que no puede usar. Deja explícito que la
+   * DISPONIBILIDAD de anuncios no es asunto del dominio — acá solo se
+   * declara la necesidad; quién decide si el entorno puede mostrarlos es
+   * la infraestructura/presentación.
+   */
+  readonly requiresRewardedAd?: boolean;
 }
 
 // Restricción de diseño explícita: el costo de "Triplicar" debe ser
@@ -68,20 +78,23 @@ export const SESSION_UPGRADE_CATALOG: readonly SessionUpgradeDefinition[] = [
     name: 'UPGRADE_NAME_DOUBLE_REWARD',
     description: 'UPGRADE_DESC_DOUBLE_REWARD',
     cost: DOUBLE_REWARD_COST,
-    conflictsWith: ['triple_reward']
+    conflictsWith: ['triple_reward'],
+    requiresRewardedAd: true
   },
   {
     id: 'triple_reward',
     name: 'UPGRADE_NAME_TRIPLE_REWARD',
     description: 'UPGRADE_DESC_TRIPLE_REWARD',
     cost: DOUBLE_REWARD_COST * 2,
-    conflictsWith: ['double_reward']
+    conflictsWith: ['double_reward'],
+    requiresRewardedAd: true
   },
   {
     id: 'revive',
     name: 'UPGRADE_NAME_REVIVE',
     description: 'UPGRADE_DESC_REVIVE',
-    cost: 1250
+    cost: 1250,
+    requiresRewardedAd: true
   },
   {
     id: 'secret_swap_final',

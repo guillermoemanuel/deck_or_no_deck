@@ -19,6 +19,18 @@ export const CASE_VALUES: readonly number[] = [
  */
 export const TOP_CASE_VALUE: number = Math.max(...CASE_VALUES);
 
+/**
+ * Valor (inclusive) a partir del cual una carta se considera "alta".
+ * Umbral extraído de CardView.reveal() (`value >= 1000`): era un número
+ * suelto en la vista, pero es una regla de diseño del mazo — 1000 es
+ * exactamente un valor real de CASE_VALUES, no un corte inventado.
+ */
+export const HIGH_CASE_VALUE_MIN = 1000;
+
+export function isHighCaseValue(value: number): boolean {
+  return value >= HIGH_CASE_VALUE_MIN;
+}
+
 if (CASE_VALUES.length !== 13) {
   throw new Error('CASE_VALUES must contain exactly 13 values (12 board + 1 secret)');
 }

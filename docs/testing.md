@@ -1,6 +1,6 @@
 # Testing
 
-> Estado al 2026-09-30 (Fase 4): **35 suites · 411 tests · todos verdes**.
+> Estado al 2026-09-30 (Fase 4, parte 2): **37 suites · 425 tests · todos verdes**.
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
@@ -38,7 +38,7 @@ npm run lint                  # eslint src
 
 | Capa | Specs | Cobertura real | Estado |
 |---|---|---|---|
-| `domain/` | 14 | alta (umbral 88/80/90/88) | 🟢 |
+| `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
 | `application/` | 11 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 4 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` |
 | `shared/` | 5 | buena | 🟢 |
@@ -89,9 +89,13 @@ testearla ahí**. Sigue vivo en escenas sin ningún test:
 
 | Lógica oculta en presentación | Archivo | Dónde debería vivir |
 |---|---|---|
-| Filtro de compras por disponibilidad de ads | `ShopScene.renderUpgradesTab()` | use-case |
-| Umbrales de color/valor de carta | `CardView.reveal()` (`value >= 1000`) | value-object |
-| Umbrales de energía (>50 / >20, pulso crítico) | `EnergyBarView` | `EnergyLevel` o constante de dominio |
+| Filtro de compras por disponibilidad de ads **(parcialmente resuelto)** | `ShopScene.renderUpgradesTab()` | use-case |
+
+Sobre esa fila: la lista de *qué* mejoras dependen de ads ya vive en dominio
+(`SessionUpgradeCatalog.requiresRewardedAd`, con spec que fija el set
+double/triple/revive), pero la decisión de *ocultarlas cuando no hay anuncios* —la
+disponibilidad— sigue en `ShopScene.renderUpgradesTab()`; moverla a un use-case queda
+pendiente.
 
 **Ya resueltos en Fase 4 (2026-09-30)** — mismo mecanismo (regla extraída a `domain` +
 test ahí); quedan acá solo como contexto histórico:
@@ -101,6 +105,8 @@ test ahí); quedan acá solo como contexto histórico:
 | Estado de mejora (poseída/bloqueada/nivel) | `ShopScene.upgradeStatusFor()` (~70 L) | `SessionUpgrades.getState()` (+ `isOwned`/`canPurchase`); la vista quedó en ~32 L, solo presentación |
 | Regla de recompensa diaria (+1 racha) | `DailyChallengeBanner` | `previewDailyCompletion()`; `completeDaily` delega en ella — test de propiedad: preview ≡ lo que paga |
 | Penalidad de abandono (−5000) en 3 sitios | literal en `OpenCardUseCase` + constante en `GameAbandonGuard` (importada por `UIScene`/`main.ts`) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (spec propio) |
+| Umbral de carta alta (≥1000) — *Fase 4 parte 2, 2026-09-30* | `CardView.reveal()` (`value >= 1000`) | `HIGH_CASE_VALUE_MIN` + `isHighCaseValue()` en `domain/value-objects/CaseValues.ts`, spec en `CaseValues.spec.ts` (frontera 999/1000) |
+| Zonas de energía (>50 / >20, pulso crítico) — *Fase 4 parte 2, 2026-09-30* | `EnergyBarView` (`colorForPercentage`) | `EnergyZone` + `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts`, fronteras 50/20 con spec en `EnergyLevel.spec.ts`; la vista solo traduce zona → color |
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 

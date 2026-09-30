@@ -4,13 +4,14 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-09-30 (refrescado en Fase 4) · 144 archivos TS · 20.318 líneas · 109 fuente + 35 specs
-> (LOC = `wc -l`, **incluyen specs**; +`GamePenalties.ts` y +`GamePenalties.spec.ts` en la Fase 4).
+> Fecha del censo: 2026-09-30 (refrescado en Fase 4, parte 2) · 146 archivos TS · 20.486 líneas · 109 fuente + 37 specs
+> (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
+> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 3.925 líneas · 14 specs · la capa más protegida 🟢
+## `src/domain/` — 4.089 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -27,13 +28,13 @@
 | `DeckSetups.ts` | 217 | ❌ | **10 mazos** con texturas/temas. 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
 | `EnergyDeltaTable.ts` | 64 | ✅ (vía `DefaultEnergyDrainRule.spec`) | Tabla de drenaje + chequeo de integridad al cargar. **Invariante.** |
 | `DailyChallenge.ts` | 119 | ✅ 169 L | Reglas del desafío diario. `previewDailyCompletion()` es la vista previa de la recompensa y `completeDaily` delega en ella (test de propiedad). |
-| `EnergyLevel.ts` | 75 | ✅ | VO con clamp `[0, ceiling]`. |
+| `EnergyLevel.ts` | 104 | ✅ 183 L | VO con clamp `[0, ceiling]` + **zonas de la barra**: `EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` (20), `ENERGY_LOW_MAX_PERCENT` (50), `getEnergyZone()` — la vista solo traduce zona → color. |
 | `GamePenalties.ts` | 14 | ✅ 20 L | **Fuente única de la penalidad** (`LOSS_PENALTY_AMOUNT` = −5000); la consumen `OpenCardUseCase`, `UIScene` y `main.ts`. |
 | `PeriodicBonus.ts` | 65 | ✅ | Bono 12 h; rango `[500…5000]` (el 0 salió en 1.3.1). |
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
 | `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |
-| `CaseValues.ts` | 23 | — | Valores posibles de carta. |
-| `SessionUpgradeCatalog.ts` | 96 | ❌ | **Costos y conflictos de la tienda.** 🟡 fuente única de precios. |
+| `CaseValues.ts` | 35 | ✅ 23 L | Valores posibles de carta + umbral de carta alta (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`) — consumido por `CardView`. |
+| `SessionUpgradeCatalog.ts` | 109 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la disponibilidad la decide `ShopScene`). 🟡 fuente única de precios. |
 
 ### services/ · state/ · events/ · ports/
 | Archivo | LOC | Spec | Nota |
@@ -85,14 +86,14 @@
 
 ---
 
-## `src/presentation/` — 10.696 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 10.700 líneas · 1 spec · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
 | `scenes/GameScene.ts` | 607 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. |
-| `scenes/ShopScene.ts` | 770 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; filtra catálogo por disponibilidad de ads; compra de mazos sin use-case. |
+| `scenes/ShopScene.ts` | 764 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; filtra el catálogo por `requiresRewardedAd` (la lista vive en dominio, la decisión de disponibilidad acá); compra de mazos sin use-case. |
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
@@ -100,9 +101,11 @@
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
-`BankerOfferPanel` 305 · `CardView` 293 (umbrales de color/valor en la vista ⚠) ·
+`BankerOfferPanel` 305 · `CardView` 294 (color/valor derivan de `isHighCaseValue` del
+dominio) ·
 `PeriodicBonusModal` 272 · `HudIconButton` 263 · `SwapEventModal` 241 ·
-`EnergyBarView` 239 (umbrales >50/>20 y pulso crítico ⚠) · `SoundFullscreenControls` 212 ·
+`EnergyBarView` 248 (relleno/label/pulso derivan de `EnergyLevel.getEnergyZone`; la vista
+solo traduce zona → color) · `SoundFullscreenControls` 212 ·
 `OnboardingCoach` 200 · `ConfirmDialog` 165 · `DailyChallengeBanner` 121 (usa
 `previewDailyCompletion` del dominio) ·
 `PayoutBoardView` 129 · `ParticleManager` 97 · `LocalizedText` 78 (auto-suscripción).

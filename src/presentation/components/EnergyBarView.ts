@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from './LocalizedText';
+import { getEnergyZone, EnergyZone } from '../../domain/value-objects/EnergyLevel';
 
 /**
  * EnergyBarView: Barra de energía HUD.
@@ -117,12 +118,17 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
 
   setPercentage(percentage: number): void {
     const clamped = Phaser.Math.Clamp(percentage, 0, 100);
+    // La zona (healthy/low/critical) la decide el dominio: los umbrales
+    // viven en ENERGY_CRITICAL_MAX_PERCENT / ENERGY_LOW_MAX_PERCENT, en
+    // EnergyLevel. Acá solo se traduce zona → color/pulso, sin repetir
+    // números mágicos que puedan desincronizarse de esos constantes.
+    const zone = getEnergyZone(clamped);
     const targetWidth = (clamped / 100) * this.effectiveMaxWidth;
-    const color = this.colorForPercentage(clamped);
+    const color = this.colorForZone(zone);
 
     this.fill.setTint(color);
     this.labelText.setParams({ percent: Math.round(clamped) });
-    this.labelText.setColor(clamped <= 20 ? '#ff3366' : '#00e5ff');
+    this.labelText.setColor(zone === 'critical' ? '#ff3366' : '#00e5ff');
 
     this.scene.tweens.add({
       targets: this.fill,
@@ -137,7 +143,7 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     // ya no lo necesita). Se reubica sobre `fill.alpha`, que queda libre
     // de conflicto porque la respiración usa `scaleY` y el ancho usa
     // `scaleX` (ver comentario del constructor).
-    if (clamped <= 20 && clamped > 0) {
+    if (zone === 'critical' && clamped > 0) {
       if (!this.criticalTween) {
         this.criticalTween = this.scene.tweens.add({
           targets: this.fill,
@@ -199,9 +205,12 @@ export class EnergyBarView extends Phaser.GameObjects.Container {
     });
   }
 
-  private colorForPercentage(percentage: number): number {
-    if (percentage > 50) return 0x2ecc71; // Verde esmeralda
-    if (percentage > 20) return 0xf1c40f; // Ámbar dorado
+  // Renombrado de colorForPercentage → colorForZone: los umbrales ya no
+  // viven acá sino en el dominio (getEnergyZone); este método solo
+  // traduce la zona resultante al mismo color de relleno de siempre.
+  private colorForZone(zone: EnergyZone): number {
+    if (zone === 'healthy') return 0x2ecc71; // Verde esmeralda
+    if (zone === 'low') return 0xf1c40f; // Ámbar dorado
     return 0xe74c3c; // Rojo carmesí crítico
   }
 

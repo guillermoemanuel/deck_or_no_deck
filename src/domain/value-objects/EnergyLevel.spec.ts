@@ -1,4 +1,4 @@
-import { EnergyLevel } from './EnergyLevel';
+import { EnergyLevel, getEnergyZone } from './EnergyLevel';
 
 describe('EnergyLevel', () => {
   describe('full', () => {
@@ -147,5 +147,37 @@ describe('EnergyLevel', () => {
     it('defaults to 100', () => {
       expect(EnergyLevel.full().getCeiling()).toBe(100);
     });
+  });
+
+  // Zonas de la barra de energia (umbral de negocio, no color): la vista
+  // traduce cada zona a un color, pero los cortes viven en el dominio.
+  describe('getEnergyZone', () => {
+    it('treats the exact upper boundary 100 and 51 as healthy', () => {
+      expect(getEnergyZone(100)).toBe('healthy');
+      expect(getEnergyZone(51)).toBe('healthy');
+    });
+
+    it('treats 50 and 21 as low', () => {
+      expect(getEnergyZone(50)).toBe('low');
+      expect(getEnergyZone(21)).toBe('low');
+    });
+
+    it('treats the critical boundary 20 and 0 as critical', () => {
+      expect(getEnergyZone(20)).toBe('critical');
+      expect(getEnergyZone(0)).toBe('critical');
+    });
+
+    it('keeps fractional values consistent with the same thresholds', () => {
+      expect(getEnergyZone(20.5)).toBe('low');
+    });
+
+    // Sin clamping: la vista ya acota a 0-100 antes de consultar, pero la
+    // funcion no rompe con valores fuera de rango — aplica los mismos limites.
+    it('applies the same thresholds to out-of-range values', () => {
+      expect(getEnergyZone(150)).toBe('healthy');
+      expect(getEnergyZone(-5)).toBe('critical');
+    });
+    // Nota: la regla "50 es low y 20 es critical" ya queda documentada por
+    // los tests de frontera de arriba (líneas 160-168) — no se duplica acá.
   });
 });

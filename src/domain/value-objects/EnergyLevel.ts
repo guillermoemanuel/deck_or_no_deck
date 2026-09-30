@@ -73,3 +73,32 @@ export class EnergyLevel {
     return Math.min(ceiling, Math.max(EnergyLevel.MIN, value));
   }
 }
+
+/**
+ * Umbrales de diseño de la barra de energía:
+ *   'critical' -> 0..20 inclusive · 'low' -> 21..50 · 'healthy' -> 51..100
+ *
+ * Hoy no hay lógica de dominio que ramifique por esta zona: su único
+ * consumidor es la vista de la barra (`EnergyBarView`), que la traduce a
+ * color, label y pulso crítico. Vive en `domain/` para que los umbrales
+ * estén testeados y definidos en un solo lugar (EnergyLevel.spec.ts).
+ * Si aparece otro consumidor —audio de alerta, HUD, aviso en el
+ * controlador—, que lea estos mismos umbrales en vez de copiar los números.
+ */
+export type EnergyZone = 'healthy' | 'low' | 'critical';
+
+/** Porcentaje (inclusive) a partir del cual la energía se considera crítica. */
+export const ENERGY_CRITICAL_MAX_PERCENT = 20;
+/** Porcentaje (inclusive) hasta el cual la energía está en zona baja. */
+export const ENERGY_LOW_MAX_PERCENT = 50;
+
+/**
+ * NO hace clamping: la vista acota a 0-100 con Phaser.Math.Clamp antes de
+ * consultar, así que un valor fuera de rango simplemente se evalúa con los
+ * mismos límites (150 -> 'healthy', -5 -> 'critical').
+ */
+export function getEnergyZone(percentage: number): EnergyZone {
+  if (percentage <= ENERGY_CRITICAL_MAX_PERCENT) return 'critical';
+  if (percentage <= ENERGY_LOW_MAX_PERCENT) return 'low';
+  return 'healthy';
+}

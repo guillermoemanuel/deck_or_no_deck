@@ -21,7 +21,7 @@ npm run dev                                   # vite dev server
 npm run build                                 # tsc --noEmit && vite build
 npx jest <ruta>                               # test selectivo — usar SIEMPRE durante el cambio
 npm test                                      # suite completa (~30 s)
-npm run typecheck                             # tsc --noEmit (incluye los 35 *.spec.ts)
+npm run typecheck                             # tsc --noEmit (incluye los 37 *.spec.ts)
 npm run lint                                  # eslint src (config mínima: eslint.config.mjs)
 npm run test:coverage
 ```

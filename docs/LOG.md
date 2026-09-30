@@ -7,6 +7,66 @@
 
 ---
 
+## 2026-09-30 · Fase 4 (parte 2) — Umbrales de presentación al dominio
+
+**Tarea:** extraer a `domain` los 3 umbrales que vivían hardcodeados en presentation
+(color/valor de carta, zonas de la barra de energía, lista de mejoras con rewarded ad).
+
+**Archivos tocados (9 en código + 5 docs de cierre):**
+
+- `src/` (9), por capa:
+  - **domain** (6): `value-objects/EnergyLevel.ts` + `EnergyLevel.spec.ts`
+    (`EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` = 20, `ENERGY_LOW_MAX_PERCENT` = 50,
+    `getEnergyZone()` sin clamp — la vista acota a 0-100 antes de consultar),
+    `value-objects/CaseValues.ts` + **`CaseValues.spec.ts` (nuevo)**
+    (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`),
+    `value-objects/SessionUpgradeCatalog.ts` + **`SessionUpgradeCatalog.spec.ts` (nuevo)**
+    (campo `requiresRewardedAd?: boolean`).
+  - **presentation** (3): `components/EnergyBarView.ts` (relleno/label/pulso derivan de la
+    zona; `colorForPercentage` → `colorForZone`), `components/CardView.ts`
+    (`value >= 1000` → `isHighCaseValue(value)`), `scenes/ShopScene.ts` (la constante
+    local `REWARDED_AD_UPGRADE_IDS` **fue borrada**; el filtro es
+    `SESSION_UPGRADE_CATALOG.filter(u => rewardedAdsUsable || !u.requiresRewardedAd)`).
+- `docs/` + raíz (cierre de los 2 bloqueantes del reviewer): `docs/LOG.md` (esta entrada),
+  `docs/testing.md` (conteos; en §5 las filas de carta y energía pasan a "ya resueltos" y
+  la de ads queda marcada *parcialmente resuelta*), `docs/MAP.md` (censo refrescado),
+  `docs/ARCHITECTURE.md` (conteo + 3 reglas nuevas en la tabla de invariantes),
+  `AGENTS.md` (35 → 37 `*.spec.ts`).
+
+**Qué se ganó:**
+
+- Los 3 umbrales pasan a tener spec en dominio: **frontera de energía 50/20**
+  (`getEnergyZone`: 51 healthy, 50 low, 20 critical, más valores fuera de rango),
+  **frontera de carta 1000** (`isHighCaseValue`: 999 false / 1000 true + el filtro real
+  `[1000, 5000, 10000, 25000]`), y el **set de ads que depende de rewarded**
+  (`requiresRewardedAd` exactamente en `double_reward`, `triple_reward`, `revive`).
+- Desaparece la última lista hardcodeada de IDs que solo existía en una escena: la lista
+  vive en el catálogo de dominio y la vista solo filtra con ella.
+- Specs: **35 → 37 archivos**; línea base de tests **411 → 425**.
+
+**Verificación:** gates en verde delegados en los agentes `qa` y `reviewer` de
+`.opencode/` — **37 suites / 425 tests**, typecheck 0 errores, lint 0, cobertura por capa
+OK. El reviewer marcó 2 hallazgos bloqueantes —esta entrada de LOG y la deriva documental
+(conteos viejos + 2 filas de `testing.md` que seguían listando umbrales ya extraídos)— y
+**ambos se cierran aquí**: entrada nueva en `LOG.md` y `testing.md`/`MAP.md`/
+`ARCHITECTURE.md`/`AGENTS.md` refrescados.
+
+**Pendientes:**
+
+- Filtro de ads en `ShopScene.renderUpgradesTab()` queda **parcialmente resuelto**: la
+  lista de qué mejoras dependen de ads vive en el catálogo (`requiresRewardedAd`, con
+  spec), pero la decisión de *disponibilidad* (ocultarlas cuando el entorno no puede
+  mostrar anuncios) sigue en la escena; moverla a un use-case queda abierto.
+- `README.md` sigue sin corregir (deriva conocida, ver `PLAYBOOK.md` §4).
+- `npm audit`: 3 vulnerabilidades en devDependencies (`PLAYBOOK.md` §5).
+
+**Nota de proceso:** el censo de `MAP.md` se refrescó midiendo cada archivo con `wc -l`.
+Lo planificado para la ronda decía `EnergyLevel.ts` 98 LOC y `CaseValues.ts` 36; medido
+sobre el código dan **104 y 35** — prevalece la medida y así quedó escrito. Totales
+actuales: 146 archivos TS · 20.486 líneas.
+
+---
+
 ## 2026-09-30 · Fase 4 — Testing y extracción de lógica a dominio
 
 **Tarea:** bajar la lógica de negocio atrapada en presentation/application al dominio y

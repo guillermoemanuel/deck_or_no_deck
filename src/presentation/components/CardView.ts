@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CardDTO } from '../../application/dto/GameStateDTO';
 import { ParticleManager } from './ParticleManager';
 import { IAudioService } from '../../domain/ports/IAudioService';
+import { isHighCaseValue } from '../../domain/value-objects/CaseValues';
 /**
  * CardView: Componente visual tonto en Phaser 3 para renderizar una carta del juego.
  *
@@ -240,7 +241,7 @@ export class CardView extends Phaser.GameObjects.Container {
         const formatted = `$${value.toLocaleString()}`;
         this.valueText.setText(formatted).setVisible(true);
 
-        const isHigh = value >= 1000;
+        const isHigh = isHighCaseValue(value);
         this.valueText.setColor(isHigh ? '#ff4d6d' : '#38ef7d');
 
         this.scene.tweens.add({
