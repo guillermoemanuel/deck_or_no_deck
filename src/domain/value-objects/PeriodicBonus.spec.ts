@@ -68,7 +68,10 @@ describe('PeriodicBonus', () => {
     });
 
     it('matches the agreed value range', () => {
-      expect([...PERIODIC_BONUS_VALUES].sort((a, b) => a - b)).toEqual([0, 1000, 2000, 3000, 4000, 5000]);
+      // BUGFIX (specs rojos desde DOND_BETA.1.3.1): el 0 salió del rango a
+      // propósito — ninguna carta del bono puede quedar vacía. El rango
+      // acordado arranca en 500.
+      expect([...PERIODIC_BONUS_VALUES].sort((a, b) => a - b)).toEqual([500, 1000, 2000, 3000, 4000, 5000]);
     });
   });
 });

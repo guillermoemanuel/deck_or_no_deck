@@ -92,22 +92,38 @@ class LanguageManager {
     }
 
     if (langCode === this.currentLanguage) {
-      return true; // no-op: ya está en ese idioma, no hace falta emitir evento
+      // BUGFIX (applyDetectedLocale pisaba una elección manual): la
+      // elección del jugador se persiste SIEMPRE, incluso cuando coincide
+      // con el idioma activo. Caso real: el default es 'en', el jugador
+      // elige "English" a propósito y esto no dejaba rastro en
+      // localStorage; en la próxima carga applyDetectedLocale() veía
+      // "nadie eligió nada" y aplicaba el locale del SDK por encima de la
+      // decisión del jugador. No se emite onLanguageChanged porque el
+      // texto en pantalla no cambió.
+      this.persistLanguage(langCode);
+      return true;
     }
 
     this.currentLanguage = langCode;
-
-    try {
-      window.localStorage.setItem(STORAGE_KEY, langCode);
-    } catch (error) {
-      console.warn('[LanguageManager] No se pudo persistir el idioma elegido.', error);
-    }
+    this.persistLanguage(langCode);
 
     // Notifica a quien esté escuchando (ver onLanguageChanged) — así una
     // escena de Phaser ya construida puede refrescar sus textos en
     // caliente sin tener que recrearse.
     this.eventBus.emit({ language: this.currentLanguage });
     return true;
+  }
+
+  /**
+   * Escribe la clave de storage tolerando fallos (storage bloqueado por
+   * iframe/cookies de terceros = el idioma sigue vivo solo en memoria).
+   */
+  private persistLanguage(langCode: SupportedLanguage): void {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, langCode);
+    } catch (error) {
+      console.warn('[LanguageManager] No se pudo persistir el idioma elegido.', error);
+    }
   }
 
   /**

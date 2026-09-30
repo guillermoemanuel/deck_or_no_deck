@@ -4,6 +4,7 @@ import { Banker } from '../../domain/services/Banker';
 import { OfferCalculator } from '../../domain/services/OfferCalculator';
 import { Card } from '../../domain/entities/Card';
 import { GameEvent } from '../../domain/events/GameEvents';
+import { findSessionUpgradeDefinition, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { ProgressionManager } from '../../infrastructure/persistence/ProgressionManager';
 import { FakeProgressionRepository } from '../../infrastructure/persistence/testing/FakeProgressionRepository';
@@ -49,6 +50,22 @@ function buildContext(seedCoins = 100000) {
   return { session, repository, progressionManager, eventBus, useCase };
 }
 
+/**
+ * BUGFIX (specs rojos tras el rebalanceo de precios de DOND_BETA.1.3.1):
+ * los costos se leen del catálogo real en vez de hardcodearlos en cada
+ * aserción. Este spec verifica que el use-case COBRE el costo publicado
+ * (y que lo cobre una sola vez), no cuánto cuesta cada mejora — eso lo
+ * decide SessionUpgradeCatalog. Así, un ajuste de precios deja de dejar
+ * esta suite en rojo por desincronización entre catálogo y spec.
+ */
+function costOf(id: SessionUpgradeId): number {
+  const definition = findSessionUpgradeDefinition(id);
+  if (!definition) {
+    throw new Error(`Upgrade inexistente en el catálogo: ${id}`);
+  }
+  return definition.cost;
+}
+
 describe('PurchaseSessionUpgradeUseCase', () => {
   it('returns unknown_upgrade for an invalid id', () => {
     const { useCase } = buildContext();
@@ -75,7 +92,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
 
       expect(result).toEqual({ success: true });
       expect(session.getSessionUpgrades().getEnergyTankLevel()).toBe(1);
-      expect(repository.getCoins()).toBe(100000 - 350);
+      expect(repository.getCoins()).toBe(100000 - costOf('energy_tank_1'));
       expect(events).toContainEqual(
         expect.objectContaining({ type: 'EnergyTankUpgraded', capacityMultiplier: 1.25 })
       );
@@ -193,7 +210,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
 
       expect(result).toEqual({ success: true });
       expect(session.getSessionUpgrades().hasNegativeCardShield()).toBe(true);
-      expect(repository.getCoins()).toBe(100000 - 400);
+      expect(repository.getCoins()).toBe(100000 - costOf('negative_card_shield'));
     });
 
     it('rejects buying it twice', () => {
@@ -214,7 +231,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
 
       expect(result).toEqual({ success: true });
       expect(session.getSessionUpgrades().hasNegotiator()).toBe(true);
-      expect(repository.getCoins()).toBe(100000 - 550);
+      expect(repository.getCoins()).toBe(100000 - costOf('negotiator'));
     });
 
     it('coexists with negative_card_shield in the same session', () => {

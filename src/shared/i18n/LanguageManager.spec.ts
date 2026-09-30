@@ -47,7 +47,6 @@ beforeEach(() => {
 
 /** Importa una instancia NUEVA del singleton, tal como quedaría tras (re)cargar la app. */
 function freshLanguageManager(): typeof import('./LanguageManager').default {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   return require('./LanguageManager').default;
 }
 
