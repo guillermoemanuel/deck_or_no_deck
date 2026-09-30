@@ -7,6 +7,29 @@
 
 ---
 
+## 2026-09-30 · Fase 2 — Reescritura de `AGENTS.md`
+
+**Tarea:** convertir `AGENTS.md` de descripción arquitectónica a **contrato operativo**.
+
+**Archivos tocados:** `AGENTS.md` (reescrito, 104 líneas) · `docs/LOG.md` (esta entrada).
+
+**Qué cambió respecto de la versión anterior:**
+- Corregidas las derivas: `npx vitest` → **Jest**; `npm run lint` ahora **existe** (Fase 0);
+  eliminadas las referencias a entidades inexistentes (`Money`, `EnergyBar` en domain).
+- La descripción larga de capas/patrones/flujos **ya no vive acá**: apunta a
+  `docs/ARCHITECTURE.md` (evita duplicar y desincronizar dos descripciones).
+- Secciones nuevas y accionables: orden de lectura previa (0), tabla de archivos de alto
+  riesgo (3), invariantes numéricos (4), contrato de eventos (5), gates de terminado (7).
+- Nuevo criterio de cierre: entrada en `docs/LOG.md` + ADR si hubo decisión + commit atómico.
+
+**Verificación:** `npm run lint` ✅ · `npm run typecheck` ✅ (0 errores).
+Docs y config: sin cambios en `src/`, suite heredada verde de `fa036a3`.
+
+**Pendiente:** Fase 3 — agentes especializados en `.opencode/agent/` + comandos
+`/plan`, `/build`, `/review`.
+
+---
+
 ## 2026-09-30 · Fase 1 — Memoria persistente del proyecto
 
 **Tarea:** volcar a documentos todo lo producido por la ingeniería inversa de la sesión.
