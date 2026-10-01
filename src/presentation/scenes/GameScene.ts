@@ -337,7 +337,10 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // esta partida.
     const reviveWithAdUseCase = new ReviveWithAdUseCase(session, services.crazyGamesService, eventBus, progressionForSession);
     const swapFinalSecretCardUseCase = new SwapFinalSecretCardUseCase(session, progressionForSession, eventBus);
-    const purchaseSessionUpgradeUseCase = new PurchaseSessionUpgradeUseCase(session, progressionForSession, eventBus);
+    // services.crazyGamesService: la compra consulta el puerto de ads —
+    // si la mejora depende de un rewarded y hoy no hay, se rechaza sin
+    // cobrar (ads_unavailable) en vez de vender algo que no se puede usar.
+    const purchaseSessionUpgradeUseCase = new PurchaseSessionUpgradeUseCase(session, progressionForSession, eventBus, services.crazyGamesService);
 
     // Suscripción INDEPENDIENTE de GameSceneController.handleEvent(): el
     // festejo de "carta de mayor valor revelada" es puramente cosmético y

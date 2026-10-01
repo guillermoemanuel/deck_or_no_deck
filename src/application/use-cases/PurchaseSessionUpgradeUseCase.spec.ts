@@ -9,6 +9,7 @@ import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { ProgressionManager } from '../../infrastructure/persistence/ProgressionManager';
 import { FakeProgressionRepository } from '../../infrastructure/persistence/testing/FakeProgressionRepository';
 import { DeterministicRandomProvider } from '../../infrastructure/services/testing/DeterministicRandomProvider';
+import { FakeCrazyGamesService } from '../../infrastructure/services/testing/FakeCrazyGamesService';
 import { collectEvents } from './testing/collectEvents';
 
 const STANDARD_VALUES = [1, 5, 10, 25, 50, 100, 250, 500, 750, 1000, 5000, 10000, 25000];
@@ -40,14 +41,17 @@ function buildSessionWithOneCardLeft(): GameSession {
   return session;
 }
 
-function buildContext(seedCoins = 100000) {
+/** `rewardedAdsAvailable = true` por defecto: mismo comportamiento que el fake hasta que el use-case creció con el puerto de ads. */
+function buildContext(seedCoins = 100000, rewardedAdsAvailable = true) {
   const session = buildSession();
   const repository = new FakeProgressionRepository();
   repository.seedCoins(seedCoins);
   const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
   const eventBus = new SimpleEventEmitter<GameEvent>();
-  const useCase = new PurchaseSessionUpgradeUseCase(session, progressionManager, eventBus);
-  return { session, repository, progressionManager, eventBus, useCase };
+  const crazyGamesService = new FakeCrazyGamesService();
+  crazyGamesService.setRewardedAvailable(rewardedAdsAvailable);
+  const useCase = new PurchaseSessionUpgradeUseCase(session, progressionManager, eventBus, crazyGamesService);
+  return { session, repository, progressionManager, eventBus, crazyGamesService, useCase };
 }
 
 /**
@@ -193,7 +197,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
       const eventBus = new SimpleEventEmitter<GameEvent>();
       const events = collectEvents(eventBus);
-      const useCase = new PurchaseSessionUpgradeUseCase(session, progressionManager, eventBus);
+      const useCase = new PurchaseSessionUpgradeUseCase(session, progressionManager, eventBus, new FakeCrazyGamesService());
 
       const result = useCase.execute('secret_swap_final');
 
@@ -301,6 +305,86 @@ describe('PurchaseSessionUpgradeUseCase', () => {
 
       expect(useCase.execute('negotiator')).toEqual({ success: true });
       expect(session.getSessionUpgrades().hasNegotiator()).toBe(true);
+    });
+  });
+
+  describe('requiresRewardedAd gate (ads_unavailable)', () => {
+    it('rejects double_reward when rewarded ads are NOT available, without charging nor granting', () => {
+      const { session, repository, useCase } = buildContext(100000, false);
+
+      const result = useCase.execute('double_reward');
+
+      expect(result).toEqual({ success: false, reason: 'ads_unavailable' });
+      expect(repository.getCoins()).toBe(100000); // no se cobro nada
+      expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(false);
+    });
+
+    it('still charges negotiator with ads unavailable (el filtro es por requiresRewardedAd del catálogo, no por lo que la tienda muestra)', () => {
+      const { session, repository, useCase } = buildContext(100000, false);
+
+      const result = useCase.execute('negotiator');
+
+      expect(result).toEqual({ success: true });
+      expect(session.getSessionUpgrades().isOwned('negotiator')).toBe(true);
+      expect(repository.getCoins()).toBe(100000 - costOf('negotiator'));
+    });
+
+    it('conflicting_upgrade still wins over ads_unavailable (la precedencia de los chequeos existentes no cambia)', () => {
+      const { repository, crazyGamesService, useCase } = buildContext();
+      useCase.execute('double_reward');
+      const coinsAfterDouble = repository.getCoins();
+      // Los ads se cortan DESPUÉS de que la fila era visible (cooldown,
+      // adblock, SDK ausente): el chequeo de conflicto va primero igual.
+      crazyGamesService.setRewardedAvailable(false);
+
+      const result = useCase.execute('triple_reward');
+
+      expect(result).toEqual({ success: false, reason: 'conflicting_upgrade', conflictsWith: 'double_reward' });
+      expect(repository.getCoins()).toBe(coinsAfterDouble);
+    });
+
+    // Nota: el test anterior que afirmaba not_applicable > ads_unavailable con
+    // energy_tank_2 fue ELIMINADO por redundante — energy_tank_2 no tiene
+    // requiresRewardedAd en el catálogo, así que el gate de ads jamás podría
+    // devolver ads_unavailable para ese id y el test pasaría aunque la
+    // precedencia estuviera mal ubicada. La precedencia real queda cubierta por
+    // el de revive (abajo), cuyo id SÍ requiere ads.
+
+    it('not_applicable también gana para una mejora QUE requiere ads (revivir repetido con los ads cortados)', () => {
+      const { repository, crazyGamesService, useCase } = buildContext();
+      useCase.execute('revive');
+      const coinsAfterRevive = repository.getCoins();
+      crazyGamesService.setRewardedAvailable(false);
+
+      const result = useCase.execute('revive');
+
+      expect(result).toEqual({ success: false, reason: 'not_applicable' });
+      expect(repository.getCoins()).toBe(coinsAfterRevive);
+    });
+
+    it('ads_unavailable wins over insufficient_coins (poco saldo y ads cortados)', () => {
+      // Saldo deliberadamente menor al costo: si alguien invirtiera el orden
+      // (spendCoins antes del gate de ads), el jugador con poco saldo vería
+      // 'insufficient_coins' en vez del motivo real — la fila quedó visible
+      // pero hoy no se puede mostrar el anuncio.
+      const seedCoins = costOf('double_reward') - 1;
+      const { session, repository, useCase } = buildContext(seedCoins, false);
+
+      const result = useCase.execute('double_reward');
+
+      expect(result).toEqual({ success: false, reason: 'ads_unavailable' });
+      expect(repository.getCoins()).toBe(seedCoins); // no se cobro nada
+      expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(false);
+    });
+
+    it('with ads available double_reward is purchased normally (paridad con el comportamiento actual)', () => {
+      const { session, repository, useCase } = buildContext();
+
+      const result = useCase.execute('double_reward');
+
+      expect(result).toEqual({ success: true });
+      expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(true);
+      expect(repository.getCoins()).toBe(100000 - costOf('double_reward'));
     });
   });
 });

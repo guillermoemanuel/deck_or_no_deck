@@ -505,7 +505,18 @@ export class ShopScene extends Phaser.Scene {
       // esta amerita un mensaje explícito — sin él, un click sobre un
       // botón que sigue diciendo "Comprar $X" y no pasa nada es confuso.
       if (result.reason === 'conflicting_upgrade') {
-        this.showConflictMessage(upgradeId, result.conflictsWith);
+        const otherName = findSessionUpgradeDefinition(result.conflictsWith)?.name;
+        this.showTemporaryRowMessage(
+          upgradeId,
+          languageManager.getText('SHOP_UPGRADE_CONFLICT', {
+            other: otherName ? languageManager.getText(otherName as TranslationKey) : ''
+          })
+        );
+      } else if (result.reason === 'ads_unavailable') {
+        // Mismo motivo que el conflicto: el use-case garantiza que no
+        // cobra, pero el botón sigue diciendo "Comprar $X" — sin este
+        // mensaje el click parece no haber hecho nada.
+        this.showTemporaryRowMessage(upgradeId, languageManager.getText('SHOP_UPGRADE_ADS_UNAVAILABLE'));
       }
       return;
     }
@@ -519,15 +530,15 @@ export class ShopScene extends Phaser.Scene {
     definition?.conflictsWith?.forEach(id => this.refreshUpgradeRow(id));
   }
 
-  /** Reemplaza brevemente la línea de estado de la fila por un mensaje claro de conflicto, y la repone. */
-  private showConflictMessage(upgradeId: SessionUpgradeId, conflictsWith: SessionUpgradeId): void {
+  /**
+   * Reemplaza brevemente la línea de estado de la fila por `message` (en
+   * rojo) y la repone a los 2200 ms. Compartido por los dos motivos de
+   * fallo que merecen mensaje explícito (conflicto, anuncios no
+   * disponibles); el texto lo arma cada caller.
+   */
+  private showTemporaryRowMessage(upgradeId: SessionUpgradeId, message: string): void {
     const refs = this.upgradeRowRefs.get(upgradeId);
     if (!refs) return;
-
-    const otherName = findSessionUpgradeDefinition(conflictsWith)?.name;
-    const message = languageManager.getText('SHOP_UPGRADE_CONFLICT', {
-      other: otherName ? languageManager.getText(otherName as TranslationKey) : ''
-    });
 
     const originalText = refs.levelOrOwnedText.text;
     const originalColor = refs.levelOrOwnedText.style.color;

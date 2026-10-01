@@ -56,6 +56,16 @@ un literal `5000` en `OpenCardUseCase` más una constante de penalidad duplicada
 `GameSessionFactory.createGameSessionWithSelection` reimplementa línea por línea
 `DeckManager.fromValuesWithSelection` (mismo loop, mismos `card_${idx}`).
 
+### 🔁 Predicado de ads de la tienda evaluado en 2 use-cases
+`ListAvailableUpgradesUseCase` (qué muestra la fila) y
+`PurchaseSessionUpgradeUseCase` (rechazo `ads_unavailable` sin cobrar) evalúan
+`definition.requiresRewardedAd && !isRewardedAdAvailable()`. La **fuente de verdad es
+única** —el flag del catálogo (`SessionUpgradeCatalog.ts`) y el puerto `ICrazyGamesService`—,
+así que hoy la duplicación es solo la línea del predicado: aceptable.
+→ Si la regla crece (p. ej. "sin fill reciente", ventana de tiempo, umbral de calidad),
+extraer un helper de `application/` y que ambos use-cases lo llamen — **no** escribir un
+tercer copy.
+
 ### 🔁 Specs con `buildSession()` propio
 Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 (hay hasta un hack `values[0] === 100000 ? { drainFor: () => 100 } : …` en
@@ -79,6 +89,11 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
    que debe re-skinnear el slot correcto.
 6. **Añadir un mazo nuevo**: `DeckSetups.ts` + texturas en `public/assets/` +
    `DeckCelebrationEffectRegistry` (no compila si falta el efecto) + `PreloadScene`.
+7. **Orden de rechazos en `PurchaseSessionUpgradeUseCase.execute`** — cascada
+   `unknown_upgrade → conflicting_upgrade → not_applicable → ads_unavailable →
+   insufficient_coins → cobrar + applyEffect`. Cada precedencia tiene test
+   (`PurchaseSessionUpgradeUseCase.spec.ts`, 28 tests): agregar un chequeo nuevo **antes**
+   de `spendCoins` y verificá que no pise el motivo que la UI ya traduce.
 
 ---
 
@@ -116,7 +131,8 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
 - `README` §5 marcaba `CryptoRandomProvider` como "pendiente" → **implementado**
   (`main.ts:52`).
 - `README` §13.1 decía "6 mazos" → hay **10** (ids en `DeckSetups.ts`).
-- `README` §14.2 decía "57 claves i18n" → hay **142** (284 líneas de clave ÷ 2 idiomas).
+- `README` §14.2 decía "57 claves i18n" → había **142** (284 líneas de clave ÷ 2 idiomas);
+  con el guard de compra por ads (mismo día) son **143** (286 ÷ 2).
 - `README` daba el evento `UpgradePurchased` por vivo → **nunca se emite**.
 - El árbol de directorios del `README` nombraba `Money`, `EnergyBar`, `Upgrade` → no
   existen (ADR-002).
@@ -147,7 +163,7 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
 - **`public/assets/` pesa 18 MB** con ~104 archivos; al reemplazar texturas usar
   `removeTextureIfExists()` antes (regla de `AGENTS.md`) o Phaser reusa la vieja.
 - **`npm audit` (2026-09-30)**: `npm audit fix` resolvió las 2 high de `brace-expansion`
-  (solo `package-lock.json`; suite 38/429 verde después). **Quedan** `esbuild`/`vite`
+  (solo `package-lock.json`; suite verde después — 38/429 en ese momento). **Quedan** `esbuild`/`vite`
   (moderate + high): su único fix es `vite@8.3.1` = breaking change — decisión explícita
   pendiente del usuario.
 - **Git**: historial de 8 commits con mensajes `DOND_BETA.x.y.z`; `main` local va adelante

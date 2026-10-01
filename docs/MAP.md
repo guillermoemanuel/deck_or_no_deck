@@ -4,16 +4,18 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-09-30 (refrescado tras bajar el filtro de ads de la tienda a un
-> use-case) · 148 archivos TS · 20.593 líneas · 110 fuente + 38 specs
+> Fecha del censo: 2026-09-30 (refrescado tras el **guard de compra por ads**) ·
+> 148 archivos TS · 20.729 líneas · 110 fuente + 38 specs
 > (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
-> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; este cierre:
-> +`ListAvailableUpgradesUseCase.ts`/`.spec`).
+> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; cierre anterior:
+> +`ListAvailableUpgradesUseCase.ts`/`.spec`; este cierre: **sin archivos nuevos** —
+> solo crecieron `PurchaseSessionUpgradeUseCase`/`.spec`, `ShopScene`, `GameScene`,
+> `LanguageData` y `SessionUpgradeCatalog`).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.090 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.091 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -36,7 +38,7 @@
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
 | `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |
 | `CaseValues.ts` | 35 | ✅ 23 L | Valores posibles de carta + umbral de carta alta (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`) — consumido por `CardView`. |
-| `SessionUpgradeCatalog.ts` | 110 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la *disponibilidad* la decide `ListAvailableUpgradesUseCase`). 🟡 fuente única de precios. |
+| `SessionUpgradeCatalog.ts` | 111 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la *disponibilidad* la deciden `ListAvailableUpgradesUseCase` y `PurchaseSessionUpgradeUseCase`). 🟡 fuente única de precios. |
 
 ### services/ · state/ · events/ · ports/
 | Archivo | LOC | Spec | Nota |
@@ -50,18 +52,18 @@
 
 ---
 
-## `src/application/` — 2.348 líneas · 12 specs · casi toda verde 🟢
+## `src/application/` — 2.467 líneas · 12 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `use-cases/PurchaseSessionUpgradeUseCase.ts` | 130 | ✅ 306 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. 🟡 |
+| `use-cases/PurchaseSessionUpgradeUseCase.ts` | 165 | ✅ 390 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. **Guard de ads**: 4.º parámetro `ICrazyGamesService`; rechaza `ads_unavailable` sin `spendCoins` cuando `requiresRewardedAd` y no hay rewarded disponible (después de `conflicting_upgrade`/`not_applicable`). 🟡 |
 | `use-cases/OpenCardUseCase.ts` | 94 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** Penalidad de derrota desde `GamePenalties`. 🟡 |
 | `use-cases/ReviveWithAdUseCase.ts` | 79 | ✅ | Orden: consumir revive → revivir. |
 | `use-cases/MultiplyRewardUseCase.ts` | 59 | ✅ | Flag `isProcessing` sincrónico (carrera de doble click). |
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
 | `use-cases/SwapFinalSecretCardUseCase.ts` | 37 | ✅ | — |
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |
-| `use-cases/ListAvailableUpgradesUseCase.ts` | 29 | ✅ 74 L | **Qué muestra la tienda ahora**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. |
+| `use-cases/ListAvailableUpgradesUseCase.ts` | 29 | ✅ 74 L | **Qué muestra la tienda**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. Su contraparte de compra es `PurchaseSessionUpgradeUseCase` (ver arriba). |
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
@@ -89,14 +91,14 @@
 
 ---
 
-## `src/presentation/` — 10.701 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 10.715 líneas · 1 spec · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
-| `scenes/GameScene.ts` | 607 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. |
-| `scenes/ShopScene.ts` | 760 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); compra de mazos sin use-case. |
+| `scenes/GameScene.ts` | 610 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra. |
+| `scenes/ShopScene.ts` | 771 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. |
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
@@ -134,11 +136,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.232 líneas · 5 specs 🟢
+## `src/shared/` — 1.234 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `i18n/LanguageData.ts` | 445 | ✅ | **142 claves × en/es**, `as const` + `satisfies` → autocomplete de claves. |
+| `i18n/LanguageData.ts` | 447 | ✅ | **143 claves × en/es**, `as const` + `satisfies` → autocomplete de claves. |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |

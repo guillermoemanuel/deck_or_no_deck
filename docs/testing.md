@@ -1,7 +1,7 @@
 # Testing
 
-> Estado al 2026-09-30 (Fase 4, parte 2): **38 suites · 429 tests · todos verdes**
-> (medido: 38 `*.spec.ts` en `src`; 416 declaraciones `it(`/`test(` + 13 de un `it.each`).
+> Estado al 2026-09-30 (guard de compra por ads): **38 suites · 435 tests · todos verdes**
+> (medido: 38 `*.spec.ts` en `src`; 422 declaraciones `it(`/`test(` + 13 de un `it.each`).
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
@@ -102,6 +102,7 @@ test ahí); quedan acá solo como contexto histórico:
 | Umbral de carta alta (≥1000) — *Fase 4 parte 2, 2026-09-30* | `CardView.reveal()` (`value >= 1000`) | `HIGH_CASE_VALUE_MIN` + `isHighCaseValue()` en `domain/value-objects/CaseValues.ts`, spec en `CaseValues.spec.ts` (frontera 999/1000) |
 | Zonas de energía (>50 / >20, pulso crítico) — *Fase 4 parte 2, 2026-09-30* | `EnergyBarView` (`colorForPercentage`) | `EnergyZone` + `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts`, fronteras 50/20 con spec en `EnergyLevel.spec.ts`; la vista solo traduce zona → color |
 | Filtro de ads de la tienda (ocultar Duplicar/Triplicar/Revivir sin rewarded) — *2026-09-30* | `ShopScene.renderUpgradesTab()` (filtraba inline con `isRewardedAdAvailable()` y `requiresRewardedAd`) | `ListAvailableUpgradesUseCase` (aplicación) + `ListAvailableUpgradesUseCase.spec.ts` (100 %); la escena solo llama `getServices(this).listAvailableUpgrades.execute()` |
+| Guard de compra por ads (fila visible con ads caídos) — *2026-09-30* | `PurchaseSessionUpgradeUseCase` cobraba sin consultar el puerto de ads | rechazo `ads_unavailable` **antes** de `spendCoins` (`crazyGamesService` como 4° parámetro, cableado en `GameScene`) + clave i18n `SHOP_UPGRADE_ADS_UNAVAILABLE`; spec de esa clase al **100 %** (28 tests) |
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 
@@ -112,6 +113,11 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 5. Cambiar idioma en el menú → verificar textos de escenas, tutorial y modales.
 6. Salir al menú a mitad de partida → verificar penalidad y saldo.
 7. Bono periódico (forzar `periodicBonusCycleStart` en localStorage).
+8. **Guard de ads en la tienda** (NO corrido): con los anuncios caídos (bloquear
+   `*crazygames-sdk-v3.js*` en DevTools → Network y recargar) comprar una mejora de ads →
+   la fila muestra *"Requiere anuncio recompensado — no hay anuncios ahora."* y **no se
+   descuentan monedas**; el conflicto Duplicar/Triplicar sigue mostrando su mensaje igual
+   que antes.
 
 **Estado — última ejecución 2026-09-30 (smoke manual en `http://localhost:5174`):**
 ítems **5, 6 y 7 verificados** en vivo (idioma EN↔ES, abandono con penalidad −5000 que
@@ -119,11 +125,27 @@ puede dejar saldo negativo, bono periódico forzado). **No corridos en esta opor
 los 4 ítems largos: **1-2** (partida DEAL/no-deal + swap de mitad y final), **3** (revivir
 con anuncio) y **4** (tienda con/sin fondos, con conflicto y compra de mazo). Nota: la
 tienda en local muestra Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK
-real de CrazyGames e `isRewardedAdAvailable()` devuelve `true` (hoy lo consulta
-`ListAvailableUpgradesUseCase`, no la escena); **la rama "oculta" del
+real de CrazyGames e `isRewardedAdAvailable()` devuelve `true` (hoy lo consultan
+`ListAvailableUpgradesUseCase` al listar y `PurchaseSessionUpgradeUseCase` al comprar, no
+la escena); **la rama "oculta" del
 filtro NO se ejercitó en vivo** — el predicado sí está cubierto por
 `ListAvailableUpgradesUseCase.spec.ts`, falta solo el smoke en el navegador (forzar
 bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
+**Ítem 8 (guard de compra por ads) tampoco corrido** — el predicado está cubierto por
+`PurchaseSessionUpgradeUseCase.spec.ts`, falta el smoke en el navegador con el SDK
+bloqueado (misma receta del párrafo anterior).
+
+### Límites aceptados del guard de compra por ads (2026-09-30 — no son bugs de esta vuelta)
+
+1. **TOCTOU compra→consumo.** El guard chequea al *comprar*; si los ads caen *después*,
+   el efecto vía anuncio no se entrega: `ResultScene` (double/triple) y
+   `ReviveWithAdUseCase` no consultan `isRewardedAdAvailable()`. Cerrarlo exigiría
+   chequeo también al consumir, o reembolso automático. Aceptado por ahora.
+2. **Exhaustividad de `applyEffect`.** El `switch` de `PurchaseSessionUpgradeUseCase` no
+   tiene aserción `never`: como devuelve `void`, `noImplicitReturns` no obliga a cubrir
+   todos los casos, así que un id nuevo en la unión `SessionUpgradeId` (+ catálogo)
+   compilaría y **cobraría sin aplicar efecto**. Mitigación propuesta: un spec que
+   recorra `SESSION_UPGRADE_CATALOG` y verifique que cada id tiene rama de efecto.
 
 ---
 

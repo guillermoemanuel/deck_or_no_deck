@@ -208,6 +208,7 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_USED: 'In progress. Finish it or come back in {time}',
     STATS_LINE: '🏆 {games} games · {winRate}% wins · Best: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Already active: {other}. Only one reward multiplier per game.',
+    SHOP_UPGRADE_ADS_UNAVAILABLE: 'Needs a rewarded ad and ads are unavailable right now.',
 
     // --- Bono Periódico (PeriodicBonusModal) ---
     PERIODIC_BONUS_TITLE: '🎁 Periodic Bonus',
@@ -401,6 +402,7 @@ export const TRANSLATIONS = {
     DAILY_CHALLENGE_USED: 'En curso. Terminalo o volvé en {time}',
     STATS_LINE: '🏆 {games} partidas · {winRate}% victorias · Mejor: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Ya tenés activo: {other}. Solo un multiplicador de premio por partida.',
+    SHOP_UPGRADE_ADS_UNAVAILABLE: 'Requiere anuncio recompensado — no hay anuncios ahora.',
 
     // --- Bono Periódico (PeriodicBonusModal) ---
     PERIODIC_BONUS_TITLE: '🎁 Bono Periódico',

@@ -45,7 +45,9 @@ Hay **dos** lugares donde se instancian concretos:
    También: init del SDK, locale detectado, `beforeunload` (gameplayStop + anti-cheat),
    manejo de fullscreen/orientación, mute durante anuncios.
 2. **`src/presentation/scenes/GameScene.ts`** (por partida): elige la carta secreta,
-   crea la `GameSession` vía `GameSessionFactory`, instancia los 7 use-cases,
+   crea la `GameSession` vía `GameSessionFactory`, instancia los 7 use-cases
+   (`PurchaseSessionUpgradeUseCase` recibe además el puerto de ads, para rechazar
+   `ads_unavailable` sin cobrar),
    crea el `GameEvent` bus, construye vistas y `GameSceneController`,
    y publica `ActiveSessionBridge` en el registry.
 
@@ -143,7 +145,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
 | Costos de tienda | los define `SessionUpgradeCatalog.ts` | tests usan `costOf(id)`, no hardcodean |
 | Zonas de energía | crítico ≤20 · baja 21..50 · sana ≥51 | `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts` |
 | Carta alta | ≥1000 (`HIGH_CASE_VALUE_MIN`, un valor real del mazo) | `isHighCaseValue()` en `domain/value-objects/CaseValues.ts` |
-| Mejoras con rewarded ad | `requiresRewardedAd: true` en double_reward, triple_reward, revive | `SessionUpgradeCatalog.ts` (declara la necesidad; la *disponibilidad* la decide `ListAvailableUpgradesUseCase` — la escena solo lista) |
+| Mejoras con rewarded ad | `requiresRewardedAd: true` en double_reward, triple_reward, revive | `SessionUpgradeCatalog.ts` solo **declara** la necesidad; deciden los 2 use-cases de aplicación sobre el puerto `ICrazyGamesService`: `ListAvailableUpgradesUseCase` (qué muestra la tienda) y `PurchaseSessionUpgradeUseCase` (rechazo `ads_unavailable` **sin cobrar** si la fila quedó visible y los ads se cortaron) — la escena solo lista y traduce el motivo a i18n |
 
 ---
 
@@ -168,7 +170,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
   | `'lastGameSummary'` | `GameScene` | `ResultScene` (lee y borra) |
   | `'resultScene:doubleBtn'/'tripleBtn'` | `ResultScene` | `ResultScene` (estado local en registry global) |
 
-- **i18n**: 142 claves × {en, es} en `shared/i18n/LanguageData.ts`.
+- **i18n**: 143 claves × {en, es} en `shared/i18n/LanguageData.ts`.
   Texto estático → componente `LocalizedText` (se auto-suscribe y se auto-destruye).
   Texto dinámico → `languageManager.getText('CLAVE', {param})` en cada render.
   Singleton `languageManager` es el **único** `export default` del proyecto.

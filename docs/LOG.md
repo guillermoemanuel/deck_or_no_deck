@@ -7,7 +7,76 @@
 
 ---
 
-## 2026-09-30 · README sincronizado con la realidad + npm audit fix
+## 2026-09-30 · Guard de compra por ads (deuda del reviewer de la Fase 4)
+
+**Tarea:** cerrar documentalmente el guard que impide comprar mejoras dependientes de
+rewarded ads cuando el entorno no puede mostrarlos, y sincronizar los docs tocados.
+
+**Qué y por qué (código, verificado por `qa` VERDE y `reviewer` APROBADO):**
+`PurchaseSessionUpgradeUseCase` ahora rechaza con motivo **`'ads_unavailable'` —sin
+cobrar—** cualquier mejora con `requiresRewardedAd` cuando
+`ICrazyGamesService.isRewardedAdAvailable()` es `false`. El chequeo va **después** de
+`conflicting_upgrade`/`not_applicable` y **antes** de `spendCoins`; nuevo **4.º parámetro
+del constructor** (`crazyGamesService`), cableado en `GameScene`. En la UI, `ShopScene`
+muestra la clave nueva **`SHOP_UPGRADE_ADS_UNAVAILABLE`** (en/es) en la línea de estado de
+la fila mediante el helper generalizado **`showTemporaryRowMessage`**, que absorbió a
+`showConflictMessage` sin duplicar el timer (2200 ms, con guarda de "no pisar el estado
+nuevo"). *Por qué:* era la deuda #1 de la vuelta anterior — con la fila visible y los ads
+caídos (cooldown tras rewarded fallido, adblock, SDK ausente) el jugador pagaba monedas por
+algo que no podía usar, violando el contrato "el dinero nunca se descuenta sin que el
+efecto se aplique".
+
+**Qué cambió por archivo:**
+
+- **Código (6):** `src/application/use-cases/PurchaseSessionUpgradeUseCase.ts` (guard +
+  motivo `ads_unavailable` en la unión, JSDoc del contrato) y su `.spec.ts` (**28 tests**,
+  306 → 390 L); `src/presentation/scenes/GameScene.ts` (pasa `services.crazyGamesService`);
+  `src/presentation/scenes/ShopScene.ts` (`showTemporaryRowMessage`, rama
+  `ads_unavailable`, 760 → 771 L); `src/shared/i18n/LanguageData.ts` (+1 clave en `en` y
+  `es` → **143**); `src/domain/value-objects/SessionUpgradeCatalog.ts` (solo JSDoc: nombra
+  a **los dos** decisorios, no solo a `ListAvailableUpgradesUseCase`).
+- **Docs (6):** `AGENTS.md` (§3: 143 claves, `ShopScene` 771 L);
+  `docs/PLAYBOOK.md` (§1: predicado de ads evaluado en 2 use-cases — fuente única,
+  helper de `application/` si la regla crece; §2: contrato de precedencia de rechazos en
+  `execute()`); `docs/testing.md` (conteos, fila de resueltos, smoke ítem 8 **no corrido**,
+  2 límites aceptados); `docs/ARCHITECTURE.md` (invariante "mejoras con rewarded ad" con
+  **2** consumidores, composition root de `GameScene`, 143 claves);
+  `docs/MAP.md` (censo: 148 archivos TS · **20.729** líneas · 110 fuente + 38 specs; LOC
+  de los 6 archivos TS que crecieron); `docs/LOG.md` (esta entrada).
+
+**Gates finales (reportados por `qa`, VERDE):** **38 suites / 435 tests** · typecheck 0 ·
+lint 0 · cobertura por capa verde · `PurchaseSessionUpgradeUseCase.ts` al **100 %**.
+Suite de esa spec: **28 tests**. **Conteos medidos por mí (grep/`find`, `npx jest` corre
+denegado por los permisos de shell de este agente):** 38 `*.spec.ts` · 422 declaraciones
+`it(`/`test(` + 13 filas de un `it.each` = 435 · 143 claves por idioma en `LanguageData.ts`
+(286 líneas de clave ÷ 2; paridad en/es garantizada por `LanguageData.spec.ts`).
+
+**Hallazgos del `reviewer` cerrados en esta vuelta:** (1) **test muerto eliminado** de la
+spec de compra; (2) **copia i18n acortada** — el texto en/es se recortó porque la línea de
+estado de la fila desborda a ~550 px (`"Requiere anuncio recompensado — no hay anuncios
+ahora."`); (3) el JSDoc de `SessionUpgradeCatalog.requiresRewardedAd` nombraba **solo a un
+decisor** (el de lista) — ahora nombra a los dos use-cases.
+
+**Desincronizaciones doc↔código corregidas (mandó el código):** `ARCHITECTURE.md` seguía
+diciendo que la disponibilidad de ads la decidía *solo* `ListAvailableUpgradesUseCase` y
+"142 claves"; `MAP.md` tenía LOC previos al guard (130/306, 760, 445, 142); `AGENTS.md`
+"142 claves" y "760 L". Los conteos históricos `38/429` de `LOG.md` y de `PLAYBOOK.md` §5
+son correctos **para su fecha** y no se reescriben (append-only / hecho en esa sesión).
+
+**Pendientes (límites aceptados, documentados en `docs/testing.md` §5):**
+
+1. **TOCTOU compra→consumo:** si los ads caen *después* de comprar, el efecto vía anuncio
+   no se entrega — `ResultScene` y `ReviveWithAdUseCase` no consultan
+   `isRewardedAdAvailable()`. Cerrarlo exigiría chequeo al consumir o reembolso.
+2. **Exhaustividad de `applyEffect`:** el `switch` no tiene aserción `never`; un 9.º id de
+   `SessionUpgradeId` compilaría y cobraría sin aplicar efecto. Mitigación propuesta: spec
+   que recorra `SESSION_UPGRADE_CATALOG`.
+3. **Smoke:** ítem 8 de `docs/testing.md` §5 (compra de ads con SDK bloqueado) **no
+   corrido**; siguen pendientes los ítems 1-4 largos.
+
+---
+
+
 
 **Tarea:** cerrar la deriva histórica del `README.md` (lista de `PLAYBOOK.md` §4,
 verificada contra el código y no contra la memoria) y registrar el `npm audit fix`.
