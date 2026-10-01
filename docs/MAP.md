@@ -5,8 +5,10 @@
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
 > Fecha del censo: 2026-10-01 (refrescado tras el **cierre de los dos límites aceptados**:
-> exhaustividad de `applyEffect` + reembolso por fallo ambiental) ·
-> 148 archivos TS · 21.132 líneas · 110 fuente + 38 specs
+> exhaustividad de `applyEffect` + reembolso por fallo ambiental, y tras la **ampliación
+> del alcance del reembolso** mismo día — de nuevo crecieron `MultiplyRewardUseCase.ts`/
+> `.spec` y `ReviveWithAdUseCase.ts`/`.spec`) ·
+> 148 archivos TS · 21.353 líneas · 110 fuente + 38 specs
 > (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
 > +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; cierre anterior:
 > +`ListAvailableUpgradesUseCase.ts`/`.spec`; este cierre: **sin archivos nuevos** —
@@ -54,14 +56,14 @@
 
 ---
 
-## `src/application/` — 2.796 líneas · 12 specs · casi toda verde 🟢
+## `src/application/` — 3.017 líneas · 12 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
 | `use-cases/PurchaseSessionUpgradeUseCase.ts` | 184 | ✅ 438 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. **Guard de ads**: 4.º parámetro `ICrazyGamesService`; rechaza `ads_unavailable` sin `spendCoins` cuando `requiresRewardedAd` y no hay rewarded disponible (después de `conflicting_upgrade`/`not_applicable`). **Exhaustividad**: guarda `const exhaustive: never = upgradeId` al final de `applyEffect` (2026-10-01) + spec `it.each` que recorre los ids del catálogo (36 tests). 🟡 |
 | `use-cases/OpenCardUseCase.ts` | 94 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** Penalidad de derrota desde `GamePenalties`. 🟡 |
-| `use-cases/ReviveWithAdUseCase.ts` | 119 | ✅ 302 L | Orden: consumir revive → revivir. Reembolso por SDK ausente (`'refunded'`, invariante XOR — ADR-006); sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. 🟡 |
-| `use-cases/MultiplyRewardUseCase.ts` | 100 | ✅ 191 L | Flag `isProcessing` sincrónico (carrera de doble click). Reembolso por SDK ausente (`'refunded'`, invariante XOR — ADR-006); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
+| `use-cases/ReviveWithAdUseCase.ts` | 128 | ✅ 408 L | Orden: consumir revive → revivir. Reembolso si `isRewardedAdAvailable()` es false — SDK ausente / adblock / cooldown 60 s (`'refunded'`, invariante XOR — ADR-006); sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. 🟡 |
+| `use-cases/MultiplyRewardUseCase.ts` | 106 | ✅ 291 L | Flag `isProcessing` sincrónico (carrera de doble click). Reembolso si `isRewardedAdAvailable()` es false — SDK ausente / adblock / cooldown 60 s (`'refunded'`, invariante XOR — ADR-006); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
 | `use-cases/SwapFinalSecretCardUseCase.ts` | 37 | ✅ | — |
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |

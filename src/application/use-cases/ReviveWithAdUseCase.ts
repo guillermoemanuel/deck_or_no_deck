@@ -26,9 +26,10 @@ export class ReviveWithAdUseCase {
     // Opcional por lo mismo que en OpenCardUseCase: solo hace falta para el
     // caso límite de "victoria inmediata al revivir" (ver más abajo), que
     // necesita acreditar el premio exactamente como una victoria normal —
-    // y ahora también para reembolsar el costo si el SDK no está (ver
-    // execute()): sin él no se puede acreditar y la rama de reembolso
-    // devuelve 'sdk_unavailable' en vez de mentir con 'refunded'.
+    // y ahora también para reembolsar el costo si no hay anuncios
+    // disponibles (ver execute()): sin él no se puede acreditar y la rama
+    // de reembolso devuelve 'sdk_unavailable' en vez de mentir con
+    // 'refunded'.
     private readonly progressionService?: IProgressionService
   ) {}
 
@@ -48,31 +49,39 @@ export class ReviveWithAdUseCase {
       return { revived: false, reason: 'not_eligible' };
     }
 
-    if (!this.crazyGamesService.isAvailable()) {
+    if (!this.crazyGamesService.isRewardedAdAvailable()) {
       // Sin puerto de progresión no hay forma de acreditar el reembolso:
-      // se devuelve el motivo REAL (SDK ausente) en vez de un 'refunded'
-      // que no cumpliría — el jugador queda como antes, con la jugada
+      // se devuelve el motivo REAL (`sdk_unavailable`, que con el chequeo
+      // ampliado también cubre adblock/cooldown — es el único motivo sin
+      // reembolso disponible en la unión) en vez de un 'refunded' que no
+      // cumpliría — el jugador queda como antes, con la jugada
       // reintentable, y no se le promete una devolución que no llegó.
       if (!this.progressionService) {
         return { revived: false, reason: 'sdk_unavailable' };
       }
 
-      // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la
-      // Tienda y el SDK de CrazyGames NO está al consumirla (SDK entero
-      // ausente: Basic Launch sin ads, o el script del SDK ni siquiera
-      // llegó a cargar) — sin esto el jugador se iba de la pantalla con
-      // las monedas perdidas y sin revivir. Se reembolsa el costo del
-      // catálogo UNA sola vez y `refunded` (chequeado arriba) bloquea el
-      // revive posterior: invariante reembolso XOR efecto, nunca ambos
+      // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la Tienda
+      // y NO hay anuncios rewarded para consumirla: SDK entero ausente
+      // (Basic Launch sin ads, o el script del SDK ni siquiera llegó a
+      // cargar), ADBLOCK DETECTADO, o la ventana de cooldown de 60 s tras
+      // un rewarded fallido. Sin esto el jugador se iba de la pantalla con
+      // las monedas perdidas y sin revivir — con el alcance anterior (solo
+      // `!isAvailable()`) el jugador con adblock (o fill muerto) compraba,
+      // reintentaba en bucle y nunca recibía nada. Se reembolsa el costo
+      // del catálogo UNA sola vez y `refunded` (chequeado arriba) bloquea
+      // el revive posterior: invariante reembolso XOR efecto, nunca ambos
       // (cobrar devuelta y revivir igual cuando vuelva el anuncio sería
       // explotable).
       //
-      // LÍMITE de este reembolso: NO cubre el adblock. El reembolso solo
-      // se dispara con `!isAvailable()`; si el adblockador únicamente
-      // mata el FILL de los anuncios, el SDK sigue "disponible", el
-      // consumo cae en `ad_failed` → SIN reembolso y con la compra
-      // reintentable (decisión de producto: `ad_failed` es fallo del
-      // anuncio, no del entorno).
+      // `ad_failed` sigue significando "el intento se hizo y falló"
+      // (cancelación del jugador o anuncio que no se completó): ahí NO se
+      // reembolsa y la compra es reintentable. PERO la causa raíz es que el
+      // servicio real pone el cooldown de 60 s con CUALQUIER rewarded
+      // fallido, INCLUIDA la cancelación del jugador — el cooldown puede
+      // ser autoinfligido. Un segundo click dentro de la ventana cae en el
+      // pre-chequeo de arriba, reembolsa y cierra el reclamo para siempre;
+      // reintentar exige esperar a que venzan los 60 s
+      // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000).
       this.progressionService.awardGameplayCoins(costOf('revive'));
       this.refunded = true;
       return { revived: false, reason: 'refunded' };

@@ -177,6 +177,106 @@ describe('MultiplyRewardUseCase', () => {
     expect(repository.getCoins()).toBe(balanceAfterPurchase + 1000);
   });
 
+  // Decisión de producto ampliada: el pre-chequeo es `!isRewardedAdAvailable()`,
+  // que además del SDK ausente (subsumido arriba) cubre adblock detectado y la
+  // ventana de cooldown de 60 s tras un rewarded fallido — todos los caminos
+  // en los que el dinero quedaría trabado comprando algo que nunca se puede usar.
+  it('refunds the cost when the SDK IS available but ads are not (adblock/cooldown), without ever asking for an ad', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    // SDK presente pero ads bloqueados: modela adblock detectado o la ventana
+    // de cooldown de 60 s (isAvailable() sigue true, isRewardedAdAvailable() false).
+    crazyGamesService.setRewardedAvailable(false);
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    const result = await useCase.execute(2);
+
+    expect(result).toEqual({ success: false, reason: 'refunded' });
+    // El reembolso es EXACTAMENTE costOf('double_reward'), una sola vez.
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('double_reward'));
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    // Nunca se intentó mostrar un anuncio que no podía rendir: sin llamada al SDK.
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Invariante reembolso XOR efecto, con el alcance ampliado: tras el
+  // reembolso por ads caídos, si los ads vuelven el reclamo sigue bloqueado —
+  // sin segundo crédito y sin efecto.
+  it('keeps the refund final: with ads available again a later attempt returns "refunded" and pays nothing', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedAvailable(false);
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    progressionManager.spendCoins(costOf('double_reward'));
+    const firstAttempt = await useCase.execute(2);
+    expect(firstAttempt).toEqual({ success: false, reason: 'refunded' });
+    const balanceAfterRefund = repository.getCoins();
+
+    // Los ads vuelven (cooldown vencido / adblock desactivado): el reclamo NO
+    // se otorga y el monto no se acredita dos veces.
+    crazyGamesService.setRewardedAvailable(true);
+    const secondAttempt = await useCase.execute(2);
+
+    expect(secondAttempt).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceAfterRefund);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Hallazgo reviewer — la secuencia más alcanzable en producción: el
+  // servicio real pone cooldown de 60 s con CUALQUIER rewarded fallido,
+  // INCLUIDA la cancelación del jugador (CrazyGamesService.settle() →
+  // rewardedBlockedUntil = now + 60000), y el pre-chequeo se evalúa en
+  // cada click. El reintento libre solo sobrevive esperando 60 s.
+  it('after a player-cancelled ad the self-inflicted cooldown makes the next click refund exactly once and close the claim', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setNextAdResult({ success: false, reason: 'user_cancelled' });
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    // Clic 1: el anuncio se pidió y falló (cancelación del jugador) —
+    // `ad_failed` SIN reembolso, el saldo tras la compra queda intacto.
+    const firstAttempt = await useCase.execute(2);
+    expect(firstAttempt).toEqual({ success: false, reason: 'ad_failed' });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
+    expect(useCase.isClaimed()).toBe(false);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+
+    // El servicio real acaba de poner el cooldown de 60 s por ese fallo.
+    crazyGamesService.setRewardedAvailable(false);
+
+    // Clic 2 a los 10 s: el cooldown lo provocó el propio jugador, pero el
+    // pre-chequeo no lo distingue — reembolsa EXACTAMENTE costOf(id) y
+    // cierra el reclamo, sin volver a pedir un anuncio.
+    const secondAttempt = await useCase.execute(2);
+    expect(secondAttempt).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('double_reward'));
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+
+    // 60 s simulados: el cooldown vence y los ads vuelven — el reclamo
+    // sigue bloqueado (reembolso XOR efecto), sin segundo crédito.
+    crazyGamesService.setRewardedAvailable(true);
+    const thirdAttempt = await useCase.execute(2);
+    expect(thirdAttempt).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+  });
+
   it('newTotal in the result reflects the actual repository balance after the bonus', async () => {
     const repository = new FakeProgressionRepository();
     repository.seedCoins(500);

@@ -7,6 +7,69 @@
 
 ---
 
+## 2026-10-01 · Alcance del reembolso ampliado a `isRewardedAdAvailable()`
+
+**Tarea:** cerrar documentalmente (docs + ADR, nada en `src/`) la ampliación de producto
+decidida por el usuario hoy: *"si no hay anuncios cuando consumís, te devolvemos el
+dinero"*. Sobre las 3 opciones presentadas — **(a)** reembolsar ante **todo fallo**,
+**(b)** **distinguir el motivo** del fallo, **(c)** **mantener solo SDK ausente** — eligió
+**(a)**. Este cierre cierra el bloque "Queda ABIERTO" de la entrada anterior (sub-caso
+del límite 2 en `testing.md`).
+
+**Qué y por qué (código ya implementado en la sesión; gates `qa` VERDE):** el chequeo de
+reembolso en `MultiplyRewardUseCase.execute()` y `ReviveWithAdUseCase.execute()` pasó de
+`!isAvailable()` a **`!isRewardedAdAvailable()`**: ahora también cubre **adblock
+detectado** y la **ventana de cooldown de 60 s** tras un rewarded fallido — los dos
+caminos que dejaban el dinero trabado (compras, `ad_failed`, reintento infinito sin
+efecto porque ese motivo no reembolsa). Invariante XOR, monto `costOf(id)`,
+`'refunded'` y `ad_failed` sin reembolso: intactos.
+
+**Archivos de código (4, todos en `src/application/`):** `use-cases/MultiplyRewardUseCase.ts`
+(predicado + comentario BUGFIX ampliado), `use-cases/MultiplyRewardUseCase.spec.ts`
+(**10 → 13** tests: +adblock/cooldown, +invariante con ads de vuelta, +transición),
+`use-cases/ReviveWithAdUseCase.ts` (ídem), `use-cases/ReviveWithAdUseCase.spec.ts`
+(**13 → 16** tests, mismos +3).
+
+**Gates:** `qa` VERDE **38 suites / 453 tests** · typecheck 0 · lint 0 · cobertura verde
+(al momento de abrir esta tarea). Durante el cierre documental, `test-engineer` agregó en
+paralelo la spec de transición (1 test por spec) → **455 tests medidos con grep al cerrar**
+(434 declaraciones `it(`/`test(` sin `it.each` + 21 filas de 2 `it.each` (13 + 8) = 455 ·
+38 `*.spec.ts`). **Pendiente: re-run de `npm test` tras el merge para confirmar 455 en verde.**
+
+**Hallazgos del `reviewer` y cómo se cerraron:**
+1. **Docs y ADR contradiciendo el código nuevo** (predicado viejo `isAvailable()`,
+   "SDK ausente" como alcance completo, límite 2 "abierto", conteos 10/13/449) →
+   **cerrados con esta entrada**: `ADR-006` (Decisión con predicado nuevo y fecha;
+   "Pendiente (decisión de producto)" movido a Decisión como **resuelto 2026-10-01** con
+   su texto original conservado; matiz de 60 s en `ad_failed`; conteos 13/16),
+   `docs/testing.md` (header 455, ítems 9-11 con conteos, §5 límite 2 **CERRADO** con el
+   alcance nuevo y la nota de reintento), `AGENTS.md` §4 (invariante con
+   `isRewardedAdAvailable()` + matiz 60 s), `docs/MAP.md` (2 celdas "Reembolso por SDK
+   ausente" → predicado completo; LOC refrescados: 106/291 y 128/408, subtotal
+   application 2.796 → 3.017, total 21.132 → 21.353).
+2. **Faltaba la spec de la transición `ad_failed → cooldown → refunded`** → agregada por
+   `test-engineer` en ambos specs: clic 1 con cancelación del jugador → `ad_failed` sin
+   reembolso → el servicio arma el cooldown de 60 s → clic 2 dentro de la ventana →
+   reembolsa `costOf(id)` exactamente una vez y cierra el reclamo → clic 3 (ads vuelven)
+   sigue `'refunded'`, sin segundo crédito.
+
+**Hechos de comportamiento que quedaron documentados:**
+- `CrazyGamesService.requestAd()` **NO consulta el cooldown** (chequea solo
+  `isAvailable()` + `adInProgress`): la ventana de 60 s la protege **el pre-chequeo**
+  `isRewardedAdAvailable()` del use-case al consumir (más los guards de tienda).
+- El cooldown de 60 s lo pone **cualquier** rewarded fallido
+  (`settle()` → `rewardedBlockedUntil = now + 60000`), **incluida la cancelación del
+  jugador** → un segundo click dentro de la ventana **reembolsa en vez de reintentar** y
+  cierra el reclamo; reintentar de verdad exige esperar los 60 s.
+
+**Docs tocados (5):** `docs/DECISIONS/ADR-006-reembolso-por-fallo-ambiental.md`,
+`docs/testing.md`, `AGENTS.md` (§4), `docs/MAP.md` (censo), `docs/LOG.md` (esta entrada).
+
+**Pendientes:** re-run de gates con los 455 · smoke navegador ítems 9-11 de `docs/testing.md`
+(no corridos; el subagente no tuvo permiso de shell, no pudo ejecutar `git`/`npm`).
+
+---
+
 ## 2026-10-01 · Cierre de los dos límites aceptados (exhaustividad + reembolso por fallo ambiental)
 
 **Tarea:** cerrar documentalmente los dos "límites aceptados" que `docs/testing.md` §5

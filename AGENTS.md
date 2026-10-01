@@ -62,9 +62,12 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.
 - Costos de tienda: los define `SessionUpgradeCatalog.ts`; los tests usan `costOf(id)`, **nunca precios hardcodeados**.
 - Bono periódico: 12 h cooldown + 24 h ventana; cartas `[500…5000]` (ADR-005).
-- Reembolso XOR efecto (ADR-006): consumir Duplicar/Triplicar/Revivir con el **SDK ausente**
-  reembolsa `costOf(id)` **una sola vez** y bloquea el reclamo (`'refunded'`);
-  `ad_failed` **no** reembolsa y sigue reintentable.
+- Reembolso XOR efecto (ADR-006): consumir Duplicar/Triplicar/Revivir con
+  **`isRewardedAdAvailable()` false — SDK ausente, adblock detectado o cooldown de 60 s**
+  (se lee ese predicado, no `isAvailable()`) reembolsa `costOf(id)` **una sola vez** y
+  bloquea el reclamo (`'refunded'`); `ad_failed` **no** reembolsa y sigue reintentable —
+  pero el cooldown de 60 s lo pone cualquier rewarded fallido **incluida la cancelación
+  del jugador**: un segundo click dentro de la ventana reembolsa y cierra el reclamo.
 
 ## 5. Eventos
 

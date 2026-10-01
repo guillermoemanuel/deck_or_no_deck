@@ -91,8 +91,10 @@ describe('ReviveWithAdUseCase', () => {
 
   // Esta construcción NO pasa progressionService (parámetro opcional): sin
   // puerto de progresión no hay forma de acreditar el reembolso, así que
-  // el use-case devuelve el motivo REAL (SDK ausente) en vez de un
-  // 'refunded' que no cumpliría — el jugador queda como hoy, reintentable.
+  // el use-case devuelve el motivo REAL (`sdk_unavailable`, que con el
+  // chequeo ampliado también cubre adblock/cooldown — es el único motivo
+  // sin reembolso disponible en la unión) en vez de un 'refunded' que no
+  // cumpliría — el jugador queda como antes, con la jugada reintentable.
   it('returns { revived: false, reason: "sdk_unavailable" } if the SDK is not available and no progression service was injected', async () => {
     const session = buildLostSession();
     const crazyGamesService = new FakeCrazyGamesService();
@@ -202,6 +204,110 @@ describe('ReviveWithAdUseCase', () => {
     expect(result).toEqual({ revived: false, reason: 'not_eligible' });
     expect(repository.getCoins()).toBe(10000);
     expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Decisión de producto ampliada: el pre-chequeo es `!isRewardedAdAvailable()`,
+  // que además del SDK ausente (subsumido arriba) cubre adblock detectado y la
+  // ventana de cooldown de 60 s tras un rewarded fallido — todos los caminos
+  // en los que el dinero del "Revivir" quedaría trabado.
+  it('refunds costOf("revive") when the SDK IS available but ads are not (adblock/cooldown), without ever asking for an ad', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    // SDK presente pero ads bloqueados: modela adblock detectado o la ventana
+    // de cooldown de 60 s (isAvailable() sigue true, isRewardedAdAvailable() false).
+    crazyGamesService.setRewardedAvailable(false);
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const { repository, progressionManager } = buildProgression(10000);
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('revive'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    const result = await useCase.execute();
+
+    expect(result).toEqual({ revived: false, reason: 'refunded' });
+    // El reembolso es EXACTAMENTE costOf('revive'), una sola vez.
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('revive'));
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+    expect(session.getStatus()).toBe('lost');
+    expect(session.getSessionUpgrades().hasRevive()).toBe(true);
+  });
+
+  // Invariante reembolso XOR efecto, con el alcance ampliado: tras el
+  // reembolso por ads caídos, si los ads vuelven el revive sigue bloqueado —
+  // sin segundo crédito y sin efecto.
+  it('keeps the refund final: with ads available again a later attempt returns "refunded" and never revives', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedAvailable(false);
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const { repository, progressionManager } = buildProgression(10000);
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus, progressionManager);
+
+    progressionManager.spendCoins(costOf('revive'));
+    const firstAttempt = await useCase.execute();
+    expect(firstAttempt).toEqual({ revived: false, reason: 'refunded' });
+    const balanceAfterRefund = repository.getCoins();
+
+    // Los ads vuelven (cooldown vencido / adblock desactivado): el revive NO
+    // se otorga y el monto no se acredita dos veces.
+    crazyGamesService.setRewardedAvailable(true);
+    const secondAttempt = await useCase.execute();
+
+    expect(secondAttempt).toEqual({ revived: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceAfterRefund);
+    expect(session.getStatus()).toBe('lost');
+    expect(session.getSessionUpgrades().hasRevive()).toBe(true);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Hallazgo reviewer — la secuencia más alcanzable en producción: el
+  // servicio real pone cooldown de 60 s con CUALQUIER rewarded fallido,
+  // INCLUIDA la cancelación del jugador (CrazyGamesService.settle() →
+  // rewardedBlockedUntil = now + 60000), y el pre-chequeo se evalúa en
+  // cada click. El reintento libre solo sobrevive esperando 60 s.
+  it('after a player-cancelled ad the self-inflicted cooldown makes the next click refund exactly once and close the revive claim', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setNextAdResult({ success: false, reason: 'user_cancelled' });
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const { repository, progressionManager } = buildProgression(10000);
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('revive'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    // Clic 1: el anuncio se pidió y falló (cancelación del jugador) —
+    // `ad_failed` SIN reembolso, el saldo tras la compra queda intacto.
+    const firstAttempt = await useCase.execute();
+    expect(firstAttempt).toEqual({ revived: false, reason: 'ad_failed' });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+
+    // El servicio real acaba de poner el cooldown de 60 s por ese fallo.
+    crazyGamesService.setRewardedAvailable(false);
+
+    // Clic 2 a los 10 s: el cooldown lo provocó el propio jugador, pero el
+    // pre-chequeo no lo distingue — reembolsa EXACTAMENTE costOf('revive')
+    // y cierra el reclamo, sin volver a pedir un anuncio.
+    const secondAttempt = await useCase.execute();
+    expect(secondAttempt).toEqual({ revived: false, reason: 'refunded' });
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('revive'));
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+
+    // 60 s simulados: el cooldown vence y los ads vuelven — el revive sigue
+    // bloqueado (reembolso XOR efecto), sin segundo crédito.
+    crazyGamesService.setRewardedAvailable(true);
+    const thirdAttempt = await useCase.execute();
+    expect(thirdAttempt).toEqual({ revived: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+    expect(session.getStatus()).toBe('lost');
+    expect(session.getSessionUpgrades().hasRevive()).toBe(true);
   });
 
   it('returns { revived: false, reason: "ad_failed" } and does NOT revive when the ad fails', async () => {

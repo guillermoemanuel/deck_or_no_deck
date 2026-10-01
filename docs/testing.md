@@ -1,8 +1,10 @@
 # Testing
 
-> Estado al 2026-10-01 (cierre de los dos límites aceptados): **38 suites · 449 tests ·
-> todos verdes** (medido: 38 `*.spec.ts` en `src`; 428 declaraciones `it(`/`test(` + 21
-> filas de 2 `it.each` = 449). Runner: **Jest + ts-jest** (no vitest). Entorno: `node`
+> Estado al 2026-10-01 (cierres de límites + ampliación del alcance del reembolso):
+> **38 suites · 455 tests** — verdes en el último gate de `qa` (**38/453**) más 2 specs
+> de transición agregadas en paralelo (re-run final pendiente) (medido: 38 `*.spec.ts`
+> en `src`; 434 declaraciones `it(`/`test(` sin contar `it.each` + 21 filas de 2
+> `it.each` (13 + 8) = 455). Runner: **Jest + ts-jest** (no vitest). Entorno: `node`
 > (sin DOM).
 
 ---
@@ -149,9 +151,10 @@ bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
 bloqueado (misma receta del párrafo anterior).
 
 **Ítems 9-11 (reembolso por fallo ambiental, ADR-006) agregados el 2026-10-01 y NO
-corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (10 tests) y
-`ReviveWithAdUseCase.spec.ts` (13 tests); falta el smoke en el navegador con el SDK
-bloqueado.
+corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (13 tests) y
+`ReviveWithAdUseCase.spec.ts` (16 tests); falta el smoke en el navegador con el SDK
+bloqueado (el mismo predicado cubre adblock y cooldown de 60 s — forzar con DevTools o
+esperando la ventana rinde el mismo resultado).
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 
@@ -164,16 +167,21 @@ bloqueado.
    `SESSION_UPGRADE_CATALOG` y afirma que la compra deja el efecto aplicado en la sesión
    real → si mañana hay un 9.º id sin rama, el test falla. Ruptura verificada: sin un
    `case`, typecheck pasa sin la guarda y falla con ella.
-2. **TOCTOU compra→consumo — CERRADO *parcialmente* (2026-10-01, ADR-006).** Al consumir
-   Duplicar/Triplicar/Revivir con `isAvailable()` false (**SDK entero ausente**):
-   reembolso único `awardGameplayCoins(costOf(id))`, motivo `'refunded'` y bloqueo de todo
-   reclamo posterior — **invariante reembolso XOR efecto**; `ad_failed` no reembolsa y
-   sigue reintentable; UI muestra `RESULT_AD_REFUNDED` y apaga los botones.
-   **Queda abierto — sub-caso, decisión de producto pendiente del usuario:** si el SDK
-   está pero `isRewardedAdAvailable()` es `false` (cooldown o fill muerto, p. ej. adblock
-   sobre el fill), el consumo cae en `ad_failed` → **sin** reembolso, reintento infinito y
-   el dinero queda trabado si los ads no vuelven. Cubrirlo dispararía el reembolso también
-   con esa condición (hoy solo `isAvailable()`).
+2. **TOCTOU compra→consumo — CERRADO (2026-10-01, ADR-006; alcance ampliado el mismo
+   día).** Al consumir Duplicar/Triplicar/Revivir con `isRewardedAdAvailable()` false —
+   **SDK ausente, adblock detectado o cooldown de 60 s** tras un rewarded fallido:
+   reembolso único `awardGameplayCoins(costOf(id))`, motivo `'refunded'` y bloqueo de
+   todo reclamo posterior — **invariante reembolso XOR efecto**; UI muestra
+   `RESULT_AD_REFUNDED` y apaga los botones. El sub-caso antes abierto (SDK presente
+   pero `isRewardedAdAvailable()` false → `ad_failed` sin reembolso y dinero trabado,
+   "decisión de producto pendiente del usuario") **cerró el 2026-10-01** con la
+   ampliación del predicado.
+   - `ad_failed` (el intento se hizo y falló: cancelación del jugador o fill muerto)
+     **no** reembolsa y sigue reintentable — **pero** el cooldown de 60 s lo pone
+     **cualquier** rewarded fallido, **incluida la cancelación del jugador**: un segundo
+     click **dentro** de la ventana reembolsa en vez de reintentar y cierra el reclamo;
+     reintentar de verdad exige esperar los 60 s. Specs de transición
+     `ad_failed → cooldown → refunded` en ambos use-cases (un test por spec).
 
 ---
 

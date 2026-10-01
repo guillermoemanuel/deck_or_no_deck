@@ -20,7 +20,7 @@ export type MultiplyRewardResult =
  * inyecta la sesión y corta con `not_eligible` vía `session.hasRevive()` —
  * este use-case no recibe la GameSession, así que no puede validar la
  * tenencia y reembolsa `costOf(multiplier === 2 ? 'double_reward' :
- * 'triple_reward')` a ciegas si el SDK no está. Hoy es inalcanzable: los
+ * 'triple_reward')` a ciegas si no hay anuncios rewarded disponibles. Hoy es inalcanzable: los
  * flags con los que se construye el botón salen de la sesión viva
  * (GameSceneController.buildUpgradeFlagsForResultScene), el catálogo prohíbe
  * comprar double+triple a la vez (SessionUpgradeCatalog.conflictsWith) y
@@ -52,23 +52,29 @@ export class MultiplyRewardUseCase {
       return { success: false, reason: 'already_claimed' };
     }
 
-    if (!this.crazyGamesService.isAvailable()) {
-      // BUGFIX (TOCTOU compra→consumo): la mejora YA se cobró en la
-      // Tienda y el SDK de CrazyGames NO está al consumirla (SDK entero
-      // ausente: Basic Launch sin ads, o el script del SDK ni siquiera
-      // llegó a cargar) — sin esto el jugador se iba de la pantalla con las
-      // monedas perdidas y sin recibir nada. Se reembolsa el costo del
-      // catálogo UNA sola vez y `refunded` (chequeado arriba) bloquea el
-      // reclamo posterior: invariante reembolso XOR efecto, nunca ambos
-      // (fallar, cobrar devuelta y reclamar igual cuando vuelva el
-      // anuncio sería explotable).
+    if (!this.crazyGamesService.isRewardedAdAvailable()) {
+      // BUGFIX (TOCTOU compra→consumo): la mejora YA se cobró en la Tienda y
+      // NO hay anuncios rewarded para consumirla: SDK entero ausente (Basic
+      // Launch sin ads, o el script del SDK ni siquiera llegó a cargar),
+      // ADBLOCK DETECTADO, o la ventana de cooldown de 60 s tras un
+      // rewarded fallido. Sin esto el jugador se iba de la pantalla con las
+      // monedas perdidas y sin recibir nada — con el alcance anterior
+      // (solo `!isAvailable()`) el jugador con adblock (o fill muerto)
+      // compraba, reintentaba en bucle y nunca recibía nada.
+      // Se reembolsa el costo del catálogo UNA sola vez y `refunded`
+      // (chequeado arriba) bloquea el reclamo posterior: invariante
+      // reembolso XOR efecto, nunca ambos (fallar, cobrar devuelta y
+      // reclamar igual cuando vuelva el anuncio sería explotable).
       //
-      // LÍMITE de este reembolso: NO cubre el adblock. El reembolso solo
-      // se dispara con `!isAvailable()`; si el adblockador únicamente
-      // mata el FILL de los anuncios, el SDK sigue "disponible", el
-      // consumo cae en `ad_failed` → SIN reembolso y con el botón
-      // reintentable (decisión de producto: `ad_failed` es fallo del
-      // anuncio, no del entorno).
+      // `ad_failed` sigue significando "el intento se hizo y falló"
+      // (cancelación del jugador o anuncio que no se completó): ahí NO se
+      // reembolsa y el botón es reintentable. PERO la causa raíz es que el
+      // servicio real pone el cooldown de 60 s con CUALQUIER rewarded
+      // fallido, INCLUIDA la cancelación del jugador — el cooldown puede
+      // ser autoinfligido. Un segundo click dentro de la ventana cae en el
+      // pre-chequeo de arriba, reembolsa y cierra el reclamo para siempre;
+      // reintentar exige esperar a que venzan los 60 s
+      // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000).
       this.progressionService.awardGameplayCoins(costOf(multiplier === 2 ? 'double_reward' : 'triple_reward'));
       this.refunded = true;
       return { success: false, reason: 'refunded' };
