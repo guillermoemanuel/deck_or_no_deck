@@ -4,27 +4,41 @@ import { GameEvent } from '../../domain/events/GameEvents';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { IProgressionService } from '../../domain/ports/IProgressionService';
 import { TOP_CASE_VALUE } from '../../domain/value-objects/CaseValues';
+import { costOf } from '../../domain/value-objects/SessionUpgradeCatalog';
 
 export type ReviveResult =
   | { revived: true }
-  | { revived: false; reason: 'ad_failed' | 'sdk_unavailable' | 'not_eligible' };
+  | { revived: false; reason: 'ad_failed' | 'sdk_unavailable' | 'not_eligible' | 'refunded' };
 
 /**
  * Coordina un efecto secundario (anuncio recompensado) con una regla de
  * dominio (revivir). El dominio permanece ignorante de que existio un anuncio.
  */
 export class ReviveWithAdUseCase {
+  // Marca el reembolso por fallo ambiental (ver execute()): una vez
+  // reembolsado, el revive queda bloqueado para siempre en esta instancia.
+  private refunded = false;
+
   constructor(
     private readonly session: GameSession,
     private readonly crazyGamesService: ICrazyGamesService,
     private readonly eventBus: SimpleEventEmitter<GameEvent>,
     // Opcional por lo mismo que en OpenCardUseCase: solo hace falta para el
     // caso límite de "victoria inmediata al revivir" (ver más abajo), que
-    // necesita acreditar el premio exactamente como una victoria normal.
+    // necesita acreditar el premio exactamente como una victoria normal —
+    // y ahora también para reembolsar el costo si el SDK no está (ver
+    // execute()): sin él no se puede acreditar y la rama de reembolso
+    // devuelve 'sdk_unavailable' en vez de mentir con 'refunded'.
     private readonly progressionService?: IProgressionService
   ) {}
 
   async execute(): Promise<ReviveResult> {
+    // Invariante reembolso XOR efecto: si ya se reembolsó, el revive se
+    // bloquea acá mismo — nunca reembolso y después el efecto.
+    if (this.refunded) {
+      return { revived: false, reason: 'refunded' };
+    }
+
     // BUGFIX (revive infinito): faltaba el chequeo de `hasRevive()` acá.
     // "Revivir" es un consumible de UNA sola vez (se compra por 1.250
     // monedas en la Tienda), pero como nada lo consumía, una única compra
@@ -35,7 +49,33 @@ export class ReviveWithAdUseCase {
     }
 
     if (!this.crazyGamesService.isAvailable()) {
-      return { revived: false, reason: 'sdk_unavailable' };
+      // Sin puerto de progresión no hay forma de acreditar el reembolso:
+      // se devuelve el motivo REAL (SDK ausente) en vez de un 'refunded'
+      // que no cumpliría — el jugador queda como antes, con la jugada
+      // reintentable, y no se le promete una devolución que no llegó.
+      if (!this.progressionService) {
+        return { revived: false, reason: 'sdk_unavailable' };
+      }
+
+      // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la
+      // Tienda y el SDK de CrazyGames NO está al consumirla (SDK entero
+      // ausente: Basic Launch sin ads, o el script del SDK ni siquiera
+      // llegó a cargar) — sin esto el jugador se iba de la pantalla con
+      // las monedas perdidas y sin revivir. Se reembolsa el costo del
+      // catálogo UNA sola vez y `refunded` (chequeado arriba) bloquea el
+      // revive posterior: invariante reembolso XOR efecto, nunca ambos
+      // (cobrar devuelta y revivir igual cuando vuelva el anuncio sería
+      // explotable).
+      //
+      // LÍMITE de este reembolso: NO cubre el adblock. El reembolso solo
+      // se dispara con `!isAvailable()`; si el adblockador únicamente
+      // mata el FILL de los anuncios, el SDK sigue "disponible", el
+      // consumo cae en `ad_failed` → SIN reembolso y con la compra
+      // reintentable (decisión de producto: `ad_failed` es fallo del
+      // anuncio, no del entorno).
+      this.progressionService.awardGameplayCoins(costOf('revive'));
+      this.refunded = true;
+      return { revived: false, reason: 'refunded' };
     }
 
     const adResult = await this.crazyGamesService.showRewardedAd();

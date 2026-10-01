@@ -1,8 +1,9 @@
 # Testing
 
-> Estado al 2026-09-30 (guard de compra por ads): **38 suites · 435 tests · todos verdes**
-> (medido: 38 `*.spec.ts` en `src`; 422 declaraciones `it(`/`test(` + 13 de un `it.each`).
-> Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
+> Estado al 2026-10-01 (cierre de los dos límites aceptados): **38 suites · 449 tests ·
+> todos verdes** (medido: 38 `*.spec.ts` en `src`; 428 declaraciones `it(`/`test(` + 21
+> filas de 2 `it.each` = 449). Runner: **Jest + ts-jest** (no vitest). Entorno: `node`
+> (sin DOM).
 
 ---
 
@@ -102,7 +103,8 @@ test ahí); quedan acá solo como contexto histórico:
 | Umbral de carta alta (≥1000) — *Fase 4 parte 2, 2026-09-30* | `CardView.reveal()` (`value >= 1000`) | `HIGH_CASE_VALUE_MIN` + `isHighCaseValue()` en `domain/value-objects/CaseValues.ts`, spec en `CaseValues.spec.ts` (frontera 999/1000) |
 | Zonas de energía (>50 / >20, pulso crítico) — *Fase 4 parte 2, 2026-09-30* | `EnergyBarView` (`colorForPercentage`) | `EnergyZone` + `getEnergyZone()` en `domain/value-objects/EnergyLevel.ts`, fronteras 50/20 con spec en `EnergyLevel.spec.ts`; la vista solo traduce zona → color |
 | Filtro de ads de la tienda (ocultar Duplicar/Triplicar/Revivir sin rewarded) — *2026-09-30* | `ShopScene.renderUpgradesTab()` (filtraba inline con `isRewardedAdAvailable()` y `requiresRewardedAd`) | `ListAvailableUpgradesUseCase` (aplicación) + `ListAvailableUpgradesUseCase.spec.ts` (100 %); la escena solo llama `getServices(this).listAvailableUpgrades.execute()` |
-| Guard de compra por ads (fila visible con ads caídos) — *2026-09-30* | `PurchaseSessionUpgradeUseCase` cobraba sin consultar el puerto de ads | rechazo `ads_unavailable` **antes** de `spendCoins` (`crazyGamesService` como 4° parámetro, cableado en `GameScene`) + clave i18n `SHOP_UPGRADE_ADS_UNAVAILABLE`; spec de esa clase al **100 %** (28 tests) |
+| Guard de compra por ads (fila visible con ads caídos) — *2026-09-30* | `PurchaseSessionUpgradeUseCase` cobraba sin consultar el puerto de ads | rechazo `ads_unavailable` **antes** de `spendCoins` (`crazyGamesService` como 4° parámetro, cableado en `GameScene`) + clave i18n `SHOP_UPGRADE_ADS_UNAVAILABLE`; spec de esa clase al **100 %** (36 tests al
+  2026-10-01: 28 + el `it.each` de exhaustividad) |
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 
@@ -118,6 +120,17 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
    la fila muestra *"Requiere anuncio recompensado — no hay anuncios ahora."* y **no se
    descuentan monedas**; el conflicto Duplicar/Triplicar sigue mostrando su mensaje igual
    que antes.
+9. **Reembolso por SDK caído — victoria** (NO corrido): comprar Duplicar, llegar a la
+   victoria con `*crazygames-sdk-v3.js*` bloqueado → mensaje `RESULT_AD_REFUNDED`
+   (*"No ads available — your coins were refunded."*), botones Duplicar/Triplicar
+   **apagados** (alpha 0.4, sin click) y el saldo devuelto **una sola vez** (revisar
+   `localStorage` — un reintento no puede sumar dos veces).
+10. **Reembolso por SDK caído — derrota** (NO corrido): comprar Revivir, perder con el
+    SDK bloqueado → ídem: mensaje de reembolso, botón Revivir **apagado**, saldo
+    devuelto una sola vez.
+11. **Regresión feliz con SDK OK** (NO corrido): mismos ítems 9-10 sin bloquear nada →
+    el anuncio se muestra, el efecto se entrega y **no hay reembolso** (saldo sin
+    devolución).
 
 **Estado — última ejecución 2026-09-30 (smoke manual en `http://localhost:5174`):**
 ítems **5, 6 y 7 verificados** en vivo (idioma EN↔ES, abandono con penalidad −5000 que
@@ -135,17 +148,32 @@ bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
 `PurchaseSessionUpgradeUseCase.spec.ts`, falta el smoke en el navegador con el SDK
 bloqueado (misma receta del párrafo anterior).
 
-### Límites aceptados del guard de compra por ads (2026-09-30 — no son bugs de esta vuelta)
+**Ítems 9-11 (reembolso por fallo ambiental, ADR-006) agregados el 2026-10-01 y NO
+corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (10 tests) y
+`ReviveWithAdUseCase.spec.ts` (13 tests); falta el smoke en el navegador con el SDK
+bloqueado.
 
-1. **TOCTOU compra→consumo.** El guard chequea al *comprar*; si los ads caen *después*,
-   el efecto vía anuncio no se entrega: `ResultScene` (double/triple) y
-   `ReviveWithAdUseCase` no consultan `isRewardedAdAvailable()`. Cerrarlo exigiría
-   chequeo también al consumir, o reembolso automático. Aceptado por ahora.
-2. **Exhaustividad de `applyEffect`.** El `switch` de `PurchaseSessionUpgradeUseCase` no
-   tiene aserción `never`: como devuelve `void`, `noImplicitReturns` no obliga a cubrir
-   todos los casos, así que un id nuevo en la unión `SessionUpgradeId` (+ catálogo)
-   compilaría y **cobraría sin aplicar efecto**. Mitigación propuesta: un spec que
-   recorra `SESSION_UPGRADE_CATALOG` y verifique que cada id tiene rama de efecto.
+### Límites del guard de compra por ads — estado al 2026-10-01
+
+*(los dos límites aceptados el 2026-09-30; detalle del porqué en `docs/DECISIONS/ADR-006`)*
+
+1. **Exhaustividad de `applyEffect` — CERRADO (2026-10-01).** Doble cierre:
+   guarda de tipos en tiempo de compilación al final del switch (`const exhaustive: never =
+   upgradeId;`, cada `case` termina en `return;`, **sin `default`**) → un id nuevo en la
+   unión `SessionUpgradeId` **no compila**; y spec `it.each` que recorre los 8 ids de
+   `SESSION_UPGRADE_CATALOG` y afirma que la compra deja el efecto aplicado en la sesión
+   real → si mañana hay un 9.º id sin rama, el test falla. Ruptura verificada: sin un
+   `case`, typecheck pasa sin la guarda y falla con ella.
+2. **TOCTOU compra→consumo — CERRADO *parcialmente* (2026-10-01, ADR-006).** Al consumir
+   Duplicar/Triplicar/Revivir con `isAvailable()` false (**SDK entero ausente**):
+   reembolso único `awardGameplayCoins(costOf(id))`, motivo `'refunded'` y bloqueo de todo
+   reclamo posterior — **invariante reembolso XOR efecto**; `ad_failed` no reembolsa y
+   sigue reintentable; UI muestra `RESULT_AD_REFUNDED` y apaga los botones.
+   **Queda abierto — sub-caso, decisión de producto pendiente del usuario:** si el SDK
+   está pero `isRewardedAdAvailable()` es `false` (cooldown o fill muerto, p. ej. adblock
+   sobre el fill), el consumo cae en `ad_failed` → **sin** reembolso, reintento infinito y
+   el dinero queda trabado si los ads no vuelven. Cubrirlo dispararía el reembolso también
+   con esa condición (hoy solo `isAvailable()`).
 
 ---
 

@@ -170,7 +170,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
   | `'lastGameSummary'` | `GameScene` | `ResultScene` (lee y borra) |
   | `'resultScene:doubleBtn'/'tripleBtn'` | `ResultScene` | `ResultScene` (estado local en registry global) |
 
-- **i18n**: 143 claves × {en, es} en `shared/i18n/LanguageData.ts`.
+- **i18n**: 144 claves × {en, es} en `shared/i18n/LanguageData.ts`.
   Texto estático → componente `LocalizedText` (se auto-suscribe y se auto-destruye).
   Texto dinámico → `languageManager.getText('CLAVE', {param})` en cada render.
   Singleton `languageManager` es el **único** `export default` del proyecto.

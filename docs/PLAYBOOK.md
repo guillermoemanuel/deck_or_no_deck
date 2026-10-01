@@ -48,9 +48,13 @@ un literal `5000` en `OpenCardUseCase` más una constante de penalidad duplicada
 `PurchaseSessionUpgradeUseCase.applyEffect` (hardcodea el mismo `capacityMultiplier`).
 **Nada garantiza que estén sincronizados** — si cambia uno, cambia el otro.
 
-### 🔁 Premio pagado por 4 dueños distintos
-`awardGameplayCoins(prize)` aparece en `OpenCardUseCase`, `ResolveDealUseCase`,
-`SwapFinalSecretCardUseCase` y `ReviveWithAdUseCase`. Hoy es consistente.
+### 🔁 Monedas acreditadas por 6 call sites de producción (fuente única)
+`awardGameplayCoins(x)` aparece en `OpenCardUseCase`, `ResolveDealUseCase`,
+`SwapFinalSecretCardUseCase`, `ReviveWithAdUseCase` (reembolso ADR-006 + premio por
+victoria inmediata), `MultiplyRewardUseCase` (bonus + reembolso ADR-006) y
+`GameOutcomeRecorder` (recompensa del desafío). Hoy es consistente: **el único camino de
+acreditar monedas es el puerto `IProgressionService.awardGameplayCoins`** (su JSDoc
+incluye los reembolsos) — nunca sumar saldo directo desde la UI.
 
 ### 🔁 Fábrica de sesión duplicada
 `GameSessionFactory.createGameSessionWithSelection` reimplementa línea por línea
@@ -92,7 +96,7 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 7. **Orden de rechazos en `PurchaseSessionUpgradeUseCase.execute`** — cascada
    `unknown_upgrade → conflicting_upgrade → not_applicable → ads_unavailable →
    insufficient_coins → cobrar + applyEffect`. Cada precedencia tiene test
-   (`PurchaseSessionUpgradeUseCase.spec.ts`, 28 tests): agregar un chequeo nuevo **antes**
+   (`PurchaseSessionUpgradeUseCase.spec.ts`, 36 tests al 2026-10-01): agregar un chequeo nuevo **antes**
    de `spendCoins` y verificá que no pise el motivo que la UI ya traduce.
 
 ---
@@ -111,6 +115,7 @@ Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 | `OfferCalculator.bonusPercentage` (ctor) | `domain/services/` | producción siempre hace `new OfferCalculator()` |
 | `DeckManager.fromValues*` | `domain/entities/DeckManager.ts` | solo lo usan specs; producción va por la factory |
 | Comentario de penalidad tachado | `UIScene.ts` | legado de la migración a i18n |
+| Rama `wantsDouble && wantsTriple` | `ResultScene.buildWonActions` (~L263) | **Potencialmente muerta** (2026-10-01): inalcanzable con el catálogo actual — `SessionUpgradeCatalog.conflictsWith` prohíbe double+triple y `SessionUpgrades` no persiste entre partidas; los flags se calculan en vivo. **No borrada**: es la red de seguridad ante cualquier bug de lógica que otorgue ambos a la vez (si se borrara, un doble flag mostraría un solo botón). Evaluación pendiente del usuario (ADR-006 la documenta). |
 
 ---
 
@@ -132,7 +137,8 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
   (`main.ts:52`).
 - `README` §13.1 decía "6 mazos" → hay **10** (ids en `DeckSetups.ts`).
 - `README` §14.2 decía "57 claves i18n" → había **142** (284 líneas de clave ÷ 2 idiomas);
-  con el guard de compra por ads (mismo día) son **143** (286 ÷ 2).
+  con el guard de compra por ads (mismo día) son **143** (286 ÷ 2) — con el reembolso por
+  fallo ambiental (2026-10-01, `RESULT_AD_REFUNDED`) son **144** (288 ÷ 2).
 - `README` daba el evento `UpgradePurchased` por vivo → **nunca se emite**.
 - El árbol de directorios del `README` nombraba `Money`, `EnergyBar`, `Upgrade` → no
   existen (ADR-002).

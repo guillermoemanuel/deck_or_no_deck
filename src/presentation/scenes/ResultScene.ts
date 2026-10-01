@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { getServices, GameServices } from '../GameServices';
 import { ResultSceneData, ResultOutcome } from './ResultScene.types';
 import { MultiplyRewardUseCase, RewardMultiplier } from '../../application/use-cases/MultiplyRewardUseCase';
+import { ReviveResult } from '../../application/use-cases/ReviveWithAdUseCase';
 import { ParticleManager } from '../components/ParticleManager';
 import { LocalizedText } from '../components/LocalizedText';
 import { GameSummary } from '../../application/records/GameOutcomeRecorder';
@@ -20,6 +21,10 @@ const COLOR_WHITE_HEX = '#ffffff';
 const COLOR_LOSS_ACCENT = 0xff4d6d;
 const COLOR_PANEL_BG = 0x0a0f1d;
 const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
+
+/** Motivos de fallo de `ReviveResult` — el caso `revived: true` se resuelve
+ * antes (la escena ya la detuvo GameSceneController) y nunca llega acá. */
+type ReviveFailureReason = Extract<ReviveResult, { revived: false }>['reason'];
 
 /**
  * ResultScene: Pantalla modal de Victoria / Derrota, estilo "Casino de
@@ -228,6 +233,13 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   private buildWonActions(data: ResultSceneData): void {
     const { width, height } = this.cameras.main;
     const baseAmount = data.amount ?? 0;
+    // El flag `refunded` (invariante reembolso XOR efecto) vive en ESTA
+    // instancia del use-case, que se recrea en cada create(): si algún día
+    // se relanzara ResultScene con `outcome: 'won'` dentro de la MISMA
+    // partida, la instancia nueva nacería sin el flag y habilitaría un
+    // segundo reembolso. Hoy no es alcanzable porque el modal `won` es
+    // terminal ("Jugar de nuevo"/"Salir" arrancan una sesión nueva, con
+    // su GameSession y su use-case propios).
     this.multiplyUseCase = new MultiplyRewardUseCase(baseAmount, this.services.crazyGamesService, this.services.progressionManager);
 
     // Upgrades "Duplicar"/"Triplicar": son consumibles de esta partida —
@@ -236,9 +248,11 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     // Son mutuamente excluyentes desde la Tienda (ver
     // PurchaseSessionUpgradeUseCase / SessionUpgradeCatalog.conflictsWith):
     // no debería llegar a haber comprado ambos en la misma partida. La rama
-    // `wantsDouble && wantsTriple` queda igual como red de seguridad (por
-    // si alguna partida vieja, comprada antes de este cambio, todavía trae
-    // los dos flags en `sessionStorage`/memoria).
+    // `wantsDouble && wantsTriple` queda como red de seguridad ante
+    // CUALQUIER bug de lógica que otorgue ambos a la vez — no ante datos
+    // viejos persistidos: `SessionUpgrades` no se serializa (se crea fresco
+    // en cada GameSession) y estos flags se calculan en vivo en
+    // `buildUpgradeFlagsForResultScene`, sin pasar por storage.
     const multiplyRowY = height / 2 + 20;
     const wantsDouble = data.hasDoubleReward === true;
     const wantsTriple = data.hasTripleReward === true;
@@ -280,18 +294,40 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
 
     // Upgrade "Revivir": solo se ofrece si se compró en esta partida.
     if (data.hasReviveUpgrade === true) {
-      this.createActionButton(width / 2, height / 2 - 5, 'RESULT_REVIVE_BUTTON', COLOR_GOLD, COLOR_GOLD_DIM, async () => {
+      // El contenedor se guarda en una variable local del closure (mismo
+      // rol que el registry de doubleBtn/tripleBtn, pero acá el disable
+      // ocurre DENTRO del propio callback): si el consumo termina en
+      // reembolso hay que poder apagar el botón desde ahí mismo.
+      const reviveBtn = this.createActionButton(width / 2, height / 2 - 5, 'RESULT_REVIVE_BUTTON', COLOR_GOLD, COLOR_GOLD_DIM, async () => {
         if (!data.onRevive) return;
         this.statusText.setText(languageManager.getText('RESULT_AD_LOADING'));
-        const outcome = (await data.onRevive()) as { revived?: boolean; reason?: string } | undefined;
+        const outcome = (await data.onRevive()) as ReviveResult | undefined;
         // Si revivió, GameSceneController ya detuvo esta escena: tocar
         // `statusText` acá lanzaría un error sobre un objeto destruido.
         if (outcome?.revived === true || !this.scene.isActive()) {
           return;
         }
+        const reason: ReviveFailureReason | undefined =
+          outcome?.revived === false ? outcome.reason : undefined;
         this.statusText.setText(
-          languageManager.getText(outcome?.reason === 'sdk_unavailable' ? 'RESULT_AD_UNAVAILABLE' : 'RESULT_AD_FAILED')
+          languageManager.getText(
+            // 'sdk_unavailable' sigue siendo posible (use-case construido
+            // sin puerto de progresión): ahí NO se reembolsa y la jugada
+            // queda reintentable, por eso el botón solo se apaga en 'refunded'.
+            reason === 'sdk_unavailable'
+              ? 'RESULT_AD_UNAVAILABLE'
+              : reason === 'refunded'
+                ? 'RESULT_AD_REFUNDED'
+                : 'RESULT_AD_FAILED'
+          )
         );
+        if (reason === 'refunded') {
+          // Causa raíz: el costo YA se reembolsó (invariante reembolso XOR
+          // efecto) y el use-case bloquea cualquier revive posterior — el
+          // botón dejaría prometiendo "Revivir" sin poder entregar nada, así
+          // que se apaga (mismo estilo que disableMultiplyButtons).
+          this.disableActionButton(reviveBtn);
+        }
       });
     }
 
@@ -316,17 +352,28 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
       this.disableMultiplyButtons();
     } else {
       this.statusText.setText(this.errorMessageFor(result.reason));
+      // Causa raíz: con 'refunded' el costo ya se devolvió UNA sola vez y
+      // el use-case bloquea cualquier reclamo posterior (reembolso XOR
+      // efecto) — el botón seguiría diciendo "Duplicar x2"/"Triplicar x3"
+      // sin poder entregar nada, así que se apaga y solo queda el mensaje
+      // re-explicando la devolución.
+      if (result.reason === 'refunded') {
+        this.disableMultiplyButtons();
+      }
     }
   }
 
-  private errorMessageFor(reason: 'ad_failed' | 'sdk_unavailable' | 'already_claimed'): string {
+  // Firmado espejo de `MultiplyRewardResult` (ya no incluye
+  // 'sdk_unavailable': esa rama del multiply devuelve 'refunded' — el
+  // 'sdk_unavailable' del revive se maneja aparte en buildLostActions).
+  private errorMessageFor(reason: 'ad_failed' | 'already_claimed' | 'refunded'): string {
     switch (reason) {
       case 'ad_failed':
         return  languageManager.getText('RESULT_AD_FAILED');
-      case 'sdk_unavailable':
-        return languageManager.getText('RESULT_AD_UNAVAILABLE');
       case 'already_claimed':
         return languageManager.getText('RESULT_AD_ALREADY_CLAIMED');
+      case 'refunded':
+        return languageManager.getText('RESULT_AD_REFUNDED');
     }
   }
 
@@ -334,12 +381,20 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     const doubleBtn = this.registry.get('resultScene:doubleBtn') as Phaser.GameObjects.Container | undefined;
     const tripleBtn = this.registry.get('resultScene:tripleBtn') as Phaser.GameObjects.Container | undefined;
 
-    [doubleBtn, tripleBtn].forEach(btn => {
-      if (btn) {
-        btn.setAlpha(0.4);
-        btn.list.forEach(child => child.disableInteractive?.());
-      }
-    });
+    [doubleBtn, tripleBtn].forEach(btn => this.disableActionButton(btn));
+  }
+
+  /**
+   * Estado "agotado" de un botón de acción: alpha atenuado a 0.4 y sin
+   * interactividad en los hijos (la zona de click vive como `zone` dentro
+   * del contenedor). Compartido por Duplicar/Triplicar y por Revivir para
+   * que las dos deshabilitaciones sean visualmente idénticas.
+   */
+  private disableActionButton(btn: Phaser.GameObjects.Container | undefined): void {
+    if (btn) {
+      btn.setAlpha(0.4);
+      btn.list.forEach(child => child.disableInteractive?.());
+    }
   }
 
   /**

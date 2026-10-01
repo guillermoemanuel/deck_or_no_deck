@@ -109,3 +109,17 @@ export const SESSION_UPGRADE_CATALOG: readonly SessionUpgradeDefinition[] = [
 export function findSessionUpgradeDefinition(id: SessionUpgradeId): SessionUpgradeDefinition | undefined {
   return SESSION_UPGRADE_CATALOG.find(u => u.id === id);
 }
+
+/**
+ * Costo publicado de una mejora — ÚNICA fuente del monto para use-cases y
+ * specs (AGENTS.md §4: los precios de la Tienda nunca se hardcodean).
+ * Lanza si el id no existe: para un id de la unión `SessionUpgradeId` eso
+ * es un bug de configuración del catálogo, no un resultado esperado.
+ */
+export function costOf(id: SessionUpgradeId): number {
+  const definition = findSessionUpgradeDefinition(id);
+  if (!definition) {
+    throw new Error(`Upgrade inexistente en el catálogo: ${id}`);
+  }
+  return definition.cost;
+}

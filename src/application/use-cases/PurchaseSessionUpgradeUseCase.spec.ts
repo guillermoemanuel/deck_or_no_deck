@@ -4,7 +4,11 @@ import { Banker } from '../../domain/services/Banker';
 import { OfferCalculator } from '../../domain/services/OfferCalculator';
 import { Card } from '../../domain/entities/Card';
 import { GameEvent } from '../../domain/events/GameEvents';
-import { findSessionUpgradeDefinition, SessionUpgradeId } from '../../domain/value-objects/SessionUpgradeCatalog';
+import {
+  costOf,
+  SessionUpgradeId,
+  SESSION_UPGRADE_CATALOG
+} from '../../domain/value-objects/SessionUpgradeCatalog';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { ProgressionManager } from '../../infrastructure/persistence/ProgressionManager';
 import { FakeProgressionRepository } from '../../infrastructure/persistence/testing/FakeProgressionRepository';
@@ -54,21 +58,9 @@ function buildContext(seedCoins = 100000, rewardedAdsAvailable = true) {
   return { session, repository, progressionManager, eventBus, crazyGamesService, useCase };
 }
 
-/**
- * BUGFIX (specs rojos tras el rebalanceo de precios de DOND_BETA.1.3.1):
- * los costos se leen del catálogo real en vez de hardcodearlos en cada
- * aserción. Este spec verifica que el use-case COBRE el costo publicado
- * (y que lo cobre una sola vez), no cuánto cuesta cada mejora — eso lo
- * decide SessionUpgradeCatalog. Así, un ajuste de precios deja de dejar
- * esta suite en rojo por desincronización entre catálogo y spec.
- */
-function costOf(id: SessionUpgradeId): number {
-  const definition = findSessionUpgradeDefinition(id);
-  if (!definition) {
-    throw new Error(`Upgrade inexistente en el catálogo: ${id}`);
-  }
-  return definition.cost;
-}
+// Los costos se leen de costOf() (fuente única en SessionUpgradeCatalog):
+// este spec verifica que el use-case COBRE el costo publicado, no cuánto
+// cuesta cada mejora — eso lo decide el catálogo (AGENTS.md §4).
 
 describe('PurchaseSessionUpgradeUseCase', () => {
   it('returns unknown_upgrade for an invalid id', () => {
@@ -132,7 +124,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
   });
 
   describe('double_reward / triple_reward', () => {
-    it('triple_reward costs exactly double double_reward (regla de diseño)', () => {
+    it('triple_reward costs exactly double double_reward (design rule)', () => {
       // Verificado contra el catalogo real, no un valor hardcodeado aparte.
       const { repository, useCase: useCaseA } = buildContext();
       useCaseA.execute('double_reward');
@@ -319,7 +311,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(false);
     });
 
-    it('still charges negotiator with ads unavailable (el filtro es por requiresRewardedAd del catálogo, no por lo que la tienda muestra)', () => {
+    it('still charges negotiator with ads unavailable (the filter uses requiresRewardedAd from the catalog, not what the shop displays)', () => {
       const { session, repository, useCase } = buildContext(100000, false);
 
       const result = useCase.execute('negotiator');
@@ -329,7 +321,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(repository.getCoins()).toBe(100000 - costOf('negotiator'));
     });
 
-    it('conflicting_upgrade still wins over ads_unavailable (la precedencia de los chequeos existentes no cambia)', () => {
+    it('conflicting_upgrade still wins over ads_unavailable (the precedence of the existing checks does not change)', () => {
       const { repository, crazyGamesService, useCase } = buildContext();
       useCase.execute('double_reward');
       const coinsAfterDouble = repository.getCoins();
@@ -350,7 +342,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
     // precedencia estuviera mal ubicada. La precedencia real queda cubierta por
     // el de revive (abajo), cuyo id SÍ requiere ads.
 
-    it('not_applicable también gana para una mejora QUE requiere ads (revivir repetido con los ads cortados)', () => {
+    it('not_applicable also wins for an upgrade THAT requires ads (repeat revive with ads cut off)', () => {
       const { repository, crazyGamesService, useCase } = buildContext();
       useCase.execute('revive');
       const coinsAfterRevive = repository.getCoins();
@@ -362,7 +354,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(repository.getCoins()).toBe(coinsAfterRevive);
     });
 
-    it('ads_unavailable wins over insufficient_coins (poco saldo y ads cortados)', () => {
+    it('ads_unavailable wins over insufficient_coins (low balance and ads cut off)', () => {
       // Saldo deliberadamente menor al costo: si alguien invirtiera el orden
       // (spendCoins antes del gate de ads), el jugador con poco saldo vería
       // 'insufficient_coins' en vez del motivo real — la fila quedó visible
@@ -377,7 +369,7 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(false);
     });
 
-    it('with ads available double_reward is purchased normally (paridad con el comportamiento actual)', () => {
+    it('with ads available double_reward is purchased normally (parity with current behavior)', () => {
       const { session, repository, useCase } = buildContext();
 
       const result = useCase.execute('double_reward');
@@ -385,6 +377,62 @@ describe('PurchaseSessionUpgradeUseCase', () => {
       expect(result).toEqual({ success: true });
       expect(session.getSessionUpgrades().isOwned('double_reward')).toBe(true);
       expect(repository.getCoins()).toBe(100000 - costOf('double_reward'));
+    });
+  });
+
+  // Límite aceptado #2 de docs/testing.md: el switch de applyEffect
+  // devuelve `void`, así que TypeScript NO exige que cubra todos los
+  // SessionUpgradeId — un id NUEVO en el catálogo compilaría, pasaría por
+  // spendCoins y NO aplicaría ningún efecto. Este spec recorre
+  // SESSION_UPGRADE_CATALOG (ids leídos del catálogo, nada hardcodeado) y
+  // afirma que cada compra deja un rastro observable en el estado REAL de
+  // la partida: si mañana aparece un 9º id sin rama en applyEffect, acá
+  // falla.
+  describe('applyEffect cubre todo el catálogo', () => {
+    const catalogIds = SESSION_UPGRADE_CATALOG.map(definition => definition.id);
+
+    /** Los dos ids cuyo efecto NO es un flag sino subir la capacidad del tanque. */
+    const ENERGY_TANK_IDS: readonly SessionUpgradeId[] = ['energy_tank_1', 'energy_tank_2'];
+
+    /**
+     * Techo de la barra de energía: GameSession no lo expone directamente,
+     * se deriva de los dos observables reales (valor crudo y porcentaje
+     * sobre la base, que ES el techo — ver EnergyLevel.toPercentageOfBase).
+     * No se hardcodea 125/150: si cambian los multiplicadores del tanque,
+     * esta derivación sigue leyendo el estado post-compra.
+     */
+    function energyCeilingOf(session: GameSession): number {
+      return session.getEnergyRaw() / (session.getEnergyPercentage() / 100);
+    }
+
+    it.each(catalogIds)('%s: the purchase leaves its effect applied on the session', id => {
+      const { session, useCase } = buildContext();
+
+      // Prerequisito de secuencia: energy_tank_2 solo es comprable desde el
+      // nivel 1 (SessionUpgrades.canPurchase). Se resuelve de forma genérica
+      // — si el id NO es comprable en una sesión fresca, antes se compra el
+      // nivel anterior — en vez de ramificar por id. De paso cubre el caso
+      // "comprar el segundo nivel del tanque después del primero".
+      if (!session.getSessionUpgrades().canPurchase(id)) {
+        expect(useCase.execute('energy_tank_1')).toEqual({ success: true });
+      }
+
+      const tankLevelBefore = session.getSessionUpgrades().getEnergyTankLevel();
+      const ceilingBefore = energyCeilingOf(session);
+
+      const result = useCase.execute(id);
+
+      expect(result).toEqual({ success: true });
+      // Efecto observable para TODOS los ids: la mejora queda adquirida
+      // (SessionUpgrades.isOwned es la única fuente de "¿ya lo tengo?").
+      expect(session.getSessionUpgrades().isOwned(id)).toBe(true);
+
+      if (ENERGY_TANK_IDS.includes(id)) {
+        // El efecto de los tanques no es un flag: es subir el TECHO de la
+        // barra (EnergyLevel.withNewCeiling) y avanzar el nivel real.
+        expect(session.getSessionUpgrades().getEnergyTankLevel()).toBeGreaterThan(tankLevelBefore);
+        expect(energyCeilingOf(session)).toBeGreaterThan(ceilingBefore);
+      }
     });
   });
 });

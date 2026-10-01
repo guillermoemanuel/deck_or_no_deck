@@ -7,6 +7,80 @@
 
 ---
 
+## 2026-10-01 · Cierre de los dos límites aceptados (exhaustividad + reembolso por fallo ambiental)
+
+**Tarea:** cerrar documentalmente los dos "límites aceptados" que `docs/testing.md` §5
+dejó abiertos el 2026-09-30, y registrar la decisión de producto asociada (ADR-006).
+
+**Qué y por qué (código ya implementado; gates verificados por `qa` VERDE y `reviewer`
+APROBADO):**
+
+- **Límite A — exhaustividad de `applyEffect`.** El switch de
+  `PurchaseSessionUpgradeUseCase` cierra con una guarda de tipos en tiempo de
+  **compilación** (`const exhaustive: never = upgradeId; void exhaustive;`, con los
+  `break` cambiados a `return;` y **sin `default`**): un 9.º id en `SessionUpgradeId` ya
+  no compila. Complemento en runtime: spec `it.each` que recorre los **8** ids de
+  `SESSION_UPGRADE_CATALOG` y afirma que la compra deja el efecto observable en la sesión
+  real — si mañana hay un 9.º id sin rama, ese test falla. Ruptura verificada: sin un
+  `case`, typecheck pasa **sin** la guarda y falla **con** ella.
+- **Límite B — TOCTOU compra→consumo → reembolso por fallo ambiental** (decisión de
+  producto del usuario, elegida sobre "conceder sin anuncio" y "solo documentar"). Al
+  consumir Duplicar/Triplicar/Revivir, si `isAvailable()` es `false` (SDK entero ausente):
+  `awardGameplayCoins(costOf(id))` **una sola vez**, motivo `'refunded'` (nuevo en las
+  uniones `MultiplyRewardResult` y `ReviveResult`) y todo intento posterior devuelve
+  `'refunded'` sin efecto — **invariante reembolso XOR efecto** (nunca ambos: sería
+  explotable). `ad_failed` (cancelación del jugador o fill muerto) **no** reembolsa y
+  sigue reintentable. UI: clave nueva **`RESULT_AD_REFUNDED`** (en/es) en `ResultScene` y
+  botones apagados al reembolsar (helper `disableActionButton`). `costOf(id)` pasó a ser
+  el helper único de dominio del monto (`SessionUpgradeCatalog`).
+
+**Cambio por archivo (11 modificados, medido con `git status`/`git diff --stat`):**
+
+- **Código (11):** `application/use-cases/PurchaseSessionUpgradeUseCase.ts` (guard
+  `never` + `return;`) y su `.spec.ts` (**36 tests**: 28 + `it.each` de 8 ids);
+  `application/use-cases/MultiplyRewardUseCase.ts` (refundo + `refunded`) y su
+  `.spec.ts` (**10**); `application/use-cases/ReviveWithAdUseCase.ts` (refundo, motivo
+  `refunded`, puerto de progresión opcional) y su `.spec.ts` (**13**);
+  `application/use-cases/ListAvailableUpgradesUseCase.spec.ts` (solo títulos `it`);
+  `domain/ports/IProgressionService.ts` (JSDoc de `awardGameplayCoins` ampliado a
+  reembolsos); `domain/value-objects/SessionUpgradeCatalog.ts` (+`costOf()`);
+  `presentation/scenes/ResultScene.ts` (483 → **538 L**: `RESULT_AD_REFUNDED`,
+  `disableActionButton`, caveats); `shared/i18n/LanguageData.ts` (+1 clave en `en` y `es`
+  → **144**).
+- **Docs (8):** `AGENTS.md` (§3: 144 claves; §4: invariante reembolso XOR);
+  `docs/DECISIONS/ADR-006-reembolso-por-fallo-ambiental.md` (nuevo) + su fila en el índice
+  `docs/DECISIONS/README.md`; `docs/testing.md`
+  (límites 1/2 → cerrados + 3 ítems de smoke nuevos **no corridos** + conteos);
+  `docs/ARCHITECTURE.md` (144 claves); `docs/MAP.md` (censo y LOC); `docs/PLAYBOOK.md`
+  (rama `wantsDouble && wantsTriple`, call sites de `awardGameplayCoins`); `docs/LOG.md`
+  (esta entrada).
+
+**Gates finales (reportados por `qa`, VERDE):** **38 suites / 449 tests** · typecheck 0 ·
+lint 0 · cobertura por capa verde. **Conteos medidos por mí:** 38 `*.spec.ts` · 428
+declaraciones `it(`/`test(` + 21 filas de 2 `it.each` (13 + 8) = 449 · **144** claves por
+idioma en `LanguageData.ts` (288 líneas de clave ÷ 2; paridad en/es garantida por
+`LanguageData.spec.ts`) · 148 archivos TS · **21.132** líneas.
+
+**Hallazgos del `reviewer` y cómo se cerraron:** 2 **bloqueantes** — documentación y ADR
+faltantes (esta entrada + `ADR-006`); 5 **medios** — (1) case muerto `'sdk_unavailable'`
+en `MultiplyRewardUseCase` eliminado (el multiply reembolsa, ya no lo devuelve);
+(2) comentarios que exageraban el alcance del reembolso **precisados** a "solo SDK
+ausente"; (3) precondición del multiply ("la mejora debe estar comprada") **documentada**
+en su JSDoc — el use-case no recibe la sesión y reembolsa a ciegas; (4) caveat de vida
+del flag `refunded` (ligado a la instancia que `ResultScene` recrea en `create()`)
+agregado en la escena; (5) comentario falso sobre `sessionStorage` **corregido** —
+`SessionUpgrades` no persiste, los flags se calculan en vivo; 1 **bajo** — títulos `it`
+traducidos a inglés.
+
+**Queda ABIERTO (redefinido, no borrado — sub-caso del límite 2 en `testing.md`):** el
+reembolso cubre **solo SDK ausente**. Si el SDK está pero `isRewardedAdAvailable()` es
+`false` (cooldown/fill muerto), el consumo cae en `ad_failed` → sin reembolso, reintento
+infinito y, si los ads no vuelven, el dinero queda trabado. **Decisión de producto
+pendiente del usuario** si se cubre ese caso (la condición del reembolso sería
+`isRewardedAdAvailable()`).
+
+---
+
 ## 2026-09-30 · Guard de compra por ads (deuda del reviewer de la Fase 4)
 
 **Tarea:** cerrar documentalmente el guard que impide comprar mejoras dependientes de

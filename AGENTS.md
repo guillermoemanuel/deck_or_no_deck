@@ -49,7 +49,7 @@ Verificación: `grep -rn "from '\.\./" src/domain` → vacío.
 | `presentation/scenes/ShopScene.ts` | escena de 771 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades`); compra de mazos sin use-case |
 | `domain/entities/GameSession.ts` | raíz del agregado + `EnergyDrainRule` |
 | `main.ts` | composition root global + anti-cheat de `beforeunload` |
-| `shared/i18n/LanguageData.ts` | 143 claves; agregá siempre `en` **y** `es` |
+| `shared/i18n/LanguageData.ts` | 144 claves; agregá siempre `en` **y** `es` |
 
 Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 
@@ -62,6 +62,9 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.
 - Costos de tienda: los define `SessionUpgradeCatalog.ts`; los tests usan `costOf(id)`, **nunca precios hardcodeados**.
 - Bono periódico: 12 h cooldown + 24 h ventana; cartas `[500…5000]` (ADR-005).
+- Reembolso XOR efecto (ADR-006): consumir Duplicar/Triplicar/Revivir con el **SDK ausente**
+  reembolsa `costOf(id)` **una sola vez** y bloquea el reclamo (`'refunded'`);
+  `ad_failed` **no** reembolsa y sigue reintentable.
 
 ## 5. Eventos
 

@@ -118,7 +118,7 @@ export class PurchaseSessionUpgradeUseCase {
           capacityMultiplier: 1.25,
           energyPercentage: this.session.getEnergyPercentage()
         });
-        break;
+        return;
       case 'energy_tank_2':
         this.session.applyEnergyTankUpgrade(2);
         this.eventBus.emit({
@@ -126,16 +126,16 @@ export class PurchaseSessionUpgradeUseCase {
           capacityMultiplier: 1.5,
           energyPercentage: this.session.getEnergyPercentage()
         });
-        break;
+        return;
       case 'double_reward':
         upgrades.grantDoubleReward();
-        break;
+        return;
       case 'triple_reward':
         upgrades.grantTripleReward();
-        break;
+        return;
       case 'revive':
         upgrades.grantRevive();
-        break;
+        return;
       case 'secret_swap_final':
         upgrades.grantSecretSwapFinal();
         // BUGFIX (secret_swap_final comprado en la última jugada): la
@@ -154,13 +154,32 @@ export class PurchaseSessionUpgradeUseCase {
         if (this.session.canSwapFinalSecretCard()) {
           this.eventBus.emit({ type: 'FinalCardSwapAvailable' });
         }
-        break;
+        return;
       case 'negative_card_shield':
         upgrades.grantNegativeCardShield();
-        break;
+        return;
       case 'negotiator':
         upgrades.grantNegotiator();
-        break;
+        return;
     }
+
+    // Guarda de exhaustividad en tiempo de COMPILACIÓN. Causa raíz (límite
+    // aceptado #2 de docs/testing.md): applyEffect devuelve `void`, así que
+    // ni `noImplicitReturns` ni el chequeo de tipos exigen que el switch
+    // cubra todos los SessionUpgradeId — un id NUEVO en la unión (+ su
+    // entrada en el catálogo) compilaría, pasaría por spendCoins y NO
+    // aplicaría ningún efecto, violando el contrato del use-case ("el
+    // dinero nunca se descuenta sin que el efecto se aplique").
+    //
+    // Por eso cada case termina en `return;` y no en `break;`: con `break`,
+    // TypeScript une al final del switch las estrecheces de TODAS las ramas
+    // (los 8 literales = la unión completa) y esta asignación a `never`
+    // fallaría siempre. Con `return`, la ÚNICA ruta que llega hasta acá es
+    // "ningún case matcheó": si el switch es exhaustivo esa ruta es `never`
+    // y compila; si falta un caso, acá queda el literal faltante y `tsc`
+    // tira TS2322. Si esta línea deja de compilar, falta una rama en el
+    // switch de arriba: agregarla — no un `default` que la oculte.
+    const exhaustive: never = upgradeId;
+    void exhaustive;
   }
 }

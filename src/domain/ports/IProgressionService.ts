@@ -16,7 +16,10 @@ export type PurchaseDeckResult =
 export interface IProgressionService {
   getCoins(): number;
 
-  /** Acredita monedas persistentes (premios de partida, bonus de anuncios). */
+  /**
+   * Acredita monedas persistentes (premios de partida, bonus de anuncios
+   * y reembolsos de mejoras que no se pudieron entregar).
+   */
   awardGameplayCoins(amount: number): void;
 
   /** Descuenta monedas persistentes si el saldo alcanza; false si no. */

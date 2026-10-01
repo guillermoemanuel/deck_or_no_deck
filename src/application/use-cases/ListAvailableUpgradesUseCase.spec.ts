@@ -10,7 +10,7 @@ function idsOf(result: readonly { readonly id: SessionUpgradeId }[]): SessionUpg
 }
 
 describe('ListAvailableUpgradesUseCase', () => {
-  it('con rewarded ads disponibles devuelve los 8 ids del catálogo, en el mismo orden', () => {
+  it('with rewarded ads available it returns the 8 catalog ids, in the same order', () => {
     const crazyGamesService = new FakeCrazyGamesService();
     const useCase = new ListAvailableUpgradesUseCase(crazyGamesService);
 
@@ -20,7 +20,7 @@ describe('ListAvailableUpgradesUseCase', () => {
     expect(idsOf(result)).toEqual(SESSION_UPGRADE_CATALOG.map(u => u.id));
   });
 
-  it('con rewarded ads NO disponibles devuelve exactamente 5, sin double_reward, triple_reward ni revive', () => {
+  it('with rewarded ads NOT available it returns exactly 5, without double_reward, triple_reward nor revive', () => {
     const crazyGamesService = new FakeCrazyGamesService();
     crazyGamesService.setRewardedAvailable(false);
     const useCase = new ListAvailableUpgradesUseCase(crazyGamesService);
@@ -33,7 +33,7 @@ describe('ListAvailableUpgradesUseCase', () => {
     expect(ids).not.toContain('revive');
   });
 
-  it('devuelve exactamente SESSION_UPGRADE_CATALOG filtrado: mismos objetos y mismo orden, sin clonar', () => {
+  it('returns exactly the filtered SESSION_UPGRADE_CATALOG: same objects and same order, without cloning', () => {
     const crazyGamesService = new FakeCrazyGamesService();
     const useCase = new ListAvailableUpgradesUseCase(crazyGamesService);
 
@@ -60,7 +60,7 @@ describe('ListAvailableUpgradesUseCase', () => {
     });
   });
 
-  it('misma instancia del use-case: al volver la disponibilidad reaparecen las 8 mejoras solas', () => {
+  it('same use-case instance: when availability comes back, all 8 upgrades reappear on their own', () => {
     const crazyGamesService = new FakeCrazyGamesService();
     const useCase = new ListAvailableUpgradesUseCase(crazyGamesService);
 

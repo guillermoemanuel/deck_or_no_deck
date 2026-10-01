@@ -15,3 +15,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [003](ADR-003-use-cases-dependen-de-progressionmanager.md) | Los use-cases dependen de `ProgressionManager` (infra), no del puerto crudo | Aceptada |
 | [004](ADR-004-idioma-manual-se-persiste-siempre.md) | La elección manual de idioma se persiste siempre | Aceptada |
 | [005](ADR-005-bono-periodico-sin-premio-cero.md) | El bono periódico ya no puede dar 0 | Aceptada |
+| [006](ADR-006-reembolso-por-fallo-ambiental.md) | Reembolso por fallo ambiental al consumir una mejora de ads | Aceptada |

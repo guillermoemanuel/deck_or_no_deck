@@ -1,4 +1,5 @@
 import { MultiplyRewardUseCase } from './MultiplyRewardUseCase';
+import { costOf } from '../../domain/value-objects/SessionUpgradeCatalog';
 import { ProgressionManager } from '../../infrastructure/persistence/ProgressionManager';
 import { FakeProgressionRepository } from '../../infrastructure/persistence/testing/FakeProgressionRepository';
 import { DeterministicRandomProvider } from '../../infrastructure/services/testing/DeterministicRandomProvider';
@@ -82,33 +83,98 @@ describe('MultiplyRewardUseCase', () => {
     expect(firstResult.success).toBe(true);
   });
 
-  it('returns { success: false, reason: "sdk_unavailable" } without awarding coins', async () => {
+  // Decisión de producto: reembolso por FALLO AMBIENTAL (TOCTOU
+  // compra→consumo de docs/testing.md). La tienda ya cobró la mejora y el
+  // SDK de CrazyGames no está al consumirla: sin reembolso el jugador se
+  // iba de la pantalla con las monedas perdidas y nada a cambio.
+  it('refunds the upgrade cost exactly once when the SDK is not available ("refunded")', async () => {
     const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
     const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
     const crazyGamesService = new FakeCrazyGamesService();
     crazyGamesService.setAvailable(false);
     const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
 
+    // Simula la compra previa en la Tienda: el monto sale del catálogo,
+    // nunca hardcodeado.
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+
     const result = await useCase.execute(2);
 
-    expect(result).toEqual({ success: false, reason: 'sdk_unavailable' });
-    expect(repository.getCoins()).toBe(0);
+    expect(result).toEqual({ success: false, reason: 'refunded' });
+    // El saldo vuelve EXACTAMENTE al anterior a la compra: ni un moneda de más.
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
   });
 
-  it('returns { success: false, reason: "ad_failed" } and allows a retry afterward', async () => {
+  it('refunds costOf("triple_reward") — not the double one — when the triple multiplier hits the missing SDK', async () => {
     const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setAvailable(false);
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('triple_reward'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    const result = await useCase.execute(3);
+
+    expect(result).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    // El monto reembolsado es EXACTAMENTE costOf("triple_reward").
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('triple_reward'));
+  });
+
+  // Invariante reembolso XOR efecto: tras cobrar devuelta, el reclamo
+  // queda bloqueado para SIEMPRE — si el efecto pudiera otorgarse igual,
+  // sería explotable (fallar a propósito, cobrar devuelta y reclamar el
+  // anuncio cuando vuelva).
+  it('blocks the effect after a refund: a later attempt with the SDK back returns "refunded" and pays nothing', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setAvailable(false);
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    progressionManager.spendCoins(costOf('double_reward'));
+    const firstAttempt = await useCase.execute(2);
+    expect(firstAttempt).toEqual({ success: false, reason: 'refunded' });
+    const balanceAfterRefund = repository.getCoins();
+
+    // El SDK vuelve: el reclamo NO se otorga y el monto no se acredita dos veces.
+    crazyGamesService.setAvailable(true);
+    const secondAttempt = await useCase.execute(2);
+
+    expect(secondAttempt).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceAfterRefund);
+  });
+
+  it('returns { success: false, reason: "ad_failed" } WITHOUT any refund and allows a retry afterward', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
     const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
     const crazyGamesService = new FakeCrazyGamesService();
     crazyGamesService.setNextAdResult({ success: false, reason: 'ad_unavailable' });
     const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
 
+    // El jugador canceló o no completó el anuncio: es SU elección, no un
+    // fallo ambiental — no se reembolsa y el botón sigue reintentable.
+    progressionManager.spendCoins(costOf('double_reward'));
+    const balanceAfterPurchase = repository.getCoins();
+
     const failedAttempt = await useCase.execute(2);
     expect(failedAttempt).toEqual({ success: false, reason: 'ad_failed' });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
     expect(useCase.isClaimed()).toBe(false);
 
     crazyGamesService.setNextAdResult({ success: true });
     const retryAttempt = await useCase.execute(2);
     expect(retryAttempt).toMatchObject({ success: true, bonusAwarded: 1000 });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase + 1000);
   });
 
   it('newTotal in the result reflects the actual repository balance after the bonus', async () => {
