@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-01 · Smoke 9-11 verificado en vivo (reembolso + cooldown, ADR-006)
+
+**Qué se tocó:** solo `docs/testing.md` (ítems 9-11 marcados *verificado 2026-10-01*,
+estado de cabecera actualizado, receta y resultados del smoke) y esta entrada. Nada en
+`src/`.
+
+**Cómo se verificó (smoke manual guiado en `http://localhost:5174`):**
+- **Receta nueva:** el SDK se derrumba **en caliente** desde la consola
+  (`window.__cg = window.CrazyGames; window.CrazyGames = null;`) en vez de bloquear
+  `*crazygames-sdk-v3.js*` en DevTools — eso exigiría recargar y mataría la sesión en
+  curso (la tienda compra sobre la sesión activa). Funciona porque
+  `CrazyGamesService.isAvailable()` relee `window.CrazyGames?.SDK?.ad` en cada llamada.
+- **Ítem 9 (victoria):** Duplicar comprado con SDK OK → consumido con SDK caído →
+  `RESULT_AD_REFUNDED`, botones apagados, saldo devuelto **una sola vez** (re-click sin
+  segundo abono). ✔
+- **Ítem 10 (derrota):** ídem con Revivir (energía a 0) → `RESULT_AD_REFUNDED`, botón
+  apagado, saldo devuelto una sola vez. ✔
+- **Ítem 11 (SDK OK):** el SDK real **abrió el anuncio** (caso A) y al terminar el efecto
+  se entregó **sin reembolso**; cancelar y recomendar dentro de los 60 s →
+  `RESULT_AD_COOLDOWN` con los botones **vivos**, y a los 60 s el reintento volvió a
+  pedir el anuncio. ✔
+
+**Qué quedó pendiente:** smoke ítems **1-4** (partida completa, swap, revivir con anuncio,
+tienda) y **8** (guard de compra con el SDK bloqueado vía DevTools — la receta de esa
+página); Vite 8; archivos `.opencode/` sin commitear; naming canónico del título.
+
+---
+
 ## 2026-10-01 · ADR-006 enmendado: motivo en el puerto + 2 políticas de reembolso
 
 **Tarea:** sincronizar documentación (`docs/` + `AGENTS.md`, nada en `src/`) tras el

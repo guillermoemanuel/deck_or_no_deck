@@ -122,20 +122,26 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
    la fila muestra *"Requiere anuncio recompensado — no hay anuncios ahora."* y **no se
    descuentan monedas**; el conflicto Duplicar/Triplicar sigue mostrando su mensaje igual
    que antes.
-9. **Reembolso por SDK caído — victoria** (NO corrido): comprar Duplicar, llegar a la
-   victoria con `*crazygames-sdk-v3.js*` bloqueado → mensaje `RESULT_AD_REFUNDED`
-   (*"No ads available — your coins were refunded."*), botones Duplicar/Triplicar
+9. **Reembolso por SDK caído — victoria** (*2026-10-01*, verificado): comprar Duplicar,
+   llegar a la
+   victoria con el SDK caído → mensaje `RESULT_AD_REFUNDED`
+   (*"No hay anuncios disponibles — te devolvimos las monedas."*), botones Duplicar/Triplicar
    **apagados** (alpha 0.4, sin click) y el saldo devuelto **una sola vez** (revisar
    `localStorage` — un reintento no puede sumar dos veces).
-10. **Reembolso por SDK caído — derrota** (NO corrido): comprar Revivir, perder con el
-    SDK bloqueado → ídem: mensaje de reembolso, botón Revivir **apagado**, saldo
+10. **Reembolso por SDK caído — derrota** (*2026-10-01*, verificado): comprar Revivir,
+     perder con el
+    SDK caído → ídem: mensaje de reembolso, botón Revivir **apagado**, saldo
     devuelto una sola vez.
-11. **Regresión feliz con SDK OK** (NO corrido): mismos ítems 9-10 sin bloquear nada →
+11. **Regresión feliz con SDK OK** (*2026-10-01*, verificado): mismos ítems 9-10 sin
+     caer el SDK →
     el anuncio se muestra, el efecto se entrega y **no hay reembolso** (saldo sin
-    devolución).
+    devolución); recomendar dentro del cooldown → `RESULT_AD_COOLDOWN` con botones
+    **vivos** y reintento efectivo a los 60 s.
 
-**Estado — última ejecución 2026-09-30 (smoke manual en `http://localhost:5174`):**
-ítems **5, 6 y 7 verificados** en vivo (idioma EN↔ES, abandono con penalidad −5000 que
+**Estado — última ejecución 2026-10-01 (smoke manual en `http://localhost:5174`):**
+ítems **9, 10 y 11 verificados** en vivo (ver detalle más abajo). Ejecución previa
+2026-09-30: ítems **5, 6 y 7 verificados**
+(idioma EN↔ES, abandono con penalidad −5000 que
 puede dejar saldo negativo, bono periódico forzado). **No corridos en esta oportunidad**
 los 4 ítems largos: **1-2** (partida DEAL/no-deal + swap de mitad y final), **3** (revivir
 con anuncio) y **4** (tienda con/sin fondos, con conflicto y compra de mazo). Nota: la
@@ -150,12 +156,23 @@ bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
 `PurchaseSessionUpgradeUseCase.spec.ts`, falta el smoke en el navegador con el SDK
 bloqueado (misma receta del párrafo anterior).
 
-**Ítems 9-11 (reembolso por fallo ambiental, ADR-006) agregados el 2026-10-01 y NO
-corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
-`ReviveWithAdUseCase.spec.ts` (19 tests); falta el smoke en el navegador con el SDK
-bloqueado: SDK caído/adblock/sin-fill → `RESULT_AD_REFUNDED` con botones apagados;
-cooldown **retryable** (cancelación del jugador u otro fallo) → `RESULT_AD_COOLDOWN`
-con botones vivos y reintento a los 60 s.
+**Ítems 9-11 (reembolso por fallo ambiental, ADR-006) — VERIFICADOS en vivo
+2026-10-01.** Receta usada: en lugar de bloquear `*crazygames-sdk-v3.js*` (eso exigiría
+recargar y mataría la sesión en curso), el SDK se derrumba **en caliente** desde la
+consola — `window.__cg = window.CrazyGames; window.CrazyGames = null;` — porque
+`CrazyGamesService.isAvailable()` relee `window.CrazyGames?.SDK?.ad` en **cada**
+llamada (`CrazyGamesService.ts:155`). Resultados:
+- **Ítem 9 (victoria):** Duplicar comprado con el SDK OK y consumido con el SDK caído →
+  `RESULT_AD_REFUNDED`, botones Duplicar/Triplicar apagados, saldo devuelto **una sola
+  vez** (un intento de re-click no sumó dos veces).
+- **Ítem 10 (derrota):** ídem con Revivir → `RESULT_AD_REFUNDED`, botón apagado, saldo
+  devuelto una sola vez.
+- **Ítem 11 (SDK OK):** el SDK real en localhost **abrió el anuncio** (caso A) y al
+  terminar se entregó el efecto **sin reembolso**; cancelar y recomentar dentro de los
+  60 s mostró `RESULT_AD_COOLDOWN` con los botones **vivos**, y a los 60 s el reintento
+  volvió a pedir el anuncio (camino nuevo de ADR-006 enmendado).
+Los flujos además siguen cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
+`ReviveWithAdUseCase.spec.ts` (19 tests).
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 
