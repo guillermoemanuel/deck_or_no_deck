@@ -173,6 +173,14 @@ export const TRANSLATIONS = {
     RESULT_AD_BONUS: '¡BONUS!\n+${amount}',
     RESULT_AD_ALREADY_CLAIMED: 'You have already claimed your bonus.',
 
+    // --- Anuncio propio (AdOverlayScene — ADR-007) ---
+    // El overlay es el MISMO para rewarded y midgame: solo cambia la leyenda
+    // inferior (hintKeyFor en AdOverlayScene.ts), porque "your reward" no
+    // aplica a un anuncio de mitad de partida.
+    AD_OVERLAY_TITLE: 'Advertisement',
+    AD_OVERLAY_HINT: 'Your reward is granted when the countdown finishes',
+    AD_OVERLAY_HINT_MIDGAME: 'The game continues when the countdown finishes',
+
     // --- HUD (renglones de botones-ícono: Bono/Tienda/Salir arriba, Sonido/Pantalla Completa abajo) ---
     HUD_BONUS: 'Bonus',
     HUD_SHOP: 'Shop',
@@ -368,6 +376,13 @@ export const TRANSLATIONS = {
     RESULT_AD_COOLDOWN: 'Los anuncios vuelven en unos segundos — probá de nuevo.',
     RESULT_AD_BONUS: '¡BONO!\n+${amount}',
     RESULT_AD_ALREADY_CLAIMED: 'Ya reclamaste tu bono.',
+
+    // --- Anuncio propio (AdOverlayScene — ADR-007) ---
+    // Mismo overlay para rewarded y midgame; solo cambia la leyenda inferior
+    // (hintKeyFor en AdOverlayScene.ts): "tu recompensa" no aplica al midgame.
+    AD_OVERLAY_TITLE: 'Publicidad',
+    AD_OVERLAY_HINT: 'Tu recompensa se otorga cuando termine la cuenta regresiva',
+    AD_OVERLAY_HINT_MIDGAME: 'El juego continúa cuando termine la cuenta regresiva',
 
     // --- HUD (renglones de botones-ícono: Bono/Tienda/Salir arriba, Sonido/Pantalla Completa abajo) ---
     HUD_BONUS: 'Bono',
