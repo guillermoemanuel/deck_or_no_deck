@@ -3,7 +3,8 @@ import {
   AdResult,
   AdType,
   AdLifecycleListener,
-  AdLifecyclePhase
+  AdLifecyclePhase,
+  RewardedAdStatus
 } from '../../../domain/ports/ICrazyGamesService';
 
 /**
@@ -12,7 +13,8 @@ import {
  */
 export class FakeCrazyGamesService implements ICrazyGamesService {
   private available = true;
-  private rewardedAvailable = true;
+  /** Estado configurable de rewardedAdStatus() — el test simula adblock, cooldown, etc. */
+  private rewardedStatus: RewardedAdStatus = 'available';
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
   private nextAdResult: AdResult = { success: true };
   // `null` por defecto: mismo comportamiento que el servicio real cuando
@@ -29,8 +31,22 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
     this.available = available;
   }
 
+  /**
+   * Compatibilidad con los specs existentes (firma intacta — la usan
+   * Multiply/Revive/Purchase/List): `false` pasa a setear `'adblock'`,
+   * no `'cooldown_retryable'`. Motivo exacto: `'adblock'` es un estado
+   * PERMANENTE que REEMBOLSA según ADR-006, así todos los tests viejos de
+   * "ads caídos → refunded" siguen verdes sin tocarlos; `'cooldown_retryable'`
+   * NO reembolsa y los rompería. Para simular otros estados (p. ej.
+   * cooldown reintentable) usar setRewardedStatus().
+   */
   setRewardedAvailable(available: boolean): void {
-    this.rewardedAvailable = available;
+    this.rewardedStatus = available ? 'available' : 'adblock';
+  }
+
+  /** Setter explícito del estado que reporta rewardedAdStatus() (ADR-006). */
+  setRewardedStatus(status: RewardedAdStatus): void {
+    this.rewardedStatus = status;
   }
 
   /** Permite a los tests simular las fases started/ended que emitiría el SDK real. */
@@ -38,8 +54,19 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
     this.lifecycleListeners.forEach(listener => listener(phase, type));
   }
 
+  /**
+   * Mismo criterio que el adapter: sin SDK manda `'sdk_unavailable'`
+   * (prioridad idéntica a CrazyGamesService.rewardedAdStatus()).
+   */
+  rewardedAdStatus(): RewardedAdStatus {
+    if (!this.available) {
+      return 'sdk_unavailable';
+    }
+    return this.rewardedStatus;
+  }
+
   isRewardedAdAvailable(): boolean {
-    return this.available && this.rewardedAvailable;
+    return this.rewardedAdStatus() === 'available';
   }
 
   onAdLifecycle(listener: AdLifecycleListener): () => void {

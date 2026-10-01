@@ -3,7 +3,8 @@ import {
   AdResult,
   AdType,
   AdLifecycleListener,
-  AdLifecyclePhase
+  AdLifecyclePhase,
+  RewardedAdStatus
 } from '../../domain/ports/ICrazyGamesService';
 
 declare global {
@@ -97,6 +98,14 @@ export class CrazyGamesService implements ICrazyGamesService {
   private adblockDetected = false;
   private adInProgress = false;
   private rewardedBlockedUntil = 0;
+  /**
+   * Motivo del último rewarded que falló (o `null` si nunca falló / el
+   * último fue exitoso). Distingue dos cooldowns con distinta política de
+   * reembolso (ADR-006): `ad_unavailable` (sin fill — fallo ambiental,
+   * reembolsa) de cualquier otro fallo (error/cancelación — reintentable,
+   * NO reembolsa). Solo lo escribe `settle()` para `type === 'rewarded'`.
+   */
+  private lastRewardedFailure: 'ad_unavailable' | 'error' | null = null;
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
 
   /**
@@ -150,8 +159,33 @@ export class CrazyGamesService implements ICrazyGamesService {
     }
   }
 
+  /**
+   * `true` solo si `rewardedAdStatus() === 'available'` — fuente única de
+   * la lógica (SDK listo, sin adblock, sin cooldown), sin duplicarla acá.
+   * Ver el JSDoc del puerto para qué se ofrece/oculta un rewarded.
+   */
   isRewardedAdAvailable(): boolean {
-    return this.isAvailable() && !this.adblockDetected && Date.now() >= this.rewardedBlockedUntil;
+    return this.rewardedAdStatus() === 'available';
+  }
+
+  /**
+   * Motivo por el que hoy NO se puede ofrecer un rewarded (o
+   * `'available'`). El orden importa y es contrato del puerto:
+   * lo permanente (sin SDK, adblock) manda sobre el cooldown de 60 s,
+   * porque solo eso define si al consumir una mejora se reembolsa
+   * (política ADR-006 — ver ICrazyGamesService.rewardedAdStatus).
+   */
+  rewardedAdStatus(): RewardedAdStatus {
+    if (!this.isAvailable()) {
+      return 'sdk_unavailable';
+    }
+    if (this.adblockDetected) {
+      return 'adblock';
+    }
+    if (Date.now() < this.rewardedBlockedUntil) {
+      return this.lastRewardedFailure === 'ad_unavailable' ? 'cooldown_no_fill' : 'cooldown_retryable';
+    }
+    return 'available';
   }
 
   onAdLifecycle(listener: AdLifecycleListener): () => void {
@@ -311,9 +345,18 @@ export class CrazyGamesService implements ICrazyGamesService {
         }
         this.adInProgress = false;
         if (type === 'rewarded') {
+          // Éxito → limpia cooldown Y motivo (status vuelve a 'available');
+          // fallo → arranca el cooldown de 60 s y registra el motivo que
+          // decide la política de reembolso (ADR-006): sin fill reembolsa,
+          // cualquier otro fallo es reintentable y NO reembolsa.
           this.rewardedBlockedUntil = result.success
             ? 0
             : Date.now() + CrazyGamesService.REWARDED_RETRY_COOLDOWN_MS;
+          this.lastRewardedFailure = result.success
+            ? null
+            : result.reason === 'ad_unavailable'
+              ? 'ad_unavailable'
+              : 'error';
         }
         resolve(result);
       };

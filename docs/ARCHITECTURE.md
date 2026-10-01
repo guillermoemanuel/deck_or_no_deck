@@ -108,7 +108,10 @@ Reglas:
 Estrategia inyectada fuera de `ports/`: `EnergyDrainRule` (definida en `GameSession.ts`,
 impl `DefaultEnergyDrainRule` en el mismo archivo; los specs definen doubles inline).
 
-Contrato clave: **`ICrazyGamesService` retorna `AdResult`, nunca lanza excepciones.**
+Contrato clave: **`ICrazyGamesService` retorna `AdResult`, nunca lanza excepciones** — y
+**`rewardedAdStatus()`** (motivo `'available' | 'sdk_unavailable' | 'adblock' |
+'cooldown_no_fill' | 'cooldown_retryable'`) es la fuente de la política de reembolso al
+consumir (2 grupos, ADR-006); `isRewardedAdAvailable()` queda como azúcar.
 Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_unavailable | error`).
 
 ---
@@ -170,7 +173,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
   | `'lastGameSummary'` | `GameScene` | `ResultScene` (lee y borra) |
   | `'resultScene:doubleBtn'/'tripleBtn'` | `ResultScene` | `ResultScene` (estado local en registry global) |
 
-- **i18n**: 144 claves × {en, es} en `shared/i18n/LanguageData.ts`.
+- **i18n**: 145 claves × {en, es} en `shared/i18n/LanguageData.ts`.
   Texto estático → componente `LocalizedText` (se auto-suscribe y se auto-destruye).
   Texto dinámico → `languageManager.getText('CLAVE', {param})` en cada render.
   Singleton `languageManager` es el **único** `export default` del proyecto.

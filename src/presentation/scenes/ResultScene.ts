@@ -311,14 +311,19 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
           outcome?.revived === false ? outcome.reason : undefined;
         this.statusText.setText(
           languageManager.getText(
-            // 'sdk_unavailable' sigue siendo posible (use-case construido
-            // sin puerto de progresión): ahí NO se reembolsa y la jugada
-            // queda reintentable, por eso el botón solo se apaga en 'refunded'.
+            // 'sdk_unavailable' y 'ads_cooldown' siguen siendo posibles (el
+            // primero porque el use-case puede construirse sin puerto de
+            // progresión; el segundo, ADR-006, por un cooldown autoinfligido
+            // por la cancelación del jugador): en AMBOS no se reembolsa y la
+            // jugada queda reintentable, por eso el botón solo se apaga en
+            // 'refunded'.
             reason === 'sdk_unavailable'
               ? 'RESULT_AD_UNAVAILABLE'
-              : reason === 'refunded'
-                ? 'RESULT_AD_REFUNDED'
-                : 'RESULT_AD_FAILED'
+              : reason === 'ads_cooldown'
+                ? 'RESULT_AD_COOLDOWN'
+                : reason === 'refunded'
+                  ? 'RESULT_AD_REFUNDED'
+                  : 'RESULT_AD_FAILED'
           )
         );
         if (reason === 'refunded') {
@@ -326,6 +331,11 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
           // efecto) y el use-case bloquea cualquier revive posterior — el
           // botón dejaría prometiendo "Revivir" sin poder entregar nada, así
           // que se apaga (mismo estilo que disableMultiplyButtons).
+          // CONTRASTE DE POLÍTICAS (ADR-006): 'ads_cooldown' NO entra en este
+          // `if` — ese cooldown puede ser autoinfligido por la cancelación del
+          // propio jugador, el use-case NO reembolsa y el reclamo sigue abierto:
+          // el botón queda ACTIVO para que, pasados los 60 s, el reintento
+          // pueda entregar el revive de verdad.
           this.disableActionButton(reviveBtn);
         }
       });
@@ -357,6 +367,10 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
       // efecto) — el botón seguiría diciendo "Duplicar x2"/"Triplicar x3"
       // sin poder entregar nada, así que se apaga y solo queda el mensaje
       // re-explicando la devolución.
+      // 'ads_cooldown' (ADR-006) queda FUERA de este `if` a propósito: no
+      // reembolsa, el reclamo sigue abierto y a los 60 s el reintento sí
+      // puede entregar el efecto — solo se muestra el mensaje y los botones
+      // permanecen ACTIVOS.
       if (result.reason === 'refunded') {
         this.disableMultiplyButtons();
       }
@@ -366,7 +380,7 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   // Firmado espejo de `MultiplyRewardResult` (ya no incluye
   // 'sdk_unavailable': esa rama del multiply devuelve 'refunded' — el
   // 'sdk_unavailable' del revive se maneja aparte en buildLostActions).
-  private errorMessageFor(reason: 'ad_failed' | 'already_claimed' | 'refunded'): string {
+  private errorMessageFor(reason: 'ad_failed' | 'already_claimed' | 'refunded' | 'ads_cooldown'): string {
     switch (reason) {
       case 'ad_failed':
         return  languageManager.getText('RESULT_AD_FAILED');
@@ -374,6 +388,8 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
         return languageManager.getText('RESULT_AD_ALREADY_CLAIMED');
       case 'refunded':
         return languageManager.getText('RESULT_AD_REFUNDED');
+      case 'ads_cooldown':
+        return languageManager.getText('RESULT_AD_COOLDOWN');
     }
   }
 

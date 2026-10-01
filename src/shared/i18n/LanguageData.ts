@@ -169,6 +169,7 @@ export const TRANSLATIONS = {
     RESULT_AD_FAILED: 'The ad was not completed. Try again.',
     RESULT_AD_UNAVAILABLE: 'Ads are not available at this time.',
     RESULT_AD_REFUNDED: 'No ads available — your coins were refunded.',
+    RESULT_AD_COOLDOWN: 'Ads will be back in a moment — try again in a few seconds.',
     RESULT_AD_BONUS: '¡BONUS!\n+${amount}',
     RESULT_AD_ALREADY_CLAIMED: 'You have already claimed your bonus.',
 
@@ -364,6 +365,7 @@ export const TRANSLATIONS = {
     RESULT_AD_FAILED: 'El anuncio no se completó. Intentá de nuevo.',
     RESULT_AD_UNAVAILABLE: 'Los anuncios no están disponibles en este momento.',
     RESULT_AD_REFUNDED: 'No hay anuncios disponibles — te devolvimos las monedas.',
+    RESULT_AD_COOLDOWN: 'Los anuncios vuelven en unos segundos — probá de nuevo.',
     RESULT_AD_BONUS: '¡BONO!\n+${amount}',
     RESULT_AD_ALREADY_CLAIMED: 'Ya reclamaste tu bono.',
 

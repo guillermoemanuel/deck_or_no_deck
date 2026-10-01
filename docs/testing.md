@@ -1,11 +1,11 @@
 # Testing
 
-> Estado al 2026-10-01 (cierres de límites + ampliación del alcance del reembolso):
-> **38 suites · 455 tests** — verdes en el último gate de `qa` (**38/453**) más 2 specs
-> de transición agregadas en paralelo (re-run final pendiente) (medido: 38 `*.spec.ts`
-> en `src`; 434 declaraciones `it(`/`test(` sin contar `it.each` + 21 filas de 2
-> `it.each` (13 + 8) = 455). Runner: **Jest + ts-jest** (no vitest). Entorno: `node`
-> (sin DOM).
+> Estado al 2026-10-01 (cierres de límites + ampliación del alcance del reembolso +
+> enmienda ADR-006 "motivo en el puerto + 2 políticas"): **38 suites · 467 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · umbrales de cobertura verdes;
+> medido: 38 `*.spec.ts` en `src`; 446 declaraciones `it(`/`test(` sin contar `it.each`
+> + 21 filas de 2 `it.each` (13 + 8) = 467). Runner: **Jest + ts-jest** (no vitest).
+> Entorno: `node` (sin DOM).
 
 ---
 
@@ -151,10 +151,11 @@ bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
 bloqueado (misma receta del párrafo anterior).
 
 **Ítems 9-11 (reembolso por fallo ambiental, ADR-006) agregados el 2026-10-01 y NO
-corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (13 tests) y
-`ReviveWithAdUseCase.spec.ts` (16 tests); falta el smoke en el navegador con el SDK
-bloqueado (el mismo predicado cubre adblock y cooldown de 60 s — forzar con DevTools o
-esperando la ventana rinde el mismo resultado).
+corridos** — los flujos están cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
+`ReviveWithAdUseCase.spec.ts` (19 tests); falta el smoke en el navegador con el SDK
+bloqueado: SDK caído/adblock/sin-fill → `RESULT_AD_REFUNDED` con botones apagados;
+cooldown **retryable** (cancelación del jugador u otro fallo) → `RESULT_AD_COOLDOWN`
+con botones vivos y reintento a los 60 s.
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 
@@ -167,21 +168,51 @@ esperando la ventana rinde el mismo resultado).
    `SESSION_UPGRADE_CATALOG` y afirma que la compra deja el efecto aplicado en la sesión
    real → si mañana hay un 9.º id sin rama, el test falla. Ruptura verificada: sin un
    `case`, typecheck pasa sin la guarda y falla con ella.
-2. **TOCTOU compra→consumo — CERRADO (2026-10-01, ADR-006; alcance ampliado el mismo
-   día).** Al consumir Duplicar/Triplicar/Revivir con `isRewardedAdAvailable()` false —
-   **SDK ausente, adblock detectado o cooldown de 60 s** tras un rewarded fallido:
-   reembolso único `awardGameplayCoins(costOf(id))`, motivo `'refunded'` y bloqueo de
-   todo reclamo posterior — **invariante reembolso XOR efecto**; UI muestra
-   `RESULT_AD_REFUNDED` y apaga los botones. El sub-caso antes abierto (SDK presente
-   pero `isRewardedAdAvailable()` false → `ad_failed` sin reembolso y dinero trabado,
-   "decisión de producto pendiente del usuario") **cerró el 2026-10-01** con la
-   ampliación del predicado.
-   - `ad_failed` (el intento se hizo y falló: cancelación del jugador o fill muerto)
-     **no** reembolsa y sigue reintentable — **pero** el cooldown de 60 s lo pone
-     **cualquier** rewarded fallido, **incluida la cancelación del jugador**: un segundo
-     click **dentro** de la ventana reembolsa en vez de reintentar y cierra el reclamo;
-     reintentar de verdad exige esperar los 60 s. Specs de transición
-     `ad_failed → cooldown → refunded` en ambos use-cases (un test por spec).
+2. **TOCTOU compra→consumo — CERRADO (2026-10-01, ADR-006; enmendado el mismo día:
+   motivo en el puerto + 2 políticas).** Al consumir Duplicar/Triplicar/Revivir la
+   política se lee con **`ICrazyGamesService.rewardedAdStatus()`** (el motivo), **no**
+   con el predicado booleano. Dos grupos con consecuencias opuestas:
+   - **`sdk_unavailable` | `adblock` | `cooldown_no_fill` →** reembolso único
+     `awardGameplayCoins(costOf(id))`, motivo `'refunded'` y bloqueo de todo reclamo
+     posterior — **invariante reembolso XOR efecto**; UI: `RESULT_AD_REFUNDED` y botones
+     apagados. Cubre SDK ausente, adblock detectado y cooldown armado por un fallo
+     **sin fill** (el reintento no promete nada).
+   - **`cooldown_retryable` →** motivo nuevo **`'ads_cooldown'`**, **sin reembolso**, sin
+     setear `refunded`, sin pedir el anuncio; UI: clave **`RESULT_AD_COOLDOWN`** y los
+     botones **NO** se apagan (reintento real a los 60 s). Ahí cae la **cancelación del
+     jugador**: el cooldown de 60 s lo pone cualquier rewarded fallido (`settle()`), así
+     que la ventana puede ser **autoinfligida** — reembolsar dentro de ella era un
+     forfeit (se perdía para siempre la chance de revivir/duplicar).
+   - `ad_failed` (el intento se hizo y falló: cancelación o anuncio no completado) **no**
+     reembolsa y sigue reintentable.
+   El sub-caso antes abierto (SDK presente pero `isRewardedAdAvailable()` false →
+   `ad_failed` sin reembolso y dinero trabado, "decisión de producto pendiente")
+   **cerró el 2026-10-01** con el grupo de reembolso; las specs de transición
+   `ad_failed → cooldown → refunded` **ya no existen**. Specs de la política nueva
+   (títulos reales):
+   - `CrazyGamesService.spec.ts` (14): *"tras un rewarded sin fill, rewardedAdStatus()
+     es "cooldown_no_fill" durante el cooldown"* · *"tras un rewarded con otro fallo
+     (timeout de arranque), rewardedAdStatus() es "cooldown_retryable"* · *"vencido el
+     cooldown de 60 s, rewardedAdStatus() vuelve a "available"* · *"con adblock
+     detectado, rewardedAdStatus() es "adblock" aunque haya cooldown activo"* · *"sin
+     SDK, rewardedAdStatus() es "sdk_unavailable" (lo permanente manda sobre cualquier
+     cooldown)"* · *"un rewarded exitoso limpia el cooldown y el motivo previo:
+     rewardedAdStatus() vuelve a "available"*.
+   - `MultiplyRewardUseCase.spec.ts` (16): *"returns "ads_cooldown" WITHOUT refunding
+     while the cooldown is retryable: balance intact, no ad asked, claim still open"* ·
+     *"after the 60 s cooldown expires the SAME claim attempts the ad for real and
+     delivers the effect"* · *"refunds costOf("double_reward") exactly once when the
+     cooldown came from a no-fill failure ("refunded")"* · *"after a player-cancelled
+     ad, adblock detected before the next click refunds exactly once and closes the
+     claim"* · *"refunds the cost when the SDK IS available but ads are blocked
+     (adblock), without ever asking for an ad"* · *"keeps the refund final: with ads
+     available again a later attempt returns "refunded" and pays nothing"*.
+   - `ReviveWithAdUseCase.spec.ts` (19): los mismos 6 con revive — *"…balance intact,
+     revive intact, no ad asked"* · *"…the SAME claim attempts the ad for real and
+     revives"* · *"refunds costOf("revive") exactly once when the cooldown came from a
+     no-fill failure ("refunded")"* · *"…closes the revive claim"* · *"refunds
+     costOf("revive") when the SDK IS available but ads are blocked (adblock)…"* ·
+     *"…a later attempt returns "refunded" and never revives"*.
 
 ---
 

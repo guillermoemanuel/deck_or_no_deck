@@ -8,15 +8,16 @@ import { costOf } from '../../domain/value-objects/SessionUpgradeCatalog';
 
 export type ReviveResult =
   | { revived: true }
-  | { revived: false; reason: 'ad_failed' | 'sdk_unavailable' | 'not_eligible' | 'refunded' };
+  | { revived: false; reason: 'ad_failed' | 'sdk_unavailable' | 'not_eligible' | 'refunded' | 'ads_cooldown' };
 
 /**
  * Coordina un efecto secundario (anuncio recompensado) con una regla de
  * dominio (revivir). El dominio permanece ignorante de que existio un anuncio.
  */
 export class ReviveWithAdUseCase {
-  // Marca el reembolso por fallo ambiental (ver execute()): una vez
-  // reembolsado, el revive queda bloqueado para siempre en esta instancia.
+  // Marca el reembolso de la política 2 (permanencia / sin fill — ver
+  // execute()): una vez reembolsado, el revive queda bloqueado para siempre
+  // en esta instancia. 'ads_cooldown' NUNCA lo setea.
   private refunded = false;
 
   constructor(
@@ -49,42 +50,56 @@ export class ReviveWithAdUseCase {
       return { revived: false, reason: 'not_eligible' };
     }
 
-    if (!this.crazyGamesService.isRewardedAdAvailable()) {
-      // Sin puerto de progresión no hay forma de acreditar el reembolso:
-      // se devuelve el motivo REAL (`sdk_unavailable`, que con el chequeo
-      // ampliado también cubre adblock/cooldown — es el único motivo sin
-      // reembolso disponible en la unión) en vez de un 'refunded' que no
-      // cumpliría — el jugador queda como antes, con la jugada
-      // reintentable, y no se le promete una devolución que no llegó.
-      if (!this.progressionService) {
-        return { revived: false, reason: 'sdk_unavailable' };
-      }
+    // Política de 2 niveles al consumir: el MOTIVO que reporta
+    // `rewardedAdStatus()` (su JSDoc es la especificación — ADR-006)
+    // decide si se reembolsa o no. DOS políticas porque los motivos se
+    // parten en dos grupos con consecuencias opuestas para el jugador.
+    const rewardedStatus = this.crazyGamesService.rewardedAdStatus();
+    switch (rewardedStatus) {
+      case 'available':
+        // Hay anuncio para ofrecer: el intento real sigue abajo, sin cambios.
+        break;
+      case 'cooldown_retryable':
+        // POLÍTICA 1 — fallo REINTENTABLE → NO se reembolsa. Causa raíz:
+        // el servicio real pone el cooldown de 60 s con CUALQUIER rewarded
+        // fallido, INCLUIDA la cancelación del propio jugador
+        // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000),
+        // así que la ventana puede ser AUTOINFLIGIDA: reembolsar dentro de
+        // ella era un FORFEIT NO QUERIDO — cancelar el anuncio de Revivir
+        // cobraba el costo y perdía para siempre la chance de revivir. Acá
+        // no se acredita nada, NO se setea `refunded` (el chequeo XOR del
+        // inicio queda intacto), no se pide el anuncio y no hace falta el
+        // puerto de progresión: la UI traduce 'ads_cooldown' ("probá en
+        // unos segundos") y a los 60 s el mismo revive reintenta de verdad.
+        return { revived: false, reason: 'ads_cooldown' };
+      case 'sdk_unavailable':
+      case 'adblock':
+      case 'cooldown_no_fill': {
+        // POLÍTICA 2 — PERMANENCIA en la sesión (SDK entero ausente: Basic
+        // Launch sin ads o el script del SDK que nunca cargó; ADBLOCK
+        // DETECTADO) o cooldown AMBIENTAL sin FILL: el reintento no promete
+        // nada y el dinero quedaría trabado.
+        //
+        // Sin puerto de progresión no hay forma de acreditar el reembolso:
+        // se devuelve el motivo REAL `sdk_unavailable` (único de esta
+        // política disponible en la unión) en vez de un 'refunded' que no
+        // cumpliría — el jugador queda como antes, con la jugada
+        // reintentable, y no se le promete una devolución que no llegó.
+        if (!this.progressionService) {
+          return { revived: false, reason: 'sdk_unavailable' };
+        }
 
-      // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la Tienda
-      // y NO hay anuncios rewarded para consumirla: SDK entero ausente
-      // (Basic Launch sin ads, o el script del SDK ni siquiera llegó a
-      // cargar), ADBLOCK DETECTADO, o la ventana de cooldown de 60 s tras
-      // un rewarded fallido. Sin esto el jugador se iba de la pantalla con
-      // las monedas perdidas y sin revivir — con el alcance anterior (solo
-      // `!isAvailable()`) el jugador con adblock (o fill muerto) compraba,
-      // reintentaba en bucle y nunca recibía nada. Se reembolsa el costo
-      // del catálogo UNA sola vez y `refunded` (chequeado arriba) bloquea
-      // el revive posterior: invariante reembolso XOR efecto, nunca ambos
-      // (cobrar devuelta y revivir igual cuando vuelva el anuncio sería
-      // explotable).
-      //
-      // `ad_failed` sigue significando "el intento se hizo y falló"
-      // (cancelación del jugador o anuncio que no se completó): ahí NO se
-      // reembolsa y la compra es reintentable. PERO la causa raíz es que el
-      // servicio real pone el cooldown de 60 s con CUALQUIER rewarded
-      // fallido, INCLUIDA la cancelación del jugador — el cooldown puede
-      // ser autoinfligido. Un segundo click dentro de la ventana cae en el
-      // pre-chequeo de arriba, reembolsa y cierra el reclamo para siempre;
-      // reintentar exige esperar a que venzan los 60 s
-      // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000).
-      this.progressionService.awardGameplayCoins(costOf('revive'));
-      this.refunded = true;
-      return { revived: false, reason: 'refunded' };
+        // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la
+        // Tienda y NO hay anuncio rewarded para consumirla — sin esto el
+        // jugador se iba de la pantalla con las monedas perdidas y sin
+        // revivir. Se reembolsa el costo del catálogo UNA sola vez y
+        // `refunded` (chequeado arriba) bloquea el revive posterior:
+        // invariante reembolso XOR efecto, nunca ambos (cobrar devuelta y
+        // revivir igual cuando vuelva el anuncio sería explotable).
+        this.progressionService.awardGameplayCoins(costOf('revive'));
+        this.refunded = true;
+        return { revived: false, reason: 'refunded' };
+      }
     }
 
     const adResult = await this.crazyGamesService.showRewardedAd();

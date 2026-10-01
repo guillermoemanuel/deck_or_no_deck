@@ -7,6 +7,70 @@
 
 ---
 
+## 2026-10-01 · ADR-006 enmendado: motivo en el puerto + 2 políticas de reembolso
+
+**Tarea:** sincronizar documentación (`docs/` + `AGENTS.md`, nada en `src/`) tras el
+cambio ya implementado y en verde (código en el árbol, **commit pendiente**) que resolvió
+la tensión **"cooldown
+autoinfligido vs fallo ambiental"**, cerrando los **4 hallazgos bloqueantes del
+`reviewer`**. Decisión del usuario de hoy (tercera sobre ADR-006): distinguir el **motivo**
+del fallo con 2 políticas en vez de reembolsar ante todo fallo.
+
+**Qué cambió en el código (ya en verde, no tocado por esta entrada):**
+- Puerto `ICrazyGamesService` → **`rewardedAdStatus(): RewardedAdStatus`**
+  (`'available' | 'sdk_unavailable' | 'adblock' | 'cooldown_no_fill' |
+  'cooldown_retryable'`); `isRewardedAdAvailable()` queda como azúcar (`=== 'available'`).
+- **Política 1 — `cooldown_retryable`** (cualquier fallo que no sea sin-fill; ahí cae la
+  **cancelación del jugador**: en producción `adError` sin fill → `'ad_unavailable'`,
+  todo lo demás → `'error'`) → motivo nuevo **`'ads_cooldown'`**, **sin reembolso**, sin
+  tocar `refunded`, sin pedir el anuncio; UI `RESULT_AD_COOLDOWN` con botones **encendidos**
+  (reintento real a los 60 s). Evita el forfeit autoinfligido: cancelar el anuncio de
+  Revivir ya no disparaba un reembolso que cerraba la chance de revivir.
+- **Política 2 — `sdk_unavailable` | `adblock` | `cooldown_no_fill`** → reembolso único
+  `'refunded'` (XOR intacto). `cooldown_no_fill` **mantiene cubierto** el caso sin-fill
+  persistente (no se reabrió ese hueco). `ad_failed` sigue sin reembolsar y reintentable.
+
+**Archivos de código (9, no tocados acá):** `domain/ports/ICrazyGamesService.ts`,
+`infrastructure/services/CrazyGamesService.ts` (`lastRewardedFailure` en `settle()`),
+`infrastructure/services/testing/FakeCrazyGamesService.ts` (`setRewardedStatus()`;
+`setRewardedAvailable(false)` → `'adblock'`), `application/use-cases/MultiplyRewardUseCase.ts`
+y `ReviveWithAdUseCase.ts` + sus specs (**+12 tests: 6 infra + 6 aplicación**; 4 tests
+viejos renombrados porque sus títulos afirmaban la política vieja; las specs de transición
+`ad_failed → cooldown → refunded` **ya no existen**), `presentation/scenes/ResultScene.ts`,
+`shared/i18n/LanguageData.ts` (**144 → 145 claves**: `RESULT_AD_COOLDOWN` en/en+es).
+
+**Hallazgos del `reviewer` y cómo se cerraron (los 4, en esta entrada):**
+1. **`docs/DECISIONS/ADR-006`** enmendado con revisión fechada: cláusula del predicado
+   booleano falso (incluido cooldown) → **2 grupos de `rewardedAdStatus()`**; borrada la
+   frase "un segundo click dentro de la ventana reembolsa y cierra el reclamo"; conteos
+   13/16 → **16/19**; contexto con la tercera decisión; UI con `RESULT_AD_COOLDOWN`.
+2. **`AGENTS.md`**: §4 reescrito (política leída con `rewardedAdStatus()`, no con el
+   predicado; retryable → `ads_cooldown` sin reembolsar; sdk/adblock/no_fill → `'refunded'`)
+   y §3 **144 → 145 claves**.
+3. **`docs/testing.md`**: header **38 suites · 467 tests** (446 `it(` + 21 filas de 2
+   `it.each`); ítems 9-11 con conteos **16/19**; límite 2 reescrito con las 2 políticas y
+   los **títulos reales** de las specs nuevas (`CrazyGamesService.spec.ts` 14 — 6 de
+   `rewardedAdStatus()` —, `MultiplyRewardUseCase.spec.ts` 16, `ReviveWithAdUseCase.spec.ts` 19).
+   **`docs/MAP.md`**: censo 148 archivos / **21.806** líneas (domain 4.137 · application
+   3.264 · infrastructure 2.167 · presentation 10.786 · shared 1.238 · root 214), LOC
+   refrescados (puerto 317 en la fila de ports, `CrazyGamesService` 408/252, fakes
+   6 archivos/259, use-cases 143/515 y 130/392, `ResultScene` 554, `LanguageData` 451),
+   política por `rewardedAdStatus()` en las 2 celdas de use-cases, **145 claves**.
+   **`docs/ARCHITECTURE.md`** (145 claves + contrato del puerto) y **`docs/PLAYBOOK.md`**
+   (145 = 290 ÷ 2).
+4. **`docs/LOG.md`**: esta entrada.
+
+**Gates:** typecheck **0** · lint **0** · coverage **umbrales verdes** · **38 suites /
+467 tests** (todo en verde al abrir la tarea). Verificación final de docs con grep:
+sin rastros de la política vieja en `docs/` + `AGENTS.md` fuera de las **entradas
+históricas de este LOG** (append-only: las entradas anteriores describen la política
+ya reemplazada, la vigente es la de esta entrada).
+
+**Pendientes:** smoke navegador ítems 9-11 de `docs/testing.md` · migración a **Vite 8**
+· archivos `.opencode/` sin commitear · commit atómico del cambio de código + docs.
+
+---
+
 ## 2026-10-01 · Alcance del reembolso ampliado a `isRewardedAdAvailable()`
 
 **Tarea:** cerrar documentalmente (docs + ADR, nada en `src/`) la ampliación de producto

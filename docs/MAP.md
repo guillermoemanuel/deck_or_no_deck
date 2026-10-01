@@ -5,21 +5,22 @@
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
 > Fecha del censo: 2026-10-01 (refrescado tras el **cierre de los dos límites aceptados**:
-> exhaustividad de `applyEffect` + reembolso por fallo ambiental, y tras la **ampliación
-> del alcance del reembolso** mismo día — de nuevo crecieron `MultiplyRewardUseCase.ts`/
-> `.spec` y `ReviveWithAdUseCase.ts`/`.spec`) ·
-> 148 archivos TS · 21.353 líneas · 110 fuente + 38 specs
+> exhaustividad de `applyEffect` + reembolso por fallo ambiental, tras la **ampliación
+> del alcance del reembolso** y tras la **enmienda ADR-006** del mismo día — motivo en el
+> puerto + 2 políticas) ·
+> 148 archivos TS · 21.806 líneas · 110 fuente + 38 specs
 > (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
 > +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; cierre anterior:
 > +`ListAvailableUpgradesUseCase.ts`/`.spec`; este cierre: **sin archivos nuevos** —
-> solo crecieron `PurchaseSessionUpgradeUseCase`/`.spec`, `MultiplyRewardUseCase`/`.spec`,
-> `ReviveWithAdUseCase`/`.spec`, `ResultScene`, `LanguageData`, `SessionUpgradeCatalog`,
-> `IProgressionService` y `ListAvailableUpgradesUseCase.spec`).
+> solo crecieron `ports/ICrazyGamesService.ts`, `CrazyGamesService.ts`/`.spec`,
+> `testing/FakeCrazyGamesService.ts`, `MultiplyRewardUseCase.ts`/`.spec`,
+> `ReviveWithAdUseCase.ts`/`.spec`, `ResultScene`, `LanguageData` y
+> `ListAvailableUpgradesUseCase.spec`).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.108 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.137 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -52,18 +53,18 @@
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 288 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos, ADR-006). |
+| `ports/*.ts` (8 archivos) | 317 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso, ADR-006). |
 
 ---
 
-## `src/application/` — 3.017 líneas · 12 specs · casi toda verde 🟢
+## `src/application/` — 3.264 líneas · 12 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
 | `use-cases/PurchaseSessionUpgradeUseCase.ts` | 184 | ✅ 438 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. **Guard de ads**: 4.º parámetro `ICrazyGamesService`; rechaza `ads_unavailable` sin `spendCoins` cuando `requiresRewardedAd` y no hay rewarded disponible (después de `conflicting_upgrade`/`not_applicable`). **Exhaustividad**: guarda `const exhaustive: never = upgradeId` al final de `applyEffect` (2026-10-01) + spec `it.each` que recorre los ids del catálogo (36 tests). 🟡 |
 | `use-cases/OpenCardUseCase.ts` | 94 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** Penalidad de derrota desde `GamePenalties`. 🟡 |
-| `use-cases/ReviveWithAdUseCase.ts` | 128 | ✅ 408 L | Orden: consumir revive → revivir. Reembolso si `isRewardedAdAvailable()` es false — SDK ausente / adblock / cooldown 60 s (`'refunded'`, invariante XOR — ADR-006); sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. 🟡 |
-| `use-cases/MultiplyRewardUseCase.ts` | 106 | ✅ 291 L | Flag `isProcessing` sincrónico (carrera de doble click). Reembolso si `isRewardedAdAvailable()` es false — SDK ausente / adblock / cooldown 60 s (`'refunded'`, invariante XOR — ADR-006); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
+| `use-cases/ReviveWithAdUseCase.ts` | 143 | ✅ 515 L | Orden: consumir revive → revivir. Política por **`rewardedAdStatus()`** (ADR-006 enmendado): `sdk_unavailable`/`adblock`/`cooldown_no_fill` → reembolso único (`'refunded'`, invariante XOR); `cooldown_retryable` → `'ads_cooldown'` sin reembolso y sin tocar `refunded`; sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. 🟡 |
+| `use-cases/MultiplyRewardUseCase.ts` | 130 | ✅ 392 L | Flag `isProcessing` sincrónico (carrera de doble click). Misma política por **`rewardedAdStatus()`** (2 grupos, ADR-006); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
 | `use-cases/SwapFinalSecretCardUseCase.ts` | 37 | ✅ | — |
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |
@@ -77,11 +78,11 @@
 
 ---
 
-## `src/infrastructure/` — 2.008 líneas · 4 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 2.167 líneas · 4 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `services/CrazyGamesService.ts` | 365 | ✅ 163 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, cooldown 60 s, `AdResult` nunca lanza. |
+| `services/CrazyGamesService.ts` | 408 | ✅ 252 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, cooldown 60 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`; `lastRewardedFailure` se setea en `settle()`) — define la política de reembolso (ADR-006). |
 | `persistence/LocalStorageProgressionRepository.ts` | 165 | ❌ | **Sin spec directo.** Migración v3→v4. Bloque de comentarios con merge artifact (L17-28). 🔴 |
 | `persistence/ProgressionManager.ts` | 152 | ✅ 246 L | Fachada de meta-progresión + eventos. |
 | `audio/AudioService.ts` | 231 | ❌ | **Sin spec ni fake.** Anclado a `Phaser.Game`. `preload()` muerto con path erróneo. 🔴 |
@@ -91,11 +92,11 @@
 | `services/CryptoRandomProvider.ts` | 57 | ❌ | Muestreo por rechazo con `crypto.getRandomValues`. |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
 | `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
-| `testing/*` (5 archivos) | 212 | — | Fakes — ver `docs/testing.md`. |
+| `testing/*` (6 archivos) | 259 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus`). |
 
 ---
 
-## `src/presentation/` — 10.770 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 10.786 líneas · 1 spec · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
@@ -106,7 +107,7 @@
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
-| `scenes/ResultScene.ts` | 538 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir al recibir `'refunded'`. |
+| `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
@@ -140,11 +141,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.236 líneas · 5 specs 🟢
+## `src/shared/` — 1.238 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `i18n/LanguageData.ts` | 449 | ✅ | **144 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED`), `as const` + `satisfies` → autocomplete de claves. |
+| `i18n/LanguageData.ts` | 451 | ✅ | **145 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`), `as const` + `satisfies` → autocomplete de claves. |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |

@@ -6,7 +6,7 @@ export type RewardMultiplier = 2 | 3;
 
 export type MultiplyRewardResult =
   | { success: true; bonusAwarded: number; newTotal: number }
-  | { success: false; reason: 'ad_failed' | 'already_claimed' | 'refunded' };
+  | { success: false; reason: 'ad_failed' | 'already_claimed' | 'refunded' | 'ads_cooldown' };
 
 /**
  * Coordina "ver anuncio -> si tiene exito, otorgar la diferencia entre premio
@@ -19,8 +19,10 @@ export type MultiplyRewardResult =
  * mejora que el jugador POSEE. A diferencia de ReviveWithAdUseCase — que
  * inyecta la sesión y corta con `not_eligible` vía `session.hasRevive()` —
  * este use-case no recibe la GameSession, así que no puede validar la
- * tenencia y reembolsa `costOf(multiplier === 2 ? 'double_reward' :
- * 'triple_reward')` a ciegas si no hay anuncios rewarded disponibles. Hoy es inalcanzable: los
+ * tenencia: reembolsa `costOf(multiplier === 2 ? 'double_reward' :
+ * 'triple_reward')` a ciegas bajo la política 2 de execute() (permanencia
+ * o sin fill) y devuelve `'ads_cooldown'` sin reembolsar ante un cooldown
+ * reintentable. Hoy es inalcanzable: los
  * flags con los que se construye el botón salen de la sesión viva
  * (GameSceneController.buildUpgradeFlagsForResultScene), el catálogo prohíbe
  * comprar double+triple a la vez (SessionUpgradeCatalog.conflictsWith) y
@@ -31,8 +33,9 @@ export type MultiplyRewardResult =
 export class MultiplyRewardUseCase {
   private claimed = false;
   private isProcessing = false;
-  // Marca el reembolso por fallo ambiental (ver execute()): una vez
-  // reembolsado, el reclamo queda bloqueado para siempre.
+  // Marca el reembolso de la política 2 (permanencia / sin fill — ver
+  // execute()): una vez reembolsado, el reclamo queda bloqueado para
+  // siempre. 'ads_cooldown' NUNCA lo setea.
   private refunded = false;
 
   constructor(
@@ -52,32 +55,53 @@ export class MultiplyRewardUseCase {
       return { success: false, reason: 'already_claimed' };
     }
 
-    if (!this.crazyGamesService.isRewardedAdAvailable()) {
-      // BUGFIX (TOCTOU compra→consumo): la mejora YA se cobró en la Tienda y
-      // NO hay anuncios rewarded para consumirla: SDK entero ausente (Basic
-      // Launch sin ads, o el script del SDK ni siquiera llegó a cargar),
-      // ADBLOCK DETECTADO, o la ventana de cooldown de 60 s tras un
-      // rewarded fallido. Sin esto el jugador se iba de la pantalla con las
-      // monedas perdidas y sin recibir nada — con el alcance anterior
-      // (solo `!isAvailable()`) el jugador con adblock (o fill muerto)
-      // compraba, reintentaba en bucle y nunca recibía nada.
-      // Se reembolsa el costo del catálogo UNA sola vez y `refunded`
-      // (chequeado arriba) bloquea el reclamo posterior: invariante
-      // reembolso XOR efecto, nunca ambos (fallar, cobrar devuelta y
-      // reclamar igual cuando vuelva el anuncio sería explotable).
-      //
-      // `ad_failed` sigue significando "el intento se hizo y falló"
-      // (cancelación del jugador o anuncio que no se completó): ahí NO se
-      // reembolsa y el botón es reintentable. PERO la causa raíz es que el
-      // servicio real pone el cooldown de 60 s con CUALQUIER rewarded
-      // fallido, INCLUIDA la cancelación del jugador — el cooldown puede
-      // ser autoinfligido. Un segundo click dentro de la ventana cae en el
-      // pre-chequeo de arriba, reembolsa y cierra el reclamo para siempre;
-      // reintentar exige esperar a que venzan los 60 s
-      // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000).
-      this.progressionService.awardGameplayCoins(costOf(multiplier === 2 ? 'double_reward' : 'triple_reward'));
-      this.refunded = true;
-      return { success: false, reason: 'refunded' };
+    // Política de 2 niveles al consumir: el MOTIVO que reporta
+    // `rewardedAdStatus()` (su JSDoc es la especificación — ADR-006)
+    // decide si se reembolsa o no. DOS políticas porque los motivos se
+    // parten en dos grupos con consecuencias opuestas para el jugador.
+    const rewardedStatus = this.crazyGamesService.rewardedAdStatus();
+    switch (rewardedStatus) {
+      case 'available':
+        // Hay anuncio para ofrecer: el intento real sigue abajo, sin cambios.
+        break;
+      case 'cooldown_retryable': {
+        // POLÍTICA 1 — fallo REINTENTABLE → NO se reembolsa.
+        // Causa raíz: el servicio real pone el cooldown de 60 s con
+        // CUALQUIER rewarded fallido, INCLUIDA la cancelación del propio
+        // jugador (CrazyGamesService.settle() → rewardedBlockedUntil = now
+        // + 60000), así que la ventana puede ser AUTOINFLIGIDA: reembolsar
+        // dentro de ella era un FORFEIT NO QUERIDO — el jugador cancelaba
+        // el anuncio, cobraba el costo y perdía para siempre la chance del
+        // efecto. Acá no se acredita nada, NO se setea `refunded` (el
+        // chequeo XOR del inicio queda intacto) y no se pide el anuncio:
+        // la UI traduce 'ads_cooldown' ("probá en unos segundos") y a los
+        // 60 s el mismo reclamo reintenta de verdad. En cambio,
+        // 'sdk_unavailable' / 'adblock' / 'cooldown_no_fill' (política 2)
+        // son estados donde el reintento no promete nada → ahí SÍ se
+        // reembolsa. `ad_failed` sigue significando "el intento se hizo y
+        // falló" (cancelación o anuncio no completado): tampoco reembolsa
+        // y el reintento es libre.
+        return { success: false, reason: 'ads_cooldown' };
+      }
+      case 'sdk_unavailable':
+      case 'adblock':
+      case 'cooldown_no_fill': {
+        // POLÍTICA 2 — PERMANENCIA en la sesión (SDK entero ausente: Basic
+        // Launch sin ads o el script del SDK que nunca cargó; ADBLOCK
+        // DETECTADO) o cooldown AMBIENTAL sin FILL: el reintento no promete
+        // nada y el dinero quedaría trabado.
+        // BUGFIX (TOCTOU compra→consumo): la mejora YA se cobró en la
+        // Tienda y NO hay anuncio rewarded para consumirla — sin esto el
+        // jugador se iba de la pantalla con las monedas perdidas y sin
+        // recibir nada. Se reembolsa el costo del catálogo UNA sola vez y
+        // `refunded` (chequeado arriba) bloquea el reclamo posterior:
+        // invariante reembolso XOR efecto, nunca ambos (fallar, cobrar
+        // devuelta y reclamar igual cuando vuelva el anuncio sería
+        // explotable).
+        this.progressionService.awardGameplayCoins(costOf(multiplier === 2 ? 'double_reward' : 'triple_reward'));
+        this.refunded = true;
+        return { success: false, reason: 'refunded' };
+      }
     }
 
     // Marcado SINCRONICO, antes de cualquier `await`: cierra la ventana de

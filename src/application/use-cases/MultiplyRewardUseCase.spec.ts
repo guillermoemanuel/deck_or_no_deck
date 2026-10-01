@@ -177,17 +177,19 @@ describe('MultiplyRewardUseCase', () => {
     expect(repository.getCoins()).toBe(balanceAfterPurchase + 1000);
   });
 
-  // Decisión de producto ampliada: el pre-chequeo es `!isRewardedAdAvailable()`,
-  // que además del SDK ausente (subsumido arriba) cubre adblock detectado y la
-  // ventana de cooldown de 60 s tras un rewarded fallido — todos los caminos
-  // en los que el dinero quedaría trabado comprando algo que nunca se puede usar.
-  it('refunds the cost when the SDK IS available but ads are not (adblock/cooldown), without ever asking for an ad', async () => {
+  // Decisión de producto ampliada: el chequeo es `rewardedAdStatus()` con
+  // la política 2 (permanencia / sin fill). Este caso modela ADBLOCK
+  // detectado — estado PERMANENTE que reembolsa — con el SDK entero
+  // presente: dinero que quedaría trabado comprando algo que nunca se
+  // puede usar. El cooldown REINTENTABLE no reembolsa: ver los tests de
+  // 'ads_cooldown' de abajo.
+  it('refunds the cost when the SDK IS available but ads are blocked (adblock), without ever asking for an ad', async () => {
     const repository = new FakeProgressionRepository();
     repository.seedCoins(10000);
     const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
     const crazyGamesService = new FakeCrazyGamesService();
-    // SDK presente pero ads bloqueados: modela adblock detectado o la ventana
-    // de cooldown de 60 s (isAvailable() sigue true, isRewardedAdAvailable() false).
+    // SDK presente pero ads bloqueados: modela adblock detectado
+    // (isAvailable() sigue true, rewardedAdStatus() = 'adblock').
     crazyGamesService.setRewardedAvailable(false);
     const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
 
@@ -206,8 +208,8 @@ describe('MultiplyRewardUseCase', () => {
   });
 
   // Invariante reembolso XOR efecto, con el alcance ampliado: tras el
-  // reembolso por ads caídos, si los ads vuelven el reclamo sigue bloqueado —
-  // sin segundo crédito y sin efecto.
+  // reembolso por adblock, si el adblock se desactiva el reclamo sigue
+  // bloqueado — sin segundo crédito y sin efecto.
   it('keeps the refund final: with ads available again a later attempt returns "refunded" and pays nothing', async () => {
     const repository = new FakeProgressionRepository();
     repository.seedCoins(10000);
@@ -221,8 +223,8 @@ describe('MultiplyRewardUseCase', () => {
     expect(firstAttempt).toEqual({ success: false, reason: 'refunded' });
     const balanceAfterRefund = repository.getCoins();
 
-    // Los ads vuelven (cooldown vencido / adblock desactivado): el reclamo NO
-    // se otorga y el monto no se acredita dos veces.
+    // El adblock se desactiva: el reclamo NO se otorga y el monto no se
+    // acredita dos veces.
     crazyGamesService.setRewardedAvailable(true);
     const secondAttempt = await useCase.execute(2);
 
@@ -231,12 +233,112 @@ describe('MultiplyRewardUseCase', () => {
     expect(crazyGamesService.rewardedAdCallCount).toBe(0);
   });
 
-  // Hallazgo reviewer — la secuencia más alcanzable en producción: el
-  // servicio real pone cooldown de 60 s con CUALQUIER rewarded fallido,
-  // INCLUIDA la cancelación del jugador (CrazyGamesService.settle() →
-  // rewardedBlockedUntil = now + 60000), y el pre-chequeo se evalúa en
-  // cada click. El reintento libre solo sobrevive esperando 60 s.
-  it('after a player-cancelled ad the self-inflicted cooldown makes the next click refund exactly once and close the claim', async () => {
+  // Política de 2 niveles (JSDoc de ICrazyGamesService.rewardedAdStatus,
+  // ADR-006): el motivo del no-disponible decide la política. Acá el
+  // cooldown de 60 s viene de un fallo REINTENTABLE — el servicio real lo
+  // activa con CUALQUIER rewarded fallido, INCLUIDA la cancelación del
+  // propio jugador (CrazyGamesService.settle() → rewardedBlockedUntil =
+  // now + 60000) —, así que reembolsar dentro de la ventana era un
+  // FORFEIT AUTOINFLIGIDO: cancelar y cobrar el dinero cerraba el reclamo
+  // perdiendo la chance del efecto. Devuelve el motivo nuevo sin tocar el
+  // saldo ni el flag `refunded`.
+  it('returns "ads_cooldown" WITHOUT refunding while the cooldown is retryable: balance intact, no ad asked, claim still open', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    // SDK presente (isAvailable() true) pero en cooldown por un fallo
+    // reintentable: el motivo del puerto es exactamente 'cooldown_retryable'.
+    crazyGamesService.setRewardedStatus('cooldown_retryable');
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    const result = await useCase.execute(2);
+
+    expect(result).toEqual({ success: false, reason: 'ads_cooldown' });
+    // Sin reembolso: el saldo queda EXACTAMENTE el de después de la compra
+    // (NO volvió al anterior a ella).
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
+    expect(repository.getCoins()).not.toBe(balanceBeforePurchase);
+    // Ni siquiera se pidió el anuncio: la ventana de cooldown lo impedía.
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+
+    // `refunded` NO quedó seteado: un segundo click dentro de la ventana
+    // vuelve a dar 'ads_cooldown' — si el reembolso se hubiera acreditado,
+    // el chequeo XOR del inicio devolvería 'refunded'.
+    const secondClick = await useCase.execute(2);
+    expect(secondClick).toEqual({ success: false, reason: 'ads_cooldown' });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Paridad con el test anterior: el reembolso que NO ocurrió no cerró
+  // nada — vencidos los 60 s la MISMA instancia reintenta de verdad y el
+  // efecto se entrega (si 'ads_cooldown' hubiera seteado `refunded`, este
+  // click devolvería 'refunded' sin pedir el anuncio).
+  it('after the 60 s cooldown expires the SAME claim attempts the ad for real and delivers the effect', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedStatus('cooldown_retryable');
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    progressionManager.spendCoins(costOf('double_reward'));
+    const balanceAfterPurchase = repository.getCoins();
+
+    const blockedAttempt = await useCase.execute(2);
+    expect(blockedAttempt).toEqual({ success: false, reason: 'ads_cooldown' });
+    expect(repository.getCoins()).toBe(balanceAfterPurchase);
+
+    // 60 s simulados: el cooldown vence y el estado vuelve a 'available'.
+    crazyGamesService.setRewardedStatus('available');
+    crazyGamesService.setNextAdResult({ success: true });
+
+    const retryAttempt = await useCase.execute(2);
+
+    expect(retryAttempt).toMatchObject({ success: true, bonusAwarded: 1000 });
+    // El intento real ocurrió (1 sola llamada al SDK) y el efecto se pagó.
+    expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+    expect(repository.getCoins()).toBe(balanceAfterPurchase + 1000);
+    expect(useCase.isClaimed()).toBe(true);
+  });
+
+  // El otro lado de la política: el cooldown AMBIENTAL (sin fill) no
+  // promete nada en el reintento — el dinero quedaría trabado —, así que
+  // ahí SÍ se reembolsa el costo exacto del catálogo, una sola vez.
+  it('refunds costOf("double_reward") exactly once when the cooldown came from a no-fill failure ("refunded")', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedStatus('cooldown_no_fill');
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+    const balanceAfterPurchase = repository.getCoins();
+
+    const result = await useCase.execute(2);
+
+    expect(result).toEqual({ success: false, reason: 'refunded' });
+    // El reembolso es EXACTAMENTE costOf('double_reward'), una sola vez.
+    expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('double_reward'));
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // Secuencia mixta (cancelación + adblock): primero la cancelación del
+  // propio jugador — `ad_failed`, sin reembolso — y entre los dos clics el
+  // SDK reporta ADBLOCK, estado PERMANENTE que SÍ reembolsa (política 2 de
+  // rewardedAdStatus()). Nota: setRewardedAvailable(false) setea
+  // 'adblock', no el cooldown; el cooldown AUTOINFLIGIDO ya NO reembolsa
+  // (era la política vieja, un forfeit) y está cubierto por los tests de
+  // 'ads_cooldown' de arriba.
+  it('after a player-cancelled ad, adblock detected before the next click refunds exactly once and closes the claim', async () => {
     const repository = new FakeProgressionRepository();
     repository.seedCoins(10000);
     const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
@@ -256,20 +358,19 @@ describe('MultiplyRewardUseCase', () => {
     expect(useCase.isClaimed()).toBe(false);
     expect(crazyGamesService.rewardedAdCallCount).toBe(1);
 
-    // El servicio real acaba de poner el cooldown de 60 s por ese fallo.
+    // Entre los dos clics se detecta adblock: rewardedAdStatus() = 'adblock'.
     crazyGamesService.setRewardedAvailable(false);
 
-    // Clic 2 a los 10 s: el cooldown lo provocó el propio jugador, pero el
-    // pre-chequeo no lo distingue — reembolsa EXACTAMENTE costOf(id) y
-    // cierra el reclamo, sin volver a pedir un anuncio.
+    // Clic 2: adblock es PERMANENTE en la sesión — reembolsa EXACTAMENTE
+    // costOf(id) y cierra el reclamo, sin volver a pedir un anuncio.
     const secondAttempt = await useCase.execute(2);
     expect(secondAttempt).toEqual({ success: false, reason: 'refunded' });
     expect(repository.getCoins() - balanceAfterPurchase).toBe(costOf('double_reward'));
     expect(repository.getCoins()).toBe(balanceBeforePurchase);
     expect(crazyGamesService.rewardedAdCallCount).toBe(1);
 
-    // 60 s simulados: el cooldown vence y los ads vuelven — el reclamo
-    // sigue bloqueado (reembolso XOR efecto), sin segundo crédito.
+    // El adblock se desactiva: el reclamo sigue bloqueado (reembolso XOR
+    // efecto), sin segundo crédito.
     crazyGamesService.setRewardedAvailable(true);
     const thirdAttempt = await useCase.execute(2);
     expect(thirdAttempt).toEqual({ success: false, reason: 'refunded' });

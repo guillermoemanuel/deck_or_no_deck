@@ -11,8 +11,9 @@ type Callbacks = {
  * Instala un `window.CrazyGames.SDK` falso. `requestAd` NO dispara nada solo:
  * cada test decide cuándo llegan adStarted / adFinished / adError, igual que
  * el SDK real, que responde de forma asíncrona.
+ * `adblock` (default `false`) configura lo que reporta `hasAdblock()`.
  */
-function installFakeSdk(): { lastCallbacks: () => Callbacks; requestAd: jest.Mock } {
+function installFakeSdk(adblock = false): { lastCallbacks: () => Callbacks; requestAd: jest.Mock } {
   let callbacks: Callbacks | null = null;
   const requestAd = jest.fn((_type: string, cb: Callbacks) => {
     callbacks = cb;
@@ -21,7 +22,7 @@ function installFakeSdk(): { lastCallbacks: () => Callbacks; requestAd: jest.Moc
     CrazyGames: {
       SDK: {
         init: () => Promise.resolve(),
-        ad: { requestAd, hasAdblock: () => Promise.resolve(false) },
+        ad: { requestAd, hasAdblock: () => Promise.resolve(adblock) },
         game: { gameplayStart: jest.fn(), gameplayStop: jest.fn() },
         user: { systemInfo: { locale: 'en-US' } }
       }
@@ -159,5 +160,93 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
 
     expect(service.isRewardedAdAvailable()).toBe(false);
     await expect(service.showRewardedAd()).resolves.toEqual({ success: false, reason: 'sdk_unavailable' });
+  });
+
+  // --- rewardedAdStatus(): el motivo del cooldown define la política de reembolso (ADR-006) ---
+
+  it('tras un rewarded sin fill, rewardedAdStatus() es "cooldown_no_fill" durante el cooldown', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+    expect(service.rewardedAdStatus()).toBe('available');
+
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'unfilled', message: 'No ad available' });
+    await pending;
+
+    expect(service.rewardedAdStatus()).toBe('cooldown_no_fill');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+  });
+
+  it('tras un rewarded con otro fallo (timeout de arranque), rewardedAdStatus() es "cooldown_retryable"', async () => {
+    installFakeSdk();
+    const service = await createReadyService();
+
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    jest.advanceTimersByTime(15_000); // nunca llegó adStarted → settle con reason 'error'
+    await pending;
+
+    expect(service.rewardedAdStatus()).toBe('cooldown_retryable');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+  });
+
+  it('vencido el cooldown de 60 s, rewardedAdStatus() vuelve a "available"', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'unfilled' });
+    await pending;
+    expect(service.rewardedAdStatus()).toBe('cooldown_no_fill');
+
+    jest.advanceTimersByTime(60_000);
+    expect(service.rewardedAdStatus()).toBe('available');
+    expect(service.isRewardedAdAvailable()).toBe(true);
+  });
+
+  it('con adblock detectado, rewardedAdStatus() es "adblock" aunque haya cooldown activo', async () => {
+    const sdk = installFakeSdk(/* adblock */ true);
+    const service = await createReadyService();
+    await flushMicrotasks(); // el resultado de hasAdblock() resuelve un tick después de init()
+
+    // Un fallo para dejar cooldown activo: lo permanente (adblock) debe mandar igual.
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'unfilled' });
+    await pending;
+
+    expect(service.rewardedAdStatus()).toBe('adblock');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+  });
+
+  it('sin SDK, rewardedAdStatus() es "sdk_unavailable" (lo permanente manda sobre cualquier cooldown)', async () => {
+    const service = new CrazyGamesService();
+    service.init();
+
+    expect(service.rewardedAdStatus()).toBe('sdk_unavailable');
+  });
+
+  it('un rewarded exitoso limpia el cooldown y el motivo previo: rewardedAdStatus() vuelve a "available"', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+
+    // 1) Fallo sin fill → cooldown no_fill todavía activo.
+    const failed = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'unfilled' });
+    await failed;
+    expect(service.rewardedAdStatus()).toBe('cooldown_no_fill');
+
+    // 2) Éxito sin avanzar el reloj: si no limpiara cooldown Y motivo, seguiría bloqueado.
+    const retry = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adStarted?.();
+    sdk.lastCallbacks().adFinished();
+    await retry;
+
+    expect(service.rewardedAdStatus()).toBe('available');
+    expect(service.isRewardedAdAvailable()).toBe(true);
   });
 });

@@ -49,7 +49,7 @@ Verificación: `grep -rn "from '\.\./" src/domain` → vacío.
 | `presentation/scenes/ShopScene.ts` | escena de 771 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades`); compra de mazos sin use-case |
 | `domain/entities/GameSession.ts` | raíz del agregado + `EnergyDrainRule` |
 | `main.ts` | composition root global + anti-cheat de `beforeunload` |
-| `shared/i18n/LanguageData.ts` | 144 claves; agregá siempre `en` **y** `es` |
+| `shared/i18n/LanguageData.ts` | 145 claves; agregá siempre `en` **y** `es` |
 
 Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 
@@ -62,12 +62,14 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.
 - Costos de tienda: los define `SessionUpgradeCatalog.ts`; los tests usan `costOf(id)`, **nunca precios hardcodeados**.
 - Bono periódico: 12 h cooldown + 24 h ventana; cartas `[500…5000]` (ADR-005).
-- Reembolso XOR efecto (ADR-006): consumir Duplicar/Triplicar/Revivir con
-  **`isRewardedAdAvailable()` false — SDK ausente, adblock detectado o cooldown de 60 s**
-  (se lee ese predicado, no `isAvailable()`) reembolsa `costOf(id)` **una sola vez** y
-  bloquea el reclamo (`'refunded'`); `ad_failed` **no** reembolsa y sigue reintentable —
-  pero el cooldown de 60 s lo pone cualquier rewarded fallido **incluida la cancelación
-  del jugador**: un segundo click dentro de la ventana reembolsa y cierra el reclamo.
+- Reembolso XOR efecto (ADR-006): la política al consumir Duplicar/Triplicar/Revivir se
+  lee con **`rewardedAdStatus()`** (el motivo), **no** con el predicado booleano:
+  `cooldown_retryable` → motivo **`'ads_cooldown'` SIN reembolsar**, sin setear
+  `refunded` y sin pedir el anuncio (UI: `RESULT_AD_COOLDOWN`, botones **encendidos** —
+  reintento real a los 60 s; ese cooldown puede ser autoinfligido por la cancelación del
+  jugador); `sdk_unavailable`/`adblock`/`cooldown_no_fill` → reembolso único `costOf(id)`
+  con resultado `'refunded'` que bloquea todo reclamo posterior. `ad_failed` **no**
+  reembolsa y sigue reintentable.
 
 ## 5. Eventos
 

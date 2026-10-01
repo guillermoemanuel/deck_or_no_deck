@@ -138,7 +138,8 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
 - `README` §13.1 decía "6 mazos" → hay **10** (ids en `DeckSetups.ts`).
 - `README` §14.2 decía "57 claves i18n" → había **142** (284 líneas de clave ÷ 2 idiomas);
   con el guard de compra por ads (mismo día) son **143** (286 ÷ 2) — con el reembolso por
-  fallo ambiental (2026-10-01, `RESULT_AD_REFUNDED`) son **144** (288 ÷ 2).
+  fallo ambiental (2026-10-01, `RESULT_AD_REFUNDED`) **144** (288 ÷ 2) y con la enmienda
+  ADR-006 (2026-10-01, `RESULT_AD_COOLDOWN`) **145** (290 ÷ 2).
 - `README` daba el evento `UpgradePurchased` por vivo → **nunca se emite**.
 - El árbol de directorios del `README` nombraba `Money`, `EnergyBar`, `Upgrade` → no
   existen (ADR-002).
