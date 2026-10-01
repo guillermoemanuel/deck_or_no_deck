@@ -110,18 +110,30 @@ test ahí); quedan acá solo como contexto histórico:
 
 Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 
-1. Partida completa: abrir cartas → oferta → DEAL → resultado → cobrar.
-2. NO DEAL hasta el final → swap mitad de partida → swap final → victoria/derrota.
-3. Energía a 0 → revivir con anuncio (fake en local) → seguir jugando.
-4. Tienda: comprar mejora con y sin fondos, con conflicto, y comprar mazo.
+1. Partida completa (*2026-10-01*, verificado): abrir cartas → oferta → DEAL →
+   resultado → cobrar (premio acreditado).
+2. NO DEAL hasta el final (*2026-10-01*, verificado): swap mitad de partida → swap
+   final → victoria/derrota (los dos swaps aparecieron).
+3. Energía a 0 → revivir con anuncio (*2026-10-01*, verificado — el SDK real abre el
+   anuncio en localhost) → seguir jugando: consumo cobrado **sin** reembolso, energía
+   restaurada, partida continúa.
+4. Tienda (*2026-10-01*, verificado): comprar mejora **con fondos** (descuenta y se
+   aplica), **conflicto** Duplicar/Triplicar (mensaje y **sin cargo**), **sin fondos**
+   (saldo intacto) y **comprar mazo** desde el menú (descuenta y desbloquea).
 5. Cambiar idioma en el menú → verificar textos de escenas, tutorial y modales.
 6. Salir al menú a mitad de partida → verificar penalidad y saldo.
 7. Bono periódico (forzar `periodicBonusCycleStart` en localStorage).
-8. **Guard de ads en la tienda** (NO corrido): con los anuncios caídos (bloquear
-   `*crazygames-sdk-v3.js*` en DevTools → Network y recargar) comprar una mejora de ads →
-   la fila muestra *"Requiere anuncio recompensado — no hay anuncios ahora."* y **no se
-   descuentan monedas**; el conflicto Duplicar/Triplicar sigue mostrando su mensaje igual
-   que antes.
+8. **Guard de ads en la tienda** (*2026-10-01*, verificado): **receta corregida** —
+   la vieja (bloquear `*crazygames-sdk-v3.js*` y recargar) **no puede** mostrar el
+   mensaje: al reabrir la tienda, `ListAvailableUpgradesUseCase` oculta las filas con
+   `requiresRewardedAd`, así que no hay botón que clicear. La receta válida es la
+   **caída en caliente**: abrir la tienda con los ads OK → `window.CrazyGames = null`
+   (consola) → clic en Duplicar → la fila muestra *"Requiere anuncio recompensado —
+   no hay anuncios ahora."* y **no se descuentan monedas** (el guard corre antes de
+   `spendCoins`). Verificado además: **rama oculta** del filtro — reabrí la tienda con
+   el SDK caído y Duplicar/Triplicar/Revivir **desaparecen**; al restaurar el SDK,
+   reaparecen. El mensaje de conflicto con ads caídos **no es alcanzable** (Triplicar
+   está oculta en ese estado) — el conflicto quedó verificado en el ítem 4.
 9. **Reembolso por SDK caído — victoria** (*2026-10-01*, verificado): comprar Duplicar,
    llegar a la
    victoria con el SDK caído → mensaje `RESULT_AD_REFUNDED`
@@ -138,23 +150,18 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     devolución); recomendar dentro del cooldown → `RESULT_AD_COOLDOWN` con botones
     **vivos** y reintento efectivo a los 60 s.
 
-**Estado — última ejecución 2026-10-01 (smoke manual en `http://localhost:5174`):**
-ítems **9, 10 y 11 verificados** en vivo (ver detalle más abajo). Ejecución previa
-2026-09-30: ítems **5, 6 y 7 verificados**
-(idioma EN↔ES, abandono con penalidad −5000 que
-puede dejar saldo negativo, bono periódico forzado). **No corridos en esta oportunidad**
-los 4 ítems largos: **1-2** (partida DEAL/no-deal + swap de mitad y final), **3** (revivir
-con anuncio) y **4** (tienda con/sin fondos, con conflicto y compra de mazo). Nota: la
-tienda en local muestra Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK
-real de CrazyGames e `isRewardedAdAvailable()` devuelve `true` (hoy lo consultan
-`ListAvailableUpgradesUseCase` al listar y `PurchaseSessionUpgradeUseCase` al comprar, no
-la escena); **la rama "oculta" del
-filtro NO se ejercitó en vivo** — el predicado sí está cubierto por
-`ListAvailableUpgradesUseCase.spec.ts`, falta solo el smoke en el navegador (forzar
-bloqueando `*crazygames-sdk-v3.js*` en DevTools → Network y recargando).
-**Ítem 8 (guard de compra por ads) tampoco corrido** — el predicado está cubierto por
-`PurchaseSessionUpgradeUseCase.spec.ts`, falta el smoke en el navegador con el SDK
-bloqueado (misma receta del párrafo anterior).
+**Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
+`http://localhost:5174`):** los **11 ítems verificados en vivo** — ítems **1-4 y 9-11**
+el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
+penalidad −5000 que puede dejar saldo negativo, bono periódico forzado). Notas de esa
+última corrida que siguen vigentes: la tienda en local muestra
+Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK real de CrazyGames y
+`isRewardedAdAvailable()` devuelve `true` (lo consultan `ListAvailableUpgradesUseCase`
+al listar y `PurchaseSessionUpgradeUseCase` al comprar, no la escena); **la rama
+"oculta" del filtro YA se ejercitó en vivo** (ítem 8, 2026-10-01) además de estar
+cubierta por `ListAvailableUpgradesUseCase.spec.ts`; y la tienda abierta **sin partida
+activa** (menú principal) arranca en la pestaña "Mazos" — las mejoras de sesión solo se
+compran desde el HUD durante una partida.
 
 **Ítems 9-11 (reembolso por fallo ambiental, ADR-006) — VERIFICADOS en vivo
 2026-10-01.** Receta usada: en lugar de bloquear `*crazygames-sdk-v3.js*` (eso exigiría

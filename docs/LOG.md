@@ -7,6 +7,40 @@
 
 ---
 
+## 2026-10-01 · Smoke 1-4 y 8 verificado en vivo — checklist de smoke COMPLETO
+
+**Qué se tocó:** solo `docs/testing.md` (ítems 1-4 y 8 marcados *verificado
+2026-10-01*, receta del ítem 8 corregida, estado de cabecera reescrito) y esta entrada.
+Nada en `src/`.
+
+**Cómo se verificó (smoke manual guiado en `http://localhost:5174`):**
+- **Ítem 1:** partida completa → DEAL → cobrar con el premio acreditado. ✔
+- **Ítem 2:** NO DEAL al final; swaps de mitad y de partida aparecieron. ✔
+- **Ítem 3:** Revivir comprado en tienda (1250) → energía a 0 → anuncio real abierto en
+  localhost → efecto entregado **sin reembolso**, energía restaurada, partida
+  continúa. ✔
+- **Ítem 4 (4 checks):** mejora con fondos (descuenta + aplica), conflicto
+  Duplicar/Triplicar (**mensaje y sin cargo**), sin fondos (saldo intacto) y compra de
+  mazo desde el menú (descuenta + desbloquea). ✔
+- **Ítem 8 — receta CORREGIDA:** la vieja (bloquear `*crazygames-sdk-v3.js*` y
+  recargar) **no puede** mostrar el mensaje del guard: al reabrir la tienda
+  `ListAvailableUpgradesUseCase` oculta las filas `requiresRewardedAd` y no hay botón
+  que clicear. Receta válida = **caída en caliente** (`window.CrazyGames = null` con la
+  tienda ya abierta) → mensaje *"Requiere anuncio recompensado — no hay anuncios
+  ahora."* y **sin cargo** (el guard corre antes de `spendCoins`). Además se verificó
+  la **rama oculta** del filtro (filas desaparecen con el SDK caído y reaparecen al
+  restaurarla) — la rama que quedó pendiente de vivo desde 2026-09-30. El conflicto
+  con ads caídos no es alcanzable (Triplicar está oculta); quedó cubierto en el 4. ✔
+
+**Estado:** los **11 ítems del smoke están verificados en vivo** (1-4 y 9-11 el
+2026-10-01; 5-7 el 2026-09-30).
+
+**Qué quedó pendiente:** Vite 8 (decisión del usuario); archivos `.opencode/` sin
+commitear; naming canónico "Deck or No Deck"; smoke de regresión completo cuando se
+toque algo del camino feliz.
+
+---
+
 ## 2026-10-01 · Smoke 9-11 verificado en vivo (reembolso + cooldown, ADR-006)
 
 **Qué se tocó:** solo `docs/testing.md` (ítems 9-11 marcados *verificado 2026-10-01*,
