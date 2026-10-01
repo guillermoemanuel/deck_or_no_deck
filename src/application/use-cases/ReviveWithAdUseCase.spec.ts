@@ -269,8 +269,8 @@ describe('ReviveWithAdUseCase', () => {
   // ADR-006): el motivo del no-disponible decide la política. Acá el
   // cooldown de 60 s viene de un fallo REINTENTABLE — el servicio real lo
   // activa con CUALQUIER rewarded fallido, INCLUIDA la cancelación del
-  // propio jugador (CrazyGamesService.settle() → rewardedBlockedUntil =
-  // now + 60000) —, así que reembolsar dentro de la ventana era un
+  // propio jugador (settle() → RewardCooldownTracker: ahora + 60000) —,
+  // así que reembolsar dentro de la ventana era un
   // FORFEIT AUTOINFLIGIDO: el jugador cancelaba el anuncio de Revivir,
   // cobraba el dinero y perdía para siempre la chance de revivir. Devuelve
   // el motivo nuevo sin tocar el saldo ni el flag `refunded`.

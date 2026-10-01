@@ -68,8 +68,8 @@ export class MultiplyRewardUseCase {
         // POLÍTICA 1 — fallo REINTENTABLE → NO se reembolsa.
         // Causa raíz: el servicio real pone el cooldown de 60 s con
         // CUALQUIER rewarded fallido, INCLUIDA la cancelación del propio
-        // jugador (CrazyGamesService.settle() → rewardedBlockedUntil = now
-        // + 60000), así que la ventana puede ser AUTOINFLIGIDA: reembolsar
+        // jugador (settle() → RewardCooldownTracker.noteFailure('other') →
+        // ahora + 60000), así que la ventana puede ser AUTOINFLIGIDA: reembolsar
         // dentro de ella era un FORFEIT NO QUERIDO — el jugador cancelaba
         // el anuncio, cobraba el costo y perdía para siempre la chance del
         // efecto. Acá no se acredita nada, NO se setea `refunded` (el

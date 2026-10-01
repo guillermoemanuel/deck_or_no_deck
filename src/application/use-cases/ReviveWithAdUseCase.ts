@@ -63,7 +63,7 @@ export class ReviveWithAdUseCase {
         // POLÍTICA 1 — fallo REINTENTABLE → NO se reembolsa. Causa raíz:
         // el servicio real pone el cooldown de 60 s con CUALQUIER rewarded
         // fallido, INCLUIDA la cancelación del propio jugador
-        // (CrazyGamesService.settle() → rewardedBlockedUntil = now + 60000),
+        // (settle() → RewardCooldownTracker: ahora + 60000),
         // así que la ventana puede ser AUTOINFLIGIDA: reembolsar dentro de
         // ella era un FORFEIT NO QUERIDO — cancelar el anuncio de Revivir
         // cobraba el costo y perdía para siempre la chance de revivir. Acá

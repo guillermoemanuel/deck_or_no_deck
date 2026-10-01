@@ -6,6 +6,7 @@ import {
   AdLifecyclePhase,
   RewardedAdStatus
 } from '../../domain/ports/ICrazyGamesService';
+import { RewardCooldownTracker } from './RewardCooldownTracker';
 
 declare global {
   interface Window {
@@ -90,22 +91,18 @@ export class CrazyGamesService implements ICrazyGamesService {
    * tiempo, muy por encima de la duración de cualquier anuncio real.
    */
   private static readonly AD_PLAYBACK_SAFETY_TIMEOUT_MS = 120000;
-  /** Tras un rewarded fallido, no se ofrecen acciones con rewarded durante este lapso. */
-  private static readonly REWARDED_RETRY_COOLDOWN_MS = 60000;
 
   private ready = false;
   private initPromise: Promise<void> | null = null;
   private adblockDetected = false;
   private adInProgress = false;
-  private rewardedBlockedUntil = 0;
   /**
-   * Motivo del último rewarded que falló (o `null` si nunca falló / el
-   * último fue exitoso). Distingue dos cooldowns con distinta política de
-   * reembolso (ADR-006): `ad_unavailable` (sin fill — fallo ambiental,
-   * reembolsa) de cualquier otro fallo (error/cancelación — reintentable,
-   * NO reembolsa). Solo lo escribe `settle()` para `type === 'rewarded'`.
+   * Cooldown de 60 s del rewarded y el motivo del último fallo, extraídos
+   * a `RewardCooldownTracker` (fuente única de esa semántica — también la
+   * consume el próximo adapter de ads propio para portales externos).
+   * Este servicio solo traduce el `AdResult` al lenguaje del tracker.
    */
-  private lastRewardedFailure: 'ad_unavailable' | 'error' | null = null;
+  private readonly rewardCooldown = new RewardCooldownTracker();
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
 
   /**
@@ -182,8 +179,9 @@ export class CrazyGamesService implements ICrazyGamesService {
     if (this.adblockDetected) {
       return 'adblock';
     }
-    if (Date.now() < this.rewardedBlockedUntil) {
-      return this.lastRewardedFailure === 'ad_unavailable' ? 'cooldown_no_fill' : 'cooldown_retryable';
+    const cooldown = this.rewardCooldown.cooldownState();
+    if (cooldown !== null) {
+      return cooldown;
     }
     return 'available';
   }
@@ -348,15 +346,15 @@ export class CrazyGamesService implements ICrazyGamesService {
           // Éxito → limpia cooldown Y motivo (status vuelve a 'available');
           // fallo → arranca el cooldown de 60 s y registra el motivo que
           // decide la política de reembolso (ADR-006): sin fill reembolsa,
-          // cualquier otro fallo es reintentable y NO reembolsa.
-          this.rewardedBlockedUntil = result.success
-            ? 0
-            : Date.now() + CrazyGamesService.REWARDED_RETRY_COOLDOWN_MS;
-          this.lastRewardedFailure = result.success
-            ? null
-            : result.reason === 'ad_unavailable'
-              ? 'ad_unavailable'
-              : 'error';
+          // cualquier otro fallo es reintentable y NO reembolsa. Esa
+          // semántica vive en RewardCooldownTracker (fuente única, también
+          // la usa el segundo adapter de ads); acá solo se traduce el
+          // resultado del SDK a su lenguaje.
+          if (result.success) {
+            this.rewardCooldown.noteSuccess();
+          } else {
+            this.rewardCooldown.noteFailure(result.reason === 'ad_unavailable' ? 'no_fill' : 'other');
+          }
         }
         resolve(result);
       };
