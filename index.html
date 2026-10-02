@@ -16,17 +16,16 @@
   <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
   <title>Deck or No Deck</title>
   <!--
-    BUGFIX (monetización): sin este script, `window.CrazyGames` nunca
-    existe — CrazyGamesService.isAvailable() siempre da `false` en
-    producción, y las 3 solicitudes de Rewarded Ad (Revivir, Duplicar,
-    Triplicar) fallan en silencio con { success: false, reason: 'sdk_unavailable' }
-    ANTES de siquiera intentar mostrar el anuncio (ver el guard temprano
-    en MultiplyRewardUseCase.execute() / ReviveWithAdUseCase.execute()).
-    Va síncrono en <head>, ANTES del bundle del juego: así
-    `window.CrazyGames.SDK` ya existe cuando cualquier código nuestro
-    corre, sin importar en qué momento se llegue a usarlo.
+    ADR-007: el tag del SDK de CrazyGames que vivía acá (síncrono en
+    <head>, para TODOS los builds) se sacó de este archivo. Ahora lo
+    inyecta dinámicamente `main.ts` (`loadCrazyGamesSdk()`) y SOLO cuando
+    el build se publica con `VITE_ADS=crazygames` — un build
+    `VITE_ADS=portal`/`none` no pide el script del SDK de CrazyGames para
+    nada (ni siquiera su URL queda en el bundle).
+    Si el script falla, el juego NO se bloquea: `CrazyGamesService.init()`
+    degrada a `sdk_unavailable` (warn) y las mecánicas de ads se ocultan
+    (mismo camino que el modo 'none').
   -->
-  <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
   <script type="module" src="./src/main.ts"></script>
   <style>
     /* BUGFIX (ads en pantalla completa, ver comentario en main.ts junto a

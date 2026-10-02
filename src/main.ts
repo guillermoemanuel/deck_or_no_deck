@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
+import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdService';
+import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
+import { presentAdOverlay } from './presentation/scenes/AdOverlayScene';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
 import { ProgressionManager } from './infrastructure/persistence/ProgressionManager';
 import { installCompactTextFloor } from './presentation/mobile/CompactTextFloor';
@@ -21,32 +24,147 @@ import { ShopScene } from './presentation/scenes/ShopScene';
 import { ResultScene } from './presentation/scenes/ResultScene';
 import { GameServices } from './presentation/GameServices';
 import { isGameAbandonGuardActive, deactivateGameAbandonGuard } from './presentation/GameAbandonGuard';
+import { ICrazyGamesService } from './domain/ports/ICrazyGamesService';
 import { LOSS_PENALTY_AMOUNT } from './domain/value-objects/GamePenalties';
 import languageManager from './shared/i18n/LanguageManager';
 
 // --- Composition Root: unica zona del proyecto donde se instancian concretos ---
-const crazyGamesService = new CrazyGamesService();
-// BUGFIX (SDK v3 "not initialized yet" / Uncaught GeneralError): dispara
-// SDK.init() lo antes posible. No hace falta esperar esta llamada acá —
-// reportGameplayStart()/showRewardedAd()/etc. esperan internamente esta
-// misma Promise antes de tocar `SDK.ad`/`SDK.game` (ver CrazyGamesService.ts).
-crazyGamesService.init();
 
-// Auto-detección de idioma (requisito CrazyGames: usar el locale que
-// reporta el SDK, con fallback a inglés). `getUserLocale()` ya espera
-// internamente a que `init()` termine y resuelve `null` sin lanzar si el
-// SDK no está disponible (dev local, otras plataformas, etc.) — acá solo
-// hace falta pasarle lo que devuelva a LanguageManager, que decide en
-// aislamiento si corresponde aplicarlo (nunca pisa una elección o
-// detección previa — ver applyDetectedLocale()). No se espera esta
-// Promise: si resuelve después de que MainMenuScene ya dibujó su primer
-// frame en DEFAULT_LANGUAGE, el cambio se ve igual, en caliente, gracias
-// a LocalizedText/onLanguageChanged.
-void crazyGamesService.getUserLocale().then(locale => {
-  if (locale) {
-    languageManager.applyDetectedLocale(locale);
-  }
-});
+// ADR-007 (decisión 3): el adapter de anuncios lo decide el env de build
+// VITE_ADS. Sin env (dev local) o con cualquier valor inválido manda el
+// default 'crazygames' — el comportamiento previo al ADR queda intacto.
+const adsMode = resolveAdsMode(import.meta.env.VITE_ADS);
+
+/**
+ * Firma común de los dos adapters de ads (ADR-007): el puerto
+ * `ICrazyGamesService` + `init()`. Las dos clases concretas declaran
+ * `init()` con firmas distintas (`CrazyGamesService.init(): void` y
+ * `OwnRewardedAdService.init(): Promise<void>`), y esta intersección
+ * acepta las dos SIN tocar ninguna clase: `void` es asignable a
+ * `Promise<void> | void` y `Promise<void>` también. Con este tipo, los 5
+ * usos del servicio en este archivo (getUserLocale(), onAdLifecycle del
+ * audio, GameServices.crazyGamesService, ListAvailableUpgradesUseCase y
+ * reportGameplayStop() en beforeunload) quedan escritos una sola vez para
+ * los 3 modos, sin ramificar según el adapter.
+ */
+type AdService = ICrazyGamesService & { init(): Promise<void> | void };
+
+// Selección de adapter (ADR-007):
+//  - 'crazygames' → adapter real del SDK (idéntico al de siempre; cambia
+//    solo de dónde sale el script — ver loadCrazyGamesSdk() más abajo).
+//  - 'none' → el MISMO CrazyGamesService pero sin cargar el script →
+//    `sdk_unavailable` permanente → filas de ads ocultas: la degradación
+//    actual, ahora disponible como modo explícito (gratis, ADR-007).
+//  - 'portal' → adapter propio; acá se le inyecta el presenter del overlay
+//    (presentation/), porque infrastructure NO puede importar
+//    presentation (regla de dependencias — mismo patrón de inversión que
+//    GameServices, ADR-003).
+// Cierre perezoso sobre `game`: esa constante se crea MÁS ABAJO en este
+// archivo, pero el cierre no se ejecuta en el arranque — solo cuando el
+// jugador pide un anuncio, siempre durante la partida y por lo tanto con
+// `game` ya inicializada (nada del orden de boot se mueve por esto).
+const crazyGamesService: AdService =
+  adsMode === 'portal'
+    ? new OwnRewardedAdService(type => presentAdOverlay(game, type))
+    : new CrazyGamesService();
+
+// Arranque de los ads (ADR-007): script → init() → locale.
+//
+// Gate ESTÁTICO del script — espejo deliberado de `resolveAdsMode()`: la
+// fuente única del ADAPTER sigue siendo `adsMode`, pero una llamada a
+// función no es plegable por el bundler, mientras que un `===` sobre el
+// env SÍ lo es (Vite lo reemplaza en build time). Así, el string
+// `sdk.crazygames.com` se elimina por completo del bundle en los builds
+// 'portal'/'none' (gate de build de ADR-007) sin cambiar el
+// comportamiento: para todo valor que NO sea 'portal' ni 'none'
+// (ausente/vacío/inválido → 'crazygames'), los dos predicados coinciden.
+// Si agregás un modo nuevo a `AdsMode`, decidí acá si ese build pide el
+// script del SDK.
+const mayLoadCrazyGamesSdk =
+  import.meta.env.VITE_ADS !== 'portal' && import.meta.env.VITE_ADS !== 'none';
+
+// Orden CRÍTICO: el chequeo `window.CrazyGames?.SDK` de
+// CrazyGamesService.init() ocurre UNA vez, en el momento de la llamada, y
+// no se reintenta — si init() corriera antes de que el script termine de
+// cargar, el servicio quedaria "sin SDK" para toda la sesión (ready=false
+// → sdk_unavailable permanente, aunque el SDK aparezca un segundo
+// después). Por eso, en modo 'crazygames' se ESPERA a loadCrazyGamesSdk()
+// y recién entonces se llama init(); en 'portal'/'none' no hay script
+// externo que esperar, así que el arranque sigue siendo síncrono como
+// siempre.
+//
+// Si el script FALLA (red caída, dominio bloqueado por una extensión),
+// loadCrazyGamesSdk() resuelve igual con un warn: no se bloquea el juego —
+// init() degrada a sdk_unavailable → ListAvailableUpgradesUseCase oculta
+// Duplicar/Triplicar/Revivir y el consumo reembolsa (ADR-006), exactamente
+// la misma degradación del modo 'none'.
+const bootAds = (): void => {
+  // BUGFIX (SDK v3 "not initialized yet" / Uncaught GeneralError): dispara
+  // SDK.init() lo antes posible dados los constraint de arriba — en modo
+  // crazygames "lo antes posible" es apenas cargado el script; en
+  // portal/none, en esta misma línea. No hace falta esperar esta llamada
+  // acá: reportGameplayStart()/showRewardedAd()/etc. esperan internamente
+  // esta misma Promise antes de tocar `SDK.ad`/`SDK.game`
+  // (ver CrazyGamesService.ts).
+  crazyGamesService.init();
+
+  // Auto-detección de idioma (requisito CrazyGames: usar el locale que
+  // reporta el SDK, con fallback a inglés). `getUserLocale()` ya espera
+  // internamente a que `init()` termine y resuelve `null` sin lanzar si el
+  // SDK no está disponible (dev local, portal sin SDK, modo 'none') — acá
+  // solo hace falta pasarle lo que devuelva a LanguageManager, que decide
+  // en aislamiento si corresponde aplicarlo (nunca pisa una elección o
+  // detección previa — ver applyDetectedLocale()). No se espera esta
+  // Promise: si resuelve después de que MainMenuScene ya dibujó su primer
+  // frame en DEFAULT_LANGUAGE, el cambio se ve igual, en caliente, gracias
+  // a LocalizedText/onLanguageChanged.
+  void crazyGamesService.getUserLocale().then(locale => {
+    if (locale) {
+      languageManager.applyDetectedLocale(locale);
+    }
+  });
+};
+
+if (mayLoadCrazyGamesSdk) {
+  // El resto del archivo sigue corriendo sincrónicamente (juego, audio,
+  // anti-cheat) mientras carga el script: solo init()/locale se diferencian.
+  void loadCrazyGamesSdk().then(bootAds);
+} else {
+  bootAds();
+}
+
+/**
+ * Inyecta el tag del SDK de CrazyGames — antes un `<script>` fijo en
+ * index.html (línea 29) que se descargaba en TODOS los builds; el ADR-007
+ * mandó sacarlo de ahí y cargarlo dinámicamente, SOLO en modo
+ * 'crazygames' (un build 'portal'/'none' jamás pide sdk.crazygames.com).
+ *
+ * La promise NUNCA rechaza: en `error` (red caída, dominio bloqueado)
+ * resuelve con un warn y deja el camino de degradación en manos de
+ * `CrazyGamesService.init()` (`sdk_unavailable`), sin frenar el arranque
+ * del juego.
+ */
+function loadCrazyGamesSdk(): Promise<void> {
+  return new Promise<void>(resolve => {
+    if (window.CrazyGames?.SDK) {
+      // El SDK ya está en la página (carga previa, tag duplicado a mano):
+      // no se inyecta un segundo <script>.
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+    script.addEventListener('load', () => resolve());
+    script.addEventListener('error', () => {
+      console.warn(
+        '[main] No se pudo cargar el SDK de CrazyGames — el juego continúa sin anuncios de la plataforma (sdk_unavailable).'
+      );
+      resolve();
+    });
+    document.head.appendChild(script);
+  });
+}
 
 const progressionRepository = new LocalStorageProgressionRepository();
 const randomProvider = new CryptoRandomProvider();

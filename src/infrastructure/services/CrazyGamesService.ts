@@ -138,8 +138,10 @@ export class CrazyGamesService implements ICrazyGamesService {
   }
 
   isAvailable(): boolean {
-    // Depende de DOS cosas: que `index.html` haya cargado el script del
-    // SDK (sin eso, `window.CrazyGames` nunca existe) Y que `init()` ya
+    // Depende de DOS cosas: que el arranque haya cargado el script del
+    // SDK (ADR-007: ya NO vive en index.html — lo inyecta
+    // `main.ts → loadCrazyGamesSdk()`, solo en modo 'crazygames'; sin
+    // eso, `window.CrazyGames` nunca existe) Y que `init()` ya
     // haya resuelto con éxito (`this.ready`) — acceder a `SDK.ad` antes
     // de eso tira un GeneralError síncrono no capturado (confirmado por
     // el trace `get ad @ crazygames-sdk-v3.js`), así que el `try/catch`
