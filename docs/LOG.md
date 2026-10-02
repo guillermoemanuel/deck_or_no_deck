@@ -7,6 +7,32 @@
 
 ---
 
+## 2026-10-02 · Tooling: agente + comando `ads-adapter` (build por `VITE_ADS`)
+
+**Qué se tocó:** `.opencode/agents/ads-adapter.md` (agente nuevo, `mode: subagent`),
+`.opencode/commands/ads-adapter.md` (comando `/ads-adapter <modo>` → `agent: ads-adapter`,
+`subagent: true`) y `.gitignore` (+`.env`). Nada en `src/` ni en docs de producto.
+
+**Qué hace:** con un modo pedido (`crazygames` | `portal` | `none`, literal **exacto** —
+misma regla estricta que `resolveAdsMode`) escribe `VITE_ADS=` en `.env` (persistente y
+compatible con cualquier shell de Windows; no toca `.env.example`), corre `npm run build`
+y verifica el bundle contra ADR-007: grep de `sdk.crazygames.com` en `dist/` con **>0**
+matches para `crazygames` y **0** para `portal`/`none`. Reporte MODO/BUILD/BUNDLE +
+VEREDICTO. Patrón calcado de `crazygames-auditor` + `crazygames-audit`.
+
+**Cómo se verificó:** flujo simulado a mano con el procedimiento del agente — `portal`:
+`.env` ignorado (`git check-ignore` OK), build verde, **0 matches**; `crazygames`: build
+verde, **1 match** (el loader dinámico en el JS); gates en verde (typecheck 0 · lint 0 ·
+42 suites / 501 tests). Formato de frontmatter contra la doc oficial de OpenCode V2
+(`subagent` es el campo vigente; `subtask` es alias deprecado).
+
+**Qué quedó pendiente:** invocar `/ads-adapter <modo>` de verdad (el catálogo de
+subagentes de esta sesión es fijo — probar tras reiniciar OpenCode); `.env` queda en
+`VITE_ADS=crazygames` (default); `.env.example` tenía un cambio propio del usuario
+(línea de ejemplo) que **no** se tocó ni se commiteó; `dist.zip` sigue sin dueño claro.
+
+---
+
 ## 2026-10-02 · Smoke del modo portal verificado en vivo (6/6 ítems, ADR-007)
 
 **Qué se tocó:** solo `docs/testing.md` (checklist del modo `portal` marcado

@@ -3,3 +3,7 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# Config local de build (VITE_ADS, etc.) — la plantilla trackeada es .env.example.
+# El agente ads-adapter escribe VITE_ADS acá (ADR-007); no debe commitearse.
+.env
