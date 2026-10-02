@@ -185,11 +185,12 @@ llamada (`CrazyGamesService.ts:155`). Resultados:
 Los flujos además siguen cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
 `ReviveWithAdUseCase.spec.ts` (19 tests).
 
-### Smoke del modo `portal` (`VITE_ADS=portal`) — checklist NUEVO, NO corrido
+### Smoke del modo `portal` (`VITE_ADS=portal`) — VERIFICADO 2026-10-02
 
 Creado el 2026-10-02 con la unidad ADR-007. **Los 11 ítems de arriba corren en modo
-default** (`crazygames`); estos 6 son el equivalente para el adapter propio y todavía
-**no se verificaron en vivo** (hay que publicar/levantar con la env puesta):
+default** (`crazygames`); estos 6 son el equivalente para el adapter propio. Los 6
+**verificados en vivo el 2026-10-02** con `VITE_ADS=portal npm run dev` (ítem 6 con
+`VITE_ADS=none`):
 
 1. `VITE_ADS=portal npm run dev` → la tienda muestra Duplicar/Triplicar/Revivir (el
    adapter propio reporta `available` sin SDK externo) y la pestaña Red **no** pide
@@ -204,6 +205,14 @@ default** (`crazygames`); estos 6 son el equivalente para el adapter propio y to
 6. `VITE_ADS=none npm run dev` → filas de ads **ocultas** en la tienda (degradación
    explícita, sin script del SDK) — además `grep sdk.crazygames.com dist/*` limpio en un
    build `portal`/`none`.
+
+**Resultado (2026-10-02):** los 6 ítems OK — el adapter propio no pidió
+`sdk.crazygames.com`; el overlay bloqueó el tablero detrás y completó los 3 s sin
+reembolso; la ✕ produjo `RESULT_AD_COOLDOWN` con botones vivos y el reintento a los 60 s
+volvió a abrir el overlay; Revivir en derrota cobró el consumo sin reembolsar y la
+partida siguió; el midgame mostró su overlay corto con `AD_OVERLAY_HINT_MIDGAME` en el
+flujo de la pantalla de resultado; y en `none`, `window.CrazyGames` quedó `undefined` con
+Duplicar/Triplicar/Revivir ausentes y el resto de mejoras visibles (en ambos idiomas).
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

@@ -7,6 +7,34 @@
 
 ---
 
+## 2026-10-02 · Smoke del modo portal verificado en vivo (6/6 ítems, ADR-007)
+
+**Qué se tocó:** solo `docs/testing.md` (checklist del modo `portal` marcado
+*VERIFICADO 2026-10-02* + párrafo de resultado) y esta entrada. Nada en `src/`.
+
+**Cómo se verificó** (smoke manual guiado, `VITE_ADS=portal npm run dev` en
+`http://localhost:5174` y luego `VITE_ADS=none`):
+1. **Visibilidad**: con `portal`, la tienda muestra Duplicar/Triplicar/Revivir y la pestaña
+   Red **no** pide `sdk.crazygames.com`. ✔
+2. **Overlay completo**: Duplicar → victoria → overlay de 3 s bloqueando el tablero →
+   efecto entregado **sin reembolso** (sin devolución de los 3000). ✔
+3. **Cancelación**: ✕ dentro de los 3 s → `RESULT_AD_COOLDOWN` con botones **vivos**,
+   sin reembolso → reintento real a los 60 s (volvió a abrir el overlay). ✔
+4. **Revivir en derrota**: overlay completo → revive y la partida continúa, consumo
+   cobrado sin reembolso. ✔
+5. **Midgame**: overlay corto con `AD_OVERLAY_HINT_MIDGAME` en el flujo de la pantalla
+   de resultado. ✔
+6. **`VITE_ADS=none`**: `window.CrazyGames === undefined`, sin pedir el SDK, filas de ads
+   **ocultas** (resto de mejoras visibles en ambos idiomas); grep de `sdk.crazygames.com`
+   en `dist/` limpio para `portal`/`none` (corrido en la fase de gates). ✔
+
+**Qué quedó pendiente:** Vite 8 (decisión del usuario); archivos `.opencode/` sin
+commitear; `dist.zip` en la raíz sin dueño claro (artefacto sin explicación, no tocado);
+naming canónico "Deck or No Deck"; regresión de los 11 ítems en modo `crazygames` si se
+toque el camino feliz.
+
+---
+
 ## 2026-10-02 · Sincronización de docs tras la unidad ADR-007 (anuncio propio + `VITE_ADS`)
 
 **Tarea:** llevar toda la documentación al código de la unidad **ADR-007**, ya implementada
