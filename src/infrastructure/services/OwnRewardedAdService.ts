@@ -46,6 +46,21 @@ export type AdOverlayPresenter = (type: AdType) => Promise<AdOverlayOutcome>;
  *   política de reembolso de ADR-006 es idéntica en ambas plataformas.
  */
 export class OwnRewardedAdService implements ICrazyGamesService {
+  /**
+   * Watchdog del presenter: si el overlay no resuelve en este lapso, el ad
+   * se da por perdido y se libera el juego. **Causa raíz:** si el presenter
+   * se cuelga (escena que nunca arranca, o `create()` que revienta antes de
+   * registrar sus failsafes), `'ended'` jamás se emitía y `adInProgress`
+   * quedaba `true` para siempre → audio silenciado y ads bloqueados de por
+   * vida. Es el espejo de la filosofía de `CrazyGamesService`
+   * (`AD_START_TIMEOUT_MS`): allí el SDK externo puede no llamar de vuelta,
+   * acá la promise del presenter puede no resolver. **Por qué 15 s:** el
+   * overlay propio dura 3 s de countdown (+ cancelación del jugador a los
+   * 3 s como mucho), así que 15 s es un margen holgado: un flujo normal ni
+   * se acerca y cualquier promise que llegue acá está realmente colgada.
+   */
+  private static readonly AD_WATCHDOG_MS = 15000;
+
   private readonly presenter: AdOverlayPresenter;
   /** Cooldown de 60 s del rewarded, con la semántica extraída a la fuente única. */
   private readonly rewardCooldown: RewardCooldownTracker;
@@ -179,7 +194,8 @@ export class OwnRewardedAdService implements ICrazyGamesService {
    * 1. Emite `started` ANTES de mostrar el overlay — contrato del puerto:
    *    los consumidores (main.ts) silencian el juego recién cuando el ad
    *    se ve, no al pedirlo.
-   * 2. Espera el presenter; su outcome decide el resultado.
+   * 2. Espera el presenter — o el watchdog de 15 s, lo que llegue primero;
+   *    el resultado gana por orden de llegada (ver punto 7).
    * 3. `completed: true` → éxito (y en rewarded, limpia cooldown+motivo).
    * 4. `completed: false` → `user_cancelled`. **Causa raíz (R5 de la
    *    auditoría):** en producción con CrazyGames la cancelación del
@@ -193,6 +209,19 @@ export class OwnRewardedAdService implements ICrazyGamesService {
    *    `'error'` — el puerto prohíbe rechazar la promesa hacia el caller.
    * 6. `ended` se emite en TODOS los caminos (finally), para restaurar el
    *    audio aunque algo falle a mitad de overlay.
+   * 7. **Watchdog de 15 s** (`AD_WATCHDOG_MS`, espejo de la filosofía de
+   *    `CrazyGamesService`): si el presenter nunca resuelve, a los 15 s se
+   *    emite `'ended'` (audio restaurado) y se resuelve `'error'` vía
+   *    `noteFailure('other')` → `cooldown_retryable` → sin reembolso,
+   *    reintento real a los 60 s (ADR-006). El `Promise.race` tiene guard
+   *    de asentado: **primer resultado gana**; un resultado del presenter
+   *    que llegue DESPUÉS del timeout se descarta entero (ni `noteSuccess`,
+   *    ni doble resolve, ni doble lifecycle — `'ended'` ya se emitió). Si
+   *    el watchdog gana, la escena overlay puede quedar visible: el jugador
+   *    la cierra con el ✕ — en la práctica es una ruta residual, porque los
+   *    failsafes de `AdOverlayScene` están al inicio de `create()` (si la
+   *    escena revienta antes de registrarlos, no hay overlay visible que
+   *    cerrar de todos modos).
    *
    * Sobre `'no_fill'` / `cooldown_no_fill`: el countdown propio SIEMPRE
    * "llena" si el jugador lo completa — no existe "el ad network no tuvo
@@ -213,9 +242,38 @@ export class OwnRewardedAdService implements ICrazyGamesService {
     }
     this.adInProgress = true;
 
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     try {
       this.emitLifecycle('started', type);
-      const outcome = await this.presenter(type);
+
+      // Watchdog contra un presenter colgado (ver AD_WATCHDOG_MS): el race
+      // tiene guard de asentado — el primer resultado gana. `Promise.race`
+      // engancha un handler en el presenter aunque ya haya ganado el
+      // timeout, así que un rechazo TARDÍO tampoco se escapa como
+      // unhandled rejection; su valor, en cambio, se descarta solo.
+      const watchdog = new Promise<null>(resolve => {
+        timer = setTimeout(() => {
+          console.warn(
+            `[OwnRewardedAdService] El overlay del ad "${type}" no respondió en ` +
+              `${OwnRewardedAdService.AD_WATCHDOG_MS}ms (presenter colgado) — se libera el juego.`
+          );
+          resolve(null);
+        }, OwnRewardedAdService.AD_WATCHDOG_MS);
+      });
+      const outcome = await Promise.race([this.presenter(type), watchdog]);
+
+      if (outcome === null) {
+        // GANÓ EL WATCHDOG: el presenter sigue colgado. Se degrada a
+        // 'error' retryable (sin reembolso, reintento a los 60 s). El
+        // resultado tardío del presenter, si llega después, queda
+        // descartado por el guard de asentado: esta ruta ya resolvió,
+        // `finally` ya emitió 'ended' y el tracker ya registró el fallo.
+        if (type === 'rewarded') {
+          this.rewardCooldown.noteFailure('other');
+        }
+        return { success: false, reason: 'error' };
+      }
 
       if (outcome.completed) {
         if (type === 'rewarded') {
@@ -239,6 +297,12 @@ export class OwnRewardedAdService implements ICrazyGamesService {
       }
       return { success: false, reason: 'error' };
     } finally {
+      // El timer se limpia SIEMPRE: en el flujo normal (3 s de countdown)
+      // el watchdog queda armado y sin esto quedaría un timer de 15 s vivo
+      // por request. Si ya venció, limpiarlo es inofensivo.
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
       this.adInProgress = false;
       this.emitLifecycle('ended', type);
     }

@@ -37,9 +37,20 @@ describe('resolveAdsMode', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it('tolera espacios alrededor de un valor válido', () => {
-    expect(resolveAdsMode('  portal  ')).toBe('portal');
-    expect(warn).not.toHaveBeenCalled();
+  it('espacios alrededor de un valor NO se toleran: default + warn (espejo del gate plegable de main.ts)', () => {
+    // Regla de alineación (revisión del diff ADR-007): main.ts decide la
+    // carga del script con `VITE_ADS !== 'portal' && !== 'none'`, un `===`
+    // exacto y plegable por el bundler. Si acá ' none ' se resolviera a
+    // 'none', el script del SDK se cargaría igual (ads vivos en un build
+    // "sin ads"). Un valor válido tiene que ser EXACTAMENTE el literal.
+    expect(resolveAdsMode('  portal  ')).toBe('crazygames');
+    expect(resolveAdsMode(' none ')).toBe('crazygames');
+    expect(warn).toHaveBeenCalledTimes(2);
+    // El aviso tiene que mencionar la env CRUDA: es lo que el deployeur
+    // necesita ver en consola para encontrar el typo.
+    expect(warn.mock.calls[0][0]).toContain('VITE_ADS');
+    expect(warn.mock.calls[0][0]).toContain('  portal  ');
+    expect(warn.mock.calls[0][0]).toContain('crazygames | portal | none');
   });
 
   it('cualquier basura cae al default crazygames y avisa una vez por valor', () => {

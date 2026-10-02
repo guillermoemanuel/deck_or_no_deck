@@ -209,3 +209,130 @@ describe('OwnRewardedAdService — anuncio propio (overlay con countdown) para p
     }).not.toThrow();
   });
 });
+
+/**
+ * Watchdog del presenter (espejo de la filosofía de AD_START_TIMEOUT_MS en
+ * CrazyGamesService): si el overlay nunca resuelve — escena que no arranca
+ * o `create()` que revienta ANTES de registrar sus failsafes — `adInProgress`
+ * quedaba `true` para siempre y el juego seguía con el audio silenciado.
+ * El `Promise.race` tiene guard de asentado: el primer resultado gana y un
+ * resultado tardío del presenter se descarta por completo.
+ */
+describe('OwnRewardedAdService — watchdog de 15 s contra un presenter colgado', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    jest.useRealTimers();
+  });
+
+  /** Deja correr las continuaciones pendientes (mismo helper que CrazyGamesService.spec). */
+  async function flushMicrotasks(): Promise<void> {
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  it('presenter que nunca resuelve → a los 15 s exactos resuelve error, ended una sola vez y el guard se libera', async () => {
+    const clock = createClock();
+    let calls = 0;
+    const presenter: AdOverlayPresenter = () => {
+      calls += 1;
+      // Primera llamada: promise que jamás resuelve (overlay colgado).
+      return calls === 1
+        ? new Promise<AdOverlayOutcome>(() => undefined)
+        : Promise.resolve({ completed: true });
+    };
+    const service = new OwnRewardedAdService(presenter, clock.now);
+    const phases = trackLifecycle(service);
+
+    const pending = service.showRewardedAd();
+    let resolved = false;
+    void pending.then(() => {
+      resolved = true;
+    });
+
+    jest.advanceTimersByTime(14_999); // un ms antes del vencimiento: sigue colgado
+    await flushMicrotasks();
+    expect(resolved).toBe(false);
+
+    jest.advanceTimersByTime(1); // 15 000 ms exactos → vence el watchdog
+    await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+
+    expect(phases).toEqual(['started', 'ended']); // 'ended' UNA sola vez (audio restaurado)
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('15000');
+    // Sin reembolso: motivo 'other' → cooldown retryable → reintento a los 60 s (ADR-006).
+    expect(service.rewardedAdStatus()).toBe('cooldown_retryable');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+
+    // El guard quedó libre: un segundo request YA no devuelve el 'error' de guard.
+    await expect(service.showRewardedAd()).resolves.toEqual({ success: true });
+    expect(calls).toBe(2);
+    expect(service.rewardedAdStatus()).toBe('available');
+    expect(phases).toEqual(['started', 'ended', 'started', 'ended']);
+  });
+
+  it('si el presenter resuelve DESPUÉS del timeout, su resultado se descarta (sin noteSuccess ni ciclos dobles)', async () => {
+    const clock = createClock();
+    let settleLate!: (outcome: AdOverlayOutcome) => void;
+    const presenter: AdOverlayPresenter = () =>
+      new Promise<AdOverlayOutcome>(resolve => {
+        settleLate = resolve;
+      });
+    const service = new OwnRewardedAdService(presenter, clock.now);
+    const phases = trackLifecycle(service);
+
+    const pending = service.showRewardedAd();
+    jest.advanceTimersByTime(15_000);
+    await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+    expect(phases).toEqual(['started', 'ended']);
+    expect(service.rewardedAdStatus()).toBe('cooldown_retryable');
+
+    // Resolución tardía (countdown completado a destiempo): ya hay un
+    // asentado — se descarta por completo.
+    settleLate({ completed: true });
+    await flushMicrotasks();
+
+    expect(service.rewardedAdStatus()).toBe('cooldown_retryable'); // nada de noteSuccess
+    expect(phases).toEqual(['started', 'ended']); // sin 'started'/'ended' dobles
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('midgame con presenter colgado también vence a los 15 s y NO toca el tracker (paridad con rewarded)', async () => {
+    const clock = createClock();
+    const { presenter } = fakePresenter(() => new Promise<AdOverlayOutcome>(() => undefined));
+    const service = new OwnRewardedAdService(presenter, clock.now);
+    const phases = trackLifecycle(service);
+
+    const pending = service.showMidgameAd();
+    jest.advanceTimersByTime(15_000);
+
+    await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+    expect(phases).toEqual(['started', 'ended']);
+    expect(service.rewardedAdStatus()).toBe('available'); // el cooldown de 60 s es solo de rewarded
+  });
+
+  it('el flujo normal (countdown de 3 s) ni se acerca al watchdog: resuelve éxito sin esperar los 15 s', async () => {
+    const clock = createClock();
+    const presenter: AdOverlayPresenter = () =>
+      new Promise<AdOverlayOutcome>(resolve => {
+        setTimeout(() => resolve({ completed: true }), 3_000);
+      });
+    const service = new OwnRewardedAdService(presenter, clock.now);
+    const phases = trackLifecycle(service);
+
+    const pending = service.showRewardedAd();
+    jest.advanceTimersByTime(3_000);
+
+    await expect(pending).resolves.toEqual({ success: true });
+    expect(phases).toEqual(['started', 'ended']);
+    expect(service.rewardedAdStatus()).toBe('available');
+    expect(warn).not.toHaveBeenCalled(); // el watchdog ni se acercó
+  });
+});
