@@ -1,11 +1,13 @@
 # Testing
 
-> Estado al 2026-10-01 (cierres de límites + ampliación del alcance del reembolso +
-> enmienda ADR-006 "motivo en el puerto + 2 políticas"): **38 suites · 467 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · umbrales de cobertura verdes;
-> medido: 38 `*.spec.ts` en `src`; 446 declaraciones `it(`/`test(` sin contar `it.each`
-> + 21 filas de 2 `it.each` (13 + 8) = 467). Runner: **Jest + ts-jest** (no vitest).
-> Entorno: `node` (sin DOM).
+> Estado al 2026-10-02 (unidad **ADR-007**: anuncio propio + `VITE_ADS`): **42 suites · 501 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · umbrales de cobertura verdes ·
+> builds default y `VITE_ADS=portal` OK; medido: 42 `*.spec.ts` en `src`;
+> 477 declaraciones `it(`/`test(` sin contar `it.each` + 24 filas de `it.each`
+> (21 previas + 3 de `resolveAdsMode.spec`) = 501 → **467 del cierre anterior + 34**
+> de las 4 specs nuevas: `resolveAdsMode` 7 · `RewardCooldownTracker` 8 ·
+> `OwnRewardedAdService` 15 · `AdOverlayScene.resolution` 4).
+> Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
 
@@ -44,9 +46,9 @@ npm run lint                  # eslint src
 |---|---|---|---|
 | `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
-| `infrastructure/` | 4 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` |
+| `infrastructure/` | 7 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+3 specs nuevas con ADR-007: `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService`) |
 | `shared/` | 5 | buena | 🟢 |
-| `presentation/` | 1 | casi nada | 🔴 ver §5 |
+| `presentation/` | 2 | casi nada | 🔴 ver §5 (la 2.ª es `AdOverlayScene.resolution.spec` — lógica pura extraída de la escena) |
 
 ---
 
@@ -155,8 +157,10 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
 penalidad −5000 que puede dejar saldo negativo, bono periódico forzado). Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
-Duplicar/Triplicar/Revivir porque `index.html:29` carga el SDK real de CrazyGames y
-`isRewardedAdAvailable()` devuelve `true` (lo consultan `ListAvailableUpgradesUseCase`
+Duplicar/Triplicar/Revivir porque en el modo default (`VITE_ADS=crazygames`) `main.ts`
+carga el SDK real de CrazyGames **dinámicamente** (`loadCrazyGamesSdk()` — el `<script>`
+del SDK **ya no** está en `index.html`, desde ADR-007) y `isRewardedAdAvailable()` devuelve
+`true` (lo consultan `ListAvailableUpgradesUseCase`
 al listar y `PurchaseSessionUpgradeUseCase` al comprar, no la escena); **la rama
 "oculta" del filtro YA se ejercitó en vivo** (ítem 8, 2026-10-01) además de estar
 cubierta por `ListAvailableUpgradesUseCase.spec.ts`; y la tienda abierta **sin partida
@@ -180,6 +184,26 @@ llamada (`CrazyGamesService.ts:155`). Resultados:
   volvió a pedir el anuncio (camino nuevo de ADR-006 enmendado).
 Los flujos además siguen cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
 `ReviveWithAdUseCase.spec.ts` (19 tests).
+
+### Smoke del modo `portal` (`VITE_ADS=portal`) — checklist NUEVO, NO corrido
+
+Creado el 2026-10-02 con la unidad ADR-007. **Los 11 ítems de arriba corren en modo
+default** (`crazygames`); estos 6 son el equivalente para el adapter propio y todavía
+**no se verificaron en vivo** (hay que publicar/levantar con la env puesta):
+
+1. `VITE_ADS=portal npm run dev` → la tienda muestra Duplicar/Triplicar/Revivir (el
+   adapter propio reporta `available` sin SDK externo) y la pestaña Red **no** pide
+   `sdk.crazygames.com`.
+2. Comprar Duplicar → llegar a la victoria → click → overlay de **3 s completo** →
+   efecto entregado **sin reembolso** (saldo sin devolución).
+3. Mismo camino pero **✕ cancelar** antes de los 3 s → `RESULT_AD_COOLDOWN` con botones
+   **vivos** y reintento real a los 60 s.
+4. Análogo con **Revivir en la derrota** (pasos 2-3 con Revivir en vez de Duplicar).
+5. Midgame (swap de mitad de partida) → overlay **corto** con la leyenda
+   `AD_OVERLAY_HINT_MIDGAME` (mismo countdown de 3 s).
+6. `VITE_ADS=none npm run dev` → filas de ads **ocultas** en la tienda (degradación
+   explícita, sin script del SDK) — además `grep sdk.crazygames.com dist/*` limpio en un
+   build `portal`/`none`.
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

@@ -38,12 +38,28 @@ shared/          i18n + EventEmitter + utils — consumible por todas las capas
 
 Hay **dos** lugares donde se instancian concretos:
 
-1. **`src/main.ts`** (global, una vez): `CrazyGamesService`, repositorios LocalStorage,
+1. **`src/main.ts`** (global, una vez): repositorios LocalStorage,
    `ProgressionManager`, `CryptoRandomProvider`, `AudioService`, `GameOutcomeRecorder`,
    `ListAvailableUpgradesUseCase` (necesita solo el puerto de ads → se instancia global).
    Todo se guarda en `game.registry.set('services', services)`.
    También: init del SDK, locale detectado, `beforeunload` (gameplayStop + anti-cheat),
    manejo de fullscreen/orientación, mute durante anuncios.
+
+   **Selección del adapter de ads por env (ADR-007)** — `resolveAdsMode(import.meta.env.VITE_ADS)`
+   (`infrastructure/config/resolveAdsMode.ts`, estricto: solo los literales exactos, el resto →
+   default `crazygames` + warn) decide uno de **3 modos**:
+
+   | `VITE_ADS` | Adapter | Arranque |
+   |---|---|---|
+   | `crazygames` (default, sin env o inválido) | `CrazyGamesService` | carga **dinámica** del SDK (`loadCrazyGamesSdk()` inyecta el `<script>` — ya **no** vive en `index.html`) → `init()` → locale |
+   | `portal` | `OwnRewardedAdService` + **presenter inyectado** (`presentAdOverlay` de `presentation/`, patrón inverso igual que GameServices/ADR-003) | síncrono: `init()` (no-op) → locale (`navigator.language`) |
+   | `none` | `CrazyGamesService` **sin script** → `sdk_unavailable` permanente → filas de ads ocultas | síncrono |
+
+   El tipo común es `type AdService = ICrazyGamesService & { init(): Promise<void> | void }`;
+   el gate de carga del script (`mayLoadCrazyGamesSdk`, `===` plegable por el bundler) es un
+   **espejo deliberado** de `resolveAdsMode()`: en un build `portal`/`none` la URL
+   `sdk.crazygames.com` no aparece en el bundle. Orden de boot en modo `crazygames`:
+   `script → init → juego` (el resto del archivo corre en paralelo mientras carga).
 2. **`src/presentation/scenes/GameScene.ts`** (por partida): elige la carta secreta,
    crea la `GameSession` vía `GameSessionFactory`, instancia los 7 use-cases
    (`PurchaseSessionUpgradeUseCase` recibe además el puerto de ads, para rechazar
@@ -96,7 +112,7 @@ Reglas:
 
 | Puerto | Implementación | Fake de test |
 |---|---|---|
-| `ICrazyGamesService` | `infrastructure/services/CrazyGamesService.ts` | `FakeCrazyGamesService` |
+| `ICrazyGamesService` | **2 adapters** (ADR-007, elegidos por `VITE_ADS` en `main.ts`): `infrastructure/services/CrazyGamesService.ts` (SDK de CrazyGames) e `infrastructure/services/OwnRewardedAdService.ts` (anuncio propio: overlay countdown 3 s, cancelación honesta `user_cancelled`, watchdog 15 s) — el cooldown de 60 s de ambos vive en `infrastructure/services/RewardCooldownTracker.ts` (fuente única) | `FakeCrazyGamesService` |
 | `IProgressionService` | `infrastructure/persistence/ProgressionManager.ts` | — (usa el fake de repo) |
 | `IProgressionRepository` | `LocalStorageProgressionRepository` | `FakeProgressionRepository` |
 | `IRecordsRepository` | `LocalStorageRecordsRepository` | `FakeRecordsRepository` |
@@ -113,6 +129,9 @@ Contrato clave: **`ICrazyGamesService` retorna `AdResult`, nunca lanza excepcion
 'cooldown_no_fill' | 'cooldown_retryable'`) es la fuente de la política de reembolso al
 consumir (2 grupos, ADR-006); `isRewardedAdAvailable()` queda como azúcar.
 Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_unavailable | error`).
+El adapter propio (`VITE_ADS=portal`) solo produce `available | cooldown_*` en su status —
+nunca `adblock` ni `sdk_unavailable` (sin ad network no hay qué bloquear); su cancelación por ✕
+sí emite `user_cancelled` honesto (motivo "muerto" resuelto, R5 de la auditoría previa).
 
 ---
 
@@ -154,8 +173,10 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
 
 ## 7. Presentación
 
-- **Escenas** (9, registradas en `main.ts:81`):
-  `Boot → Preload → MainMenu → HowToPlay / DeckSelection → GameScene + UIScene → Shop / Result`.
+- **Escenas** (9 en la lista de `main.ts:200`; la décima, `AdOverlayScene`, la registra en
+  runtime `presentAdOverlay()` — ADR-007):
+  `Boot → Preload → MainMenu → HowToPlay / DeckSelection → GameScene + UIScene → Shop / Result`
+  (+ `AdOverlayScene` solo en modo `VITE_ADS=portal`).
   Las escenas **no se importan entre sí**; se comunican por Scene Manager (payloads tipados
   en `*.types.ts`), por `game.registry` o por eventos.
 - **`GameSceneController`**: único traductor `GameEvent` → efectos visuales.
@@ -173,7 +194,7 @@ Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_u
   | `'lastGameSummary'` | `GameScene` | `ResultScene` (lee y borra) |
   | `'resultScene:doubleBtn'/'tripleBtn'` | `ResultScene` | `ResultScene` (estado local en registry global) |
 
-- **i18n**: 145 claves × {en, es} en `shared/i18n/LanguageData.ts`.
+- **i18n**: 148 claves × {en, es} en `shared/i18n/LanguageData.ts`.
   Texto estático → componente `LocalizedText` (se auto-suscribe y se auto-destruye).
   Texto dinámico → `languageManager.getText('CLAVE', {param})` en cada render.
   Singleton `languageManager` es el **único** `export default` del proyecto.
@@ -218,7 +239,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 38 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 42 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

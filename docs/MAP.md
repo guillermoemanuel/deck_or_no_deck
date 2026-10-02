@@ -4,18 +4,22 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-01 (refrescado tras el **cierre de los dos límites aceptados**:
-> exhaustividad de `applyEffect` + reembolso por fallo ambiental, tras la **ampliación
-> del alcance del reembolso** y tras la **enmienda ADR-006** del mismo día — motivo en el
-> puerto + 2 políticas) ·
-> 148 archivos TS · 21.806 líneas · 110 fuente + 38 specs
-> (LOC = `wc -l`, **incluyen specs**; Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2:
-> +`CaseValues.spec.ts` y +`SessionUpgradeCatalog.spec.ts`; cierre anterior:
-> +`ListAvailableUpgradesUseCase.ts`/`.spec`; este cierre: **sin archivos nuevos** —
-> solo crecieron `ports/ICrazyGamesService.ts`, `CrazyGamesService.ts`/`.spec`,
-> `testing/FakeCrazyGamesService.ts`, `MultiplyRewardUseCase.ts`/`.spec`,
-> `ReviveWithAdUseCase.ts`/`.spec`, `ResultScene`, `LanguageData` y
-> `ListAvailableUpgradesUseCase.spec`).
+> Fecha del censo: 2026-10-02 (refrescado tras la unidad **ADR-007** — anuncio propio
+> con countdown + selección de adapter por `VITE_ADS`) ·
+> **158 archivos TS · 23.344 líneas · 116 fuente + 42 specs**
+> (LOC = conteo de líneas por archivo, **incluyen specs** — en esta sesión no corrieron
+> `cloc` ni `wc -l`: el total es el censo previo **21.806** + los deltas medidos uno a
+> uno = **+1.403** de los 10 archivos nuevos + **119** de `main.ts` (214→333) + **16** de
+> `LanguageData` (451→467); el resto conserva su LOC del censo previo (al re-contarlos con
+> esta herramienta algunas escenas dan **±1 L**: diferencia `wc -l` vs conteo de líneas, sin
+> cambios reales atribuibles a esta unidad); Fase 4: +`GamePenalties.ts`/`.spec`; Fase 4 parte 2: +`CaseValues.spec.ts` y
+> +`SessionUpgradeCatalog.spec.ts`; cierre anterior: +`ListAvailableUpgradesUseCase.ts`/`.spec`;
+> este cierre: **10 archivos nuevos** — `vite-env.d.ts`,
+> `infrastructure/config/resolveAdsMode.ts`/`.spec`,
+> `infrastructure/services/RewardCooldownTracker.ts`/`.spec`,
+> `infrastructure/services/OwnRewardedAdService.ts`/`.spec`,
+> `presentation/scenes/AdOverlayScene.ts` + `AdOverlayScene.resolution.ts`/`.spec`
+> — y **crecieron** `main.ts` y `LanguageData.ts`).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
@@ -78,11 +82,14 @@
 
 ---
 
-## `src/infrastructure/` — 2.167 líneas · 4 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 3.151 líneas · 7 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `services/CrazyGamesService.ts` | 408 | ✅ 252 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, cooldown 60 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`; `lastRewardedFailure` se setea en `settle()`) — define la política de reembolso (ADR-006). |
+| `services/CrazyGamesService.ts` | 408 | ✅ 252 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. |
+| `services/OwnRewardedAdService.ts` | 310 | ✅ 338 L | **Adapter propio** (ADR-007, `VITE_ADS=portal`): pide el overlay al presenter inyectado (`AdOverlayScene`, desde presentation); status solo `available`/`cooldown_*` (nunca `adblock`/`sdk_unavailable`); ✕ → `user_cancelled` honesto → `cooldown_retryable`; **watchdog 15 s** (presenter colgado → `'error'` retryable y resultado tardío descartado); midgame sin tocar el tracker; `getUserLocale()` → `navigator.language`; telemetría no-op. |
+| `services/RewardCooldownTracker.ts` | 86 | ✅ 101 L | **Fuente única del cooldown de 60 s** con motivo (`no_fill`/`other` → `cooldown_no_fill`/`cooldown_retryable`), extraído de `CrazyGamesService` para que los 2 adapters produzcan estados idénticos (ADR-006/007). Reloj inyectable; nunca lanza. 🟢 |
+| `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
 | `persistence/LocalStorageProgressionRepository.ts` | 165 | ❌ | **Sin spec directo.** Migración v3→v4. Bloque de comentarios con merge artifact (L17-28). 🔴 |
 | `persistence/ProgressionManager.ts` | 152 | ✅ 246 L | Fachada de meta-progresión + eventos. |
 | `audio/AudioService.ts` | 231 | ❌ | **Sin spec ni fake.** Anclado a `Phaser.Game`. `preload()` muerto con path erróneo. 🔴 |
@@ -96,7 +103,7 @@
 
 ---
 
-## `src/presentation/` — 10.786 líneas · 1 spec · **zona más frágil** 🔴
+## `src/presentation/` — 11.177 líneas · 2 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
@@ -109,6 +116,7 @@
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
 | `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
+| `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 275 + 70 | ✅ 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **No está en la lista de `main.ts`**: la registra en runtime `presentAdOverlay()`, la función **presenter** que `main.ts` inyecta al adapter (inversión de dependencia — infrastructure no importa presentation). La resolución single-shot vive en `.resolution.ts` (lógica pura, la única parte testeada de la escena). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
 `BankerOfferPanel` 305 · `CardView` 294 (color/valor derivan de `isHighCaseValue` del
@@ -141,11 +149,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.238 líneas · 5 specs 🟢
+## `src/shared/` — 1.254 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `i18n/LanguageData.ts` | 451 | ✅ | **145 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`), `as const` + `satisfies` → autocomplete de claves. |
+| `i18n/LanguageData.ts` | 467 | ✅ | **148 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |
@@ -158,8 +166,9 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (214) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
-| `index.html` | Carga **síncrona** del SDK v3 en `<head>` (sin eso `isAvailable()` es siempre false) + overlay "gira el dispositivo". |
+| `main.ts` (333) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `vite-env.d.ts` (28) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` — **sin lógica** (la validación vive en `resolveAdsMode.ts`, ADR-007). Script global a propósito (fusión con `vite/client`). |
+| `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |
 | `jest.config.js` | `ts-jest`, `node` env, umbrales de cobertura **por capa** (Fase 4): `domain/` 88/80/90/88 y `application/` 88/82/90/88 (stmts/branches/functions/lines). |
 | `tsconfig.json` | `strict` + `noUnused*` + `noImplicitReturns`; **incluye specs** desde la Fase 0. |

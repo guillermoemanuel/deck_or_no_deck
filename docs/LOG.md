@@ -7,6 +7,72 @@
 
 ---
 
+## 2026-10-02 · Sincronización de docs tras la unidad ADR-007 (anuncio propio + `VITE_ADS`)
+
+**Tarea:** llevar toda la documentación al código de la unidad **ADR-007**, ya implementada
+en verde y commiteada localmente (7 commits `be1beac..56bd5d0`, **sin pushear**). Solo
+`docs/` + `AGENTS.md` (+ `.env.example`, ver pendiente): **nada en `src/`**, sin commits.
+
+**Qué se tocó (los 5 bloques):**
+1. **Decisiones** — `docs/DECISIONS/README.md`: fila de **007** en la tabla. `ADR-007`
+   ampliado con **Consecuencias (enmienda 2026-10-02, estado sigue *Aceptada*)**: las 3
+   decisiones conscientes de la revisión — (a) ventana de carga en modo `crazygames` con
+   el script dinámico (`reportGameplayStart()` puede descartarse; **telemetría, no ads**,
+   aceptado), (b) **watchdog de 15 s** en `OwnRewardedAdService` (presenter colgado →
+   `'error'` retryable; resultado tardío descartado), (c) `resolveAdsMode` **estricto**
+   (cualquier desviación → default + warn) para equivaler por construcción al espejo
+   plegable de `main.ts`. `ADR-006`: la mención `rewardedBlockedUntil = now + 60000` ahora
+   apunta a `RewardCooldownTracker.noteFailure()` (`blockedUntil = ahora + 60000`) —
+   **política intacta**, solo cambió dónde vive el campo.
+2. **Contrato/estado** — `AGENTS.md`: §3 `LanguageData.ts` **145 → 148 claves**; fila de
+   `main.ts` con la **selección del adapter de ads por `VITE_ADS`** (ADR-007) y §1
+   38 → **42** `*.spec.ts`. §4 (invariantes) sin cambios.
+3. **Mapa/prueba** — `docs/MAP.md` censo **2026-10-02**: **158 archivos TS · 23.344 líneas ·
+   116 fuente + 42 specs**; los **10 archivos nuevos arriba** (`vite-env.d.ts`,
+   `resolveAdsMode`+spec, `RewardCooldownTracker`+spec, `OwnRewardedAdService`+spec,
+   `AdOverlayScene`+`.resolution`+spec) y `main.ts` **214 → 333 L** medido,
+   `CrazyGamesService` (408 L, delega cooldown), `LanguageData` **451 → 467 L / 148 claves**,
+   `index.html` ya **no** carga el SDK. `docs/testing.md`: header **42 suites · 501 tests**
+   (477 `it(` + 24 filas de `it.each` = 467 previos + 34 de las 4 specs nuevas), tabla de
+   specs por capa (infra 7 · presentation 2), la nota que decía "`index.html:29` carga el
+   SDK" corregida (hoy carga en **dinámico** desde `main.ts`) y **checklist de smoke del
+   modo `portal`** — 6 ítems **nuevos, NO corridos**.
+4. **Arquitectura** — `docs/ARCHITECTURE.md`: composition root con la tabla de los **3
+   modos** de `VITE_ADS` y boot `script → init → juego`, puerto con **2 adapters** +
+   `RewardCooldownTracker`, overlay propio con **presenter inyectado** (escena 10.ª
+   registrada en runtime), i18n **148**, 42 specs. `docs/PLAYBOOK.md` §1: **(a)** deuda de
+   naming `ICrazyGamesService` → `IAdService` (decisión 4 del ADR-007, anotada como
+   prometió) y **(b)** `AdOverlayScene` registrado como copia **≥11** de la paleta
+   "Casino de Lujo" y del chrome de modal/✕; §4 serie de claves i18n llevada a **148**.
+5. **Entorno** — `.env.example` **existe** (placeholder "sin variables"): iba a documentar
+   `VITE_ADS=crazygames|portal|none` pero el tool lo **rechazó con permiso denegado**
+   (fuera de `docs/`+`AGENTS.md`+`README.md`) → **queda pendiente**.
+
+**Por qué:** ADR-007 + decisiones del usuario (overlay de 3 s, adapter por env, sin rename
+del puerto) + los hallazgos de la revisión (1 bloqueante + 3 corregidos/documentados).
+
+**Cómo se verificó (gates de la unidad, en verde al abrirla):** typecheck **0** · lint **0**
+· **42 suites / 501 tests** · coverage con **umbrales verdes** · `npm run build` ✅ y
+`VITE_ADS=portal npm run build` ✅ con **cero** `sdk.crazygames.com` en `dist/` · `qa`
+gates 1-4 **PASS** · `reviewer`: 1 hallazgo bloqueante + 3 corregidos/documentados
+(alineación `resolveAdsMode`↔gate, watchdog 15 s, race de carga aceptada, copia de paleta
+en PLAYBOOK).
+**Verificación de ESTA tarea (grep sobre docs vigentes):** "145 claves" → **0** fuera del
+historial de este LOG · "`index.html:29` carga el SDK" → **0** · `rewardedBlockedUntil` →
+**0** (solo historial del LOG) · ADR-007 **presente** en `docs/DECISIONS/README.md` ·
+`src/` intacto.
+**Método:** `cloc`/`wc -l` y `git` **no corrieron** (tool `shell` con permiso denegado en
+esta sesión): los LOC se midieron línea a línea con la tool de lectura y el total de MAP es
+el censo previo **+ deltas medidos** (los archivos no listados conservan su LOC anterior).
+
+**Qué quedó pendiente:** **(1)** documentar `VITE_ADS` en `.env.example` (permiso
+denegado); **(2)** smoke manual del modo `portal` — los 6 ítems nuevos de `docs/testing.md`;
+**(3)** pendientes de siempre: `.opencode/` sin commitear, naming canónico "Deck or No
+Deck" (+ rename `IAdService` en PLAYBOOK §1), Vite 8 (decisión del usuario). Unidad sin
+pushear (`be1beac..56bd5d0`).
+
+---
+
 ## 2026-10-01 · Smoke 1-4 y 8 verificado en vivo — checklist de smoke COMPLETO
 
 **Qué se tocó:** solo `docs/testing.md` (ítems 1-4 y 8 marcados *verificado

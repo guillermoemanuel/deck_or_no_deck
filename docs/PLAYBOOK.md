@@ -18,12 +18,17 @@ en: `MainMenuScene.createCasinoButton` · `DeckSelectionScene.createCasinoButton
 Los comentarios de cada uno se referencian entre sí: la duplicación es **conocida**.
 → Si tocás el estilo de un botón, asumí que hay 7 copias más.
 
-### 🔁 Paleta de colores repetida en ≥10 archivos
+### 🔁 Paleta de colores repetida en ≥11 archivos
 `COLOR_GOLD = 0xffd76a`, `COLOR_GOLD_DIM = 0xd4af37`, `FONT_FAMILY = 'Georgia, …'`
 aparecen en `GameSceneController`, `UIScene`, `ResultScene`, `MainMenuScene`,
 `BankerOfferPanel`, `ConfirmDialog`, `DailyChallengeBanner`, `ShopScene`,
-`DeckSelectionScene`, `HowToPlayScene`.
+`DeckSelectionScene`, `HowToPlayScene` **y `AdOverlayScene`** (2026-10-02, ADR-007:
+`PANEL_FILL = 0x121218` + `COLOR_GOLD` + acento, copiados a mano del chrome de
+modal de `ShopScene`/`HowToPlayScene`, incluido el ✕ circular de cierre).
 **Drift ya ocurrido:** `COLOR_PANEL_BG` = `0x0a0e17` en 5 archivos pero `0x0a0f1d` en `ResultScene`.
+→ Son **11 copias** de la paleta "Casino de Lujo" y una **más** del chrome de modal:
+si tocás el estilo, asumí que hay 10 copias más (extractor pendiente, ver deuda de
+naming justo abajo).
 
 ### 🔁 Tween contador + pulso infinito (3 copias)
 `BankerOfferPanel.animateOfferAmountCounter` · `GameSceneController.animateRevealedValueCounter` ·
@@ -74,6 +79,16 @@ tercer copy.
 Cada spec de use-case arma su sesión a mano en vez de reusar la factory
 (hay hasta un hack `values[0] === 100000 ? { drainFor: () => 100 } : …` en
 `OpenCardUseCase.spec.ts`).
+
+### 🔁 Deuda de naming: puerto `ICrazyGamesService` con ≥2 adapters (ADR-007, decisión 4)
+El puerto sigue llamándose `ICrazyGamesService` (y su impl `CrazyGamesService`) pero
+desde ADR-007 lo implementan **2 adapters reales** — `CrazyGamesService` (SDK de
+CrazyGames) y `OwnRewardedAdService` (anuncio propio) — más `FakeCrazyGamesService`
+en specs. El nombre miente: ya no hay nada de CrazyGames en el contrato. **Rename
+pendiente a `IAdService`** si se acepta el churn (imports/fakes/specs en las 4 capas);
+hoy la única mitigación es el JSDoc del puerto y de `main.ts` (`type AdService`).
+Registrado acá como prometió ADR-007 §Decisión: **no** renombrar "de paso" en otra
+unidad — si se hace, es una tarea propia con sus 4 gates.
 
 ---
 
@@ -138,8 +153,10 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
 - `README` §13.1 decía "6 mazos" → hay **10** (ids en `DeckSetups.ts`).
 - `README` §14.2 decía "57 claves i18n" → había **142** (284 líneas de clave ÷ 2 idiomas);
   con el guard de compra por ads (mismo día) son **143** (286 ÷ 2) — con el reembolso por
-  fallo ambiental (2026-10-01, `RESULT_AD_REFUNDED`) **144** (288 ÷ 2) y con la enmienda
-  ADR-006 (2026-10-01, `RESULT_AD_COOLDOWN`) **145** (290 ÷ 2).
+  fallo ambiental (2026-10-01, `RESULT_AD_REFUNDED`) **144** (288 ÷ 2), con la enmienda
+  ADR-006 (2026-10-01, `RESULT_AD_COOLDOWN`) **145** (290 ÷ 2) y con ADR-007
+  (2026-10-02, `AD_OVERLAY_TITLE`/`AD_OVERLAY_HINT`/`AD_OVERLAY_HINT_MIDGAME`) **148**
+  (296 ÷ 2 — hoy el valor vigente, medido en `LanguageData.ts`).
 - `README` daba el evento `UpgradePurchased` por vivo → **nunca se emite**.
 - El árbol de directorios del `README` nombraba `Money`, `EnergyBar`, `Upgrade` → no
   existen (ADR-002).

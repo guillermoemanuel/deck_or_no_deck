@@ -55,8 +55,11 @@ El usuario eligió entre **(a)** mantener el reembolso ante todo fallo y **(b)**
 - **`ad_failed` no reembolsa** (el intento se hizo y falló: cancelación del jugador o
   fill muerto): es fallo del anuncio, no del entorno; el reintento queda libre.
   **Matiz del cooldown, enmendado 2026-10-01:** los 60 s los pone **cualquier** rewarded
-  fallido, **incluida la cancelación del jugador** (`CrazyGamesService.settle()` →
-  `rewardedBlockedUntil = now + 60000`), y la ventana **puede ser autoinfligida**. La
+  fallido, **incluida la cancelación del jugador** (`settle()` →
+  `RewardCooldownTracker.noteFailure()` → `blockedUntil = ahora + 60000`; desde ADR-007
+  esa semántica vive en `RewardCooldownTracker.ts`, fuente única compartida por los dos
+  adapters — el campo ya **no** está en `CrazyGamesService`), y la ventana **puede ser
+  autoinfligida**. La
   cláusula anterior decía que "un segundo click dentro de la ventana reembolsa y cierra
   el reclamo": eso convertía la cancelación en un forfeit no querido. Hoy decide el
   **motivo** del cooldown — `cooldown_retryable` → `'ads_cooldown'` sin reembolso;

@@ -1,6 +1,7 @@
 # ADR-007: Anuncio propio (countdown) para portales externos + selección de adapter por `VITE_ADS`
 
-**Estado:** Aceptada · **Registrada:** 2026-10-01 · **Pre-implementation:** 2026-10-01
+**Estado:** Aceptada · **Registrada:** 2026-10-01 · **Pre-implementation:** 2026-10-01 ·
+**Enmienda:** 2026-10-02 (Consecuencias — decisiones conscientes de la revisión del diff)
 
 ## Contexto
 El juego hoy está atado a CrazyGames: `ICrazyGamesService` tiene un único adapter
@@ -13,8 +14,8 @@ portales externos.
 
 Además, la auditoría previa marcó **R5**: en el adapter actual `user_cancelled` es un
 motivo "muerto" (no se emite honestamente porque el SDK ajeno lo absorbe), y el
-`index.html` carga el SDK de CrazyGames de forma fija en línea 29 para **todos** los
-builds.
+`index.html` cargaba el SDK de CrazyGames de forma fija en línea 29 para **todos** los
+builds (estado previo a este ADR — hoy esa carga es dinámica desde `main.ts`, ver Decisión).
 
 El usuario eligió, todas el 2026-10-01, entre mantener el statu quo, detectar el hosting
 automáticamente, o configurar el adapter por env → **configurar por env** con anuncio
@@ -58,3 +59,26 @@ propio como adapter alternativo.
 - Telemetría (`reportGameplay*`) y happy-time son no-op en modo portal; `getUserLocale()`
   cae a `navigator.language`.
 - El ADR-006 queda referenciado, no modificado.
+
+### Enmienda 2026-10-02 — decisiones conscientes de la revisión (estado: sigue *Aceptada*)
+
+- **Ventana de carga en modo `crazygames` (aceptado — telemetría, no ads).** El SDK ya
+  carga **dinámicamente** (`loadCrazyGamesSdk()` en `main.ts`), así que hay una ventana
+  entre el arranque del juego y el `load` del script: `reportGameplayStart()` se descarta
+  si el jugador llega a la partida antes de que el SDK esté listo (el reporte no espera).
+  Es solo telemetría de gameplay para CrazyGames — no toca ads (`showRewardedAd()` /
+  `init()` sí esperan la Promise de carga) — y el caso de error del script (red caída,
+  dominio bloqueado) ya degrada a `sdk_unavailable` sin frenar el arranque.
+- **Watchdog de 15 s en `OwnRewardedAdService`** (espejo de los timeouts de
+  `CrazyGamesService`): un presenter colgado → resultado `'error'` **retryable** (sin
+  reembolso, reintento dentro de la ventana de 60 s) y el resultado **tardío** del
+  presenter se descarta (guard de asentado — el primer resultado gana). El timer se
+  limpia siempre en el `finally`. Cubierto por specs de watchdog en
+  `OwnRewardedAdService.spec.ts`.
+- **`resolveAdsMode` es estricto:** solo acepta los 3 literales **exactos**; cualquier
+  desviación (incluidos espacios, mayúsculas, typos) → default `'crazygames'` +
+  `console.warn` con el valor crudo. El motivo es equivaler **por construcción** al
+  espejo plegable del gate de script de `main.ts`
+  (`VITE_ADS !== 'portal' && !== 'none'`, un `===` exacto que el bundler sí pliega): si
+  una función tolerara espacios, los dos predicados divergirían y un build `portal` mal
+  escrito pediría el SDK igual. `undefined`/vacío → default **sin** warn (dev local).
