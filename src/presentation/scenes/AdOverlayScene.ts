@@ -5,9 +5,15 @@ import { LocalizedText } from '../components/LocalizedText';
 import { createAdOverlayResolution, type AdOverlayResult } from './AdOverlayScene.resolution';
 
 /**
- * Clave de escena — única fuente para registrarla/iniciarla.
- * La escena NO está en la lista de `main.ts`: la registra en runtime el
- * presenter de acá abajo (el composition root solo la inyecta, ADR-007).
+ * Clave de escena — única fuente para iniciarla. La escena SÍ está en el
+ * `config.scene` de `main.ts` (última de la lista: se dibuja arriba de
+ * todo, la misma posición que le daba el registro en runtime) y arranca
+ * dormida hasta el primer `game.scene.start()`.
+ *
+ * ADR-007 enmienda 2026-10-04: antes NO estaba en la lista y la
+ * registraba en runtime el presenter de abajo — eso encallaba con la cola
+ * de Phaser (`SceneManager.add()` diferido vs `start()` inmediato), ver
+ * el BUGFIX de `presentAdOverlay`.
  */
 export const AD_OVERLAY_KEY = 'AdOverlayScene';
 
@@ -231,19 +237,43 @@ export class AdOverlayScene extends Phaser.Scene {
  *   traduce a `user_cancelled` (cooldown retryable, ADR-007).
  *
  * Garantías:
- * - Registro idempotente: la escena se agrega a `game.scene` solo si
- *   todavía no existe (no se duplica entre un anuncio y el siguiente).
+ * - Escena registrada EN EL BOOT (`config.scene` de `main.ts`): acá solo
+ *   se pide el start — nunca se llama a `scene.add()` en runtime (era el
+ *   origen de la carrera con la cola de Phaser, ver BUGFIX abajo).
  * - Resolución única: la primera resolución gana (`resolveOnce`).
  * - No se cuelga: además de los SHUTDOWN/DESTROY de la propia escena, si
  *   el juego se destruye antes de que resuelva, resuelve
- *   `{ completed: false }` y desuscribe ese listener.
+ *   `{ completed: false }` y desuscribe ese listener; y si la escena no
+ *   estuviera registrada (regresión), degrada en 0 s sin esperar el
+ *   watchdog del adapter.
  *
- * @param game instancia sobre la que se registra/inicia la escena (la
+ * @param game instancia sobre la que se inicia la escena (la
  * recibe el adapter porque infrastructure no tiene acceso al juego).
  * @param type `'rewarded' | 'midgame'` — misma escena para ambos
  * (ADR-007); solo cambia la leyenda inferior.
  */
 export function presentAdOverlay(game: Phaser.Game, type: AdType): Promise<AdOverlayResult> {
+  // BUGFIX (ADR-007 enmienda 2026-10-04 — carrera add/start con la cola
+  // de Phaser): antes acá hacíamos `scene.add()` + `scene.start()` en
+  // runtime. `SceneManager.add()` de Phaser 3.90 se DEFIERE a `_pending`
+  // cuando `isProcessing` es true (no registra la escena todavía), pero
+  // `SceneManager.start()` NO se defiere: consulta `getScene` sincrónico,
+  // no la encontraba (warning "Scene key not found: AdOverlayScene"),
+  // no arrancaba nada y la promise quedaba colgada hasta el watchdog de
+  // 15 s del adapter → `error` → cooldown de 60 s en el PRIMER ad de la
+  // sesión; al frame siguiente `processQueue()` sí registraba la escena
+  // (dormida, `autoStart: false`), por eso "después funciona bien". La
+  // escena ahora se registra en boot (config.scene de main.ts) y acá solo
+  // se pide el start: si faltara, se degrada en 0 s con
+  // `{ completed: false }` en vez de colgar hasta el watchdog.
+  if (!game.scene.getScene(AD_OVERLAY_KEY)) {
+    console.error(
+      `[AdOverlayScene] La escena "${AD_OVERLAY_KEY}" no está registrada en game.scene ` +
+        '(falta en config.scene de main.ts) — se cancela el ad en 0 s en vez de colgar.'
+    );
+    return Promise.resolve({ completed: false });
+  }
+
   const cleanups: Array<() => void> = [];
   const resolution = createAdOverlayResolution(() => {
     // Al resolverse, deja los listeners de seguridad desuscritos para no
@@ -252,10 +282,6 @@ export function presentAdOverlay(game: Phaser.Game, type: AdType): Promise<AdOve
       cleanup();
     }
   });
-
-  if (!game.scene.getScene(AD_OVERLAY_KEY)) {
-    game.scene.add(AD_OVERLAY_KEY, AdOverlayScene, false);
-  }
 
   // Red de seguridad a nivel juego: si Phaser se destruye con la escena
   // todavía sin resolver (o sin siquiera haber arrancado), la promise del

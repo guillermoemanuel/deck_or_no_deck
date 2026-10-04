@@ -1,11 +1,11 @@
 # Testing
 
-> Estado al 2026-10-02 (unidad **ADR-007**: anuncio propio + `VITE_ADS`): **42 suites · 501 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · umbrales de cobertura verdes ·
-> builds default y `VITE_ADS=portal` OK; medido: 42 `*.spec.ts` en `src`;
-> 477 declaraciones `it(`/`test(` sin contar `it.each` + 24 filas de `it.each`
-> (21 previas + 3 de `resolveAdsMode.spec`) = 501 → **467 del cierre anterior + 34**
-> de las 4 specs nuevas: `resolveAdsMode` 7 · `RewardCooldownTracker` 8 ·
+> Estado al 2026-10-04 (enmienda **ADR-007**: `AdOverlayScene` al boot): **43 suites · 504 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · `npm run build` OK; medido: 43
+> `*.spec.ts` en `src`; 480 declaraciones `it(`/`test(` sin contar `it.each` + 24 filas
+> de `it.each` (21 previas + 3 de `resolveAdsMode.spec`) = 504 → **501 del cierre
+> ADR-007 + 3** de `AdOverlayScene.spec` (nueva, red→verde). Detalle del cierre
+> 2026-10-02 (467 + 34 = 501): `resolveAdsMode` 7 · `RewardCooldownTracker` 8 ·
 > `OwnRewardedAdService` 15 · `AdOverlayScene.resolution` 4).
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
@@ -48,7 +48,7 @@ npm run lint                  # eslint src
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 7 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+3 specs nuevas con ADR-007: `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService`) |
 | `shared/` | 5 | buena | 🟢 |
-| `presentation/` | 2 | casi nada | 🔴 ver §5 (la 2.ª es `AdOverlayScene.resolution.spec` — lógica pura extraída de la escena) |
+| `presentation/` | 3 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura) y `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node); el resto de escenas sin test |
 
 ---
 
@@ -213,6 +213,14 @@ volvió a abrir el overlay; Revivir en derrota cobró el consumo sin reembolsar 
 partida siguió; el midgame mostró su overlay corto con `AD_OVERLAY_HINT_MIDGAME` en el
 flujo de la pantalla de resultado; y en `none`, `window.CrazyGames` quedó `undefined` con
 Duplicar/Triplicar/Revivir ausentes y el resto de mejoras visibles (en ambos idiomas).
+
+> **Regresión de cara (2026-10-04, ADR-007 enmienda):** el ítem 2 debe poder hacerse
+> **de primera, con la página recargada** — era justo el caso que rompía la carrera
+> `scene.add()`+`scene.start()` en runtime (`Scene key not found: AdOverlayScene` →
+> watchdog 15 s → `RESULT_AD_COOLDOWN` en el primer ad de la sesión). Hoy
+> `AdOverlayScene` está en el `config.scene` de `main.ts` y `presentAdOverlay()` degrada
+> en 0 s si faltara; repetir ítem 2 con **sesión fresca** (recargar y reclamar Duplicar
+> sin jugar antes) al tocar el registro de escenas o el presenter.
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

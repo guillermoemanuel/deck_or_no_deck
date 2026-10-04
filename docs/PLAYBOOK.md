@@ -190,6 +190,14 @@ antiguas §10–15 quedan en el historial de git). Derivas medidas que se cerrar
   (solo `package-lock.json`; suite verde después — 38/429 en ese momento). **Quedan** `esbuild`/`vite`
   (moderate + high): su único fix es `vite@8.3.1` = breaking change — decisión explícita
   pendiente del usuario.
+- **Phaser `SceneManager`: `add()` se defiere, `start()` no** (bug del 2026-10-04,
+  ADR-007 enmienda): con `isProcessing === true`, `add()` va a `_pending` (aún no
+  registra) mientras `start()` consulta `getScene` **síncrono** → `Scene key not found`
+  → promise del presenter colgada → watchdog 15 s → cooldown. La pareja `add()`+`start()`
+  en el mismo tick es una carrera; solo se ve en el **primer** uso de la sesión (al frame
+  siguiente `processQueue()` ya registró la escena). Por eso `AdOverlayScene` está en el
+  `config.scene` de `main.ts` (dormida) y `presentAdOverlay()` solo hace `start()` con
+  degradación en 0 s. No registres escenas en runtime con esa pareja.
 - **Git**: historial de 8 commits con mensajes `DOND_BETA.x.y.z`; `main` local va adelante
   de `origin/main`. `speculation-game.zip` no está en `.gitignore`.
 

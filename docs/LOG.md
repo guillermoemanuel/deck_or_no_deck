@@ -7,6 +7,49 @@
 
 ---
 
+## 2026-10-04 · BUGFIX ADR-007: `AdOverlayScene` al boot — carrera `add`/`start` en el primer ad del modo portal
+
+**Qué pasó (bug en `src/`, ya fixeado):** en modo `VITE_ADS=portal` el **primer**
+reclamo de Duplicar de la sesión fallaba (`RESULT_AD_LOADING` → `RESULT_AD_FAILED` →
+`RESULT_AD_COOLDOWN`; consola: `Scene key not found: AdOverlayScene`) y "después
+funcionaba bien". Causa raíz probada contra `node_modules/phaser/src/scene/SceneManager.js`
+(Phaser 3.90.0): `presentAdOverlay()` hacía `scene.add()` + `scene.start()` en runtime,
+pero `SceneManager.add()` **se defiere a `_pending`** cuando `isProcessing` es `true`
+(no registra la escena todavía) y `SceneManager.start()` **no** se defiere → `getScene`
+sincrónico no encuentra la clave → no arranca nada → promise del presenter colgada →
+**watchdog de 15 s** de `OwnRewardedAdService` → `'error'` → **cooldown 60 s**. Al frame
+siguiente `processQueue()` registraba la escena dormida (`autoStart: false`), por eso
+los reclamos siguientes andaban.
+
+**Fix (`src/`):** (1) `main.ts` (348 L): `AdOverlayScene` importada (línea 5) y **al
+final** de `config.scene` (última = se dibuja arriba de todo, la posición que le daba el
+registro en runtime). (2) `AdOverlayScene.ts` (275 → 301 L): `presentAdOverlay()` ya
+**no** llama a `scene.add()` — chequea `game.scene.getScene(AD_OVERLAY_KEY)` y si falta
+→ `console.error` + `Promise.resolve({ completed: false })` (**degradación en 0 s**,
+nunca llega al watchdog); JSDoc marcado `BUGFIX (ADR-007 enmienda 2026-10-04)`.
+(3) Nuevo `src/presentation/scenes/AdOverlayScene.spec.ts` (123 L, **3 tests**; mockea
+`'phaser'` como `DeckCelebrationEffect.spec` — entorno node, sin jsdom).
+
+**Docs (tarea de esta sesión, `memory-keeper`):** `docs/DECISIONS/ADR-007…md` (+enmienda
+2026-10-04 y las dos fechas en el header), `docs/ARCHITECTURE.md` §7 (10 escenas),
+`docs/MAP.md` (fila `AdOverlayScene` 301 L, fila `main.ts` 348, censo → 159 archivos /
+43 specs, `presentation/` 3 specs), `docs/testing.md` (43/504, `AdOverlayScene 3`, fila
+`presentation/`, nota de regresión en el smoke de portal), `docs/PLAYBOOK.md` §5 (trampa
+nueva: `add()` difiere / `start()` no), esta entrada.
+
+**Cómo se verificó:** gates en verde — `npx jest src/presentation/scenes` → 2 suites /
+7 tests ✓ · rojo→verde del test de degradación (antes de fix: `Received: "sin resolver"`)
+✓ · `npm run typecheck` 0 ✓ · `npm run lint` 0 ✓ · `npm test` → **43 suites / 504 tests**
+(base 42/501) ✓ · `npm run build` ✓.
+
+**Qué quedó pendiente:** smoke manual en el navegador del usuario: **recargar y reclamar
+Duplicar de primera** (ítem 2 del smoke de portal con sesión fresca); posible follow-up
+si aparecen errores `Uncaught` en la consola — un frame que aborta antes de `render()`
+deja `isProcessing` trabado, la misma condición que gatilló la carrera; sobrantes sin
+resolver: `dist.zip` y `M .env.example`.
+
+---
+
 ## 2026-10-02 · Tooling: agente + comando `ads-adapter` (build por `VITE_ADS`)
 
 **Qué se tocó:** `.opencode/agents/ads-adapter.md` (agente nuevo, `mode: subagent`),

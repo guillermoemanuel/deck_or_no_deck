@@ -173,10 +173,11 @@ sí emite `user_cancelled` honesto (motivo "muerto" resuelto, R5 de la auditorí
 
 ## 7. Presentación
 
-- **Escenas** (9 en la lista de `main.ts:200`; la décima, `AdOverlayScene`, la registra en
-  runtime `presentAdOverlay()` — ADR-007):
+- **Escenas** (10 en la lista de `main.ts:200`; la décima es `AdOverlayScene`, registrada
+  en el boot y **dormida hasta su primer `start()`** — ADR-007 enmienda 2026-10-04,
+  que reemplaza el registro en runtime):
   `Boot → Preload → MainMenu → HowToPlay / DeckSelection → GameScene + UIScene → Shop / Result`
-  (+ `AdOverlayScene` solo en modo `VITE_ADS=portal`).
+  (+ `AdOverlayScene`, activada solo en modo `VITE_ADS=portal`).
   Las escenas **no se importan entre sí**; se comunican por Scene Manager (payloads tipados
   en `*.types.ts`), por `game.registry` o por eventos.
 - **`GameSceneController`**: único traductor `GameEvent` → efectos visuales.
@@ -239,7 +240,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 42 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 43 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

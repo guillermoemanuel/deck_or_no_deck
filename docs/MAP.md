@@ -4,9 +4,9 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-02 (refrescado tras la unidad **ADR-007** — anuncio propio
-> con countdown + selección de adapter por `VITE_ADS`) ·
-> **158 archivos TS · 23.344 líneas · 116 fuente + 42 specs**
+> Fecha del censo: 2026-10-04 (cierre de la **enmienda ADR-007** — la unidad ADR-007 fue
+> 2026-10-02) ·
+> **159 archivos TS · 23.508 líneas · 116 fuente + 43 specs**
 > (LOC = conteo de líneas por archivo, **incluyen specs** — en esta sesión no corrieron
 > `cloc` ni `wc -l`: el total es el censo previo **21.806** + los deltas medidos uno a
 > uno = **+1.403** de los 10 archivos nuevos + **119** de `main.ts` (214→333) + **16** de
@@ -18,8 +18,12 @@
 > `infrastructure/config/resolveAdsMode.ts`/`.spec`,
 > `infrastructure/services/RewardCooldownTracker.ts`/`.spec`,
 > `infrastructure/services/OwnRewardedAdService.ts`/`.spec`,
-> `presentation/scenes/AdOverlayScene.ts` + `AdOverlayScene.resolution.ts`/`.spec`
+> `presentation/scenes/AdOverlayScene.ts` + `AdOverlayScene.resolution.ts`/`.spec` +
+> `AdOverlayScene.spec.ts`
 > — y **crecieron** `main.ts` y `LanguageData.ts`).
+> Cierre 2026-10-04 (enmienda ADR-007 — bugfix de la carrera `add`/`start`): +1 spec
+> `presentation/scenes/AdOverlayScene.spec.ts` (123 L) → 159 archivos / 43 specs;
+> `AdOverlayScene.ts` **275 → 301** (+26) y `main.ts` **333 → 348** (+15) → total 23.508).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
@@ -103,7 +107,7 @@
 
 ---
 
-## `src/presentation/` — 11.177 líneas · 2 specs · **zona más frágil** 🔴
+## `src/presentation/` — 11.326 líneas · 3 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
@@ -116,7 +120,7 @@
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
 | `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
-| `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 275 + 70 | ✅ 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **No está en la lista de `main.ts`**: la registra en runtime `presentAdOverlay()`, la función **presenter** que `main.ts` inyecta al adapter (inversión de dependencia — infrastructure no importa presentation). La resolución single-shot vive en `.resolution.ts` (lógica pura, la única parte testeada de la escena). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
+| `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 301 + 70 | ✅ 123 + 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **Registrada en el `config.scene` de `main.ts` (última de la lista — se dibuja arriba de todo; ADR-007 enmienda 2026-10-04); `presentAdOverlay()` — la función **presenter** que `main.ts` inyecta al adapter, inversión de dependencia: infrastructure no importa presentation — solo pide el `start` y degrada en 0 s con `{ completed: false }` si la escena faltara** (BUGFIX: la pareja `scene.add()`+`scene.start()` en runtime era una carrera con la cola de Phaser — primer ad de la sesión → `Scene key not found` → watchdog 15 s). La resolución single-shot vive en `.resolution.ts` (lógica pura); la escena además tiene `.spec.ts` (3 tests, mock de `'phaser'` en node — incluye la degradación red→verde). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
 `BankerOfferPanel` 305 · `CardView` 294 (color/valor derivan de `isHighCaseValue` del
@@ -166,7 +170,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (333) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (348) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 10 escenas**, con `AdOverlayScene` **al final** (dormida hasta su primer `start()`, ADR-007 enmienda 2026-10-04) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `vite-env.d.ts` (28) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` — **sin lógica** (la validación vive en `resolveAdsMode.ts`, ADR-007). Script global a propósito (fusión con `vite/client`). |
 | `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |

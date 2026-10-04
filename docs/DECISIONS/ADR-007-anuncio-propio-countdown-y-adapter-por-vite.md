@@ -1,7 +1,8 @@
 # ADR-007: Anuncio propio (countdown) para portales externos + selección de adapter por `VITE_ADS`
 
 **Estado:** Aceptada · **Registrada:** 2026-10-01 · **Pre-implementation:** 2026-10-01 ·
-**Enmienda:** 2026-10-02 (Consecuencias — decisiones conscientes de la revisión del diff)
+**Enmienda:** 2026-10-02 (Consecuencias — decisiones conscientes de la revisión del diff) ·
+2026-10-04 (`AdOverlayScene` se registra en el boot — ver enmienda al pie)
 
 ## Contexto
 El juego hoy está atado a CrazyGames: `ICrazyGamesService` tiene un único adapter
@@ -82,3 +83,33 @@ propio como adapter alternativo.
   (`VITE_ADS !== 'portal' && !== 'none'`, un `===` exacto que el bundler sí pliega): si
   una función tolerara espacios, los dos predicados divergirían y un build `portal` mal
   escrito pediría el SDK igual. `undefined`/vacío → default **sin** warn (dev local).
+
+### Enmienda 2026-10-04 — AdOverlayScene se registra EN EL BOOT (estado: sigue *Aceptada*)
+
+- **Decisión original (revertida):** `AdOverlayScene` **no** estaba en `config.scene`;
+  la registraba en runtime `presentAdOverlay()` con `scene.add()` + `scene.start()` en
+  cada reclamo (al ser la última en registrarse quedaba "arriba de todo" en el stack de
+  escenas).
+- **Bug reproducido (modo `VITE_ADS=portal`):** el **primer** reclamo de Duplicar de la
+  sesión fallaba — consola `RESULT_AD_LOADING` → `RESULT_AD_FAILED` →
+  `RESULT_AD_COOLDOWN`, con warning `Scene key not found: AdOverlayScene`. La promise
+  del presenter quedaba colgada → **watchdog de 15 s** de `OwnRewardedAdService` →
+  resultado `'error'` → **cooldown 60 s**. "Después funciona bien" porque
+  `processQueue()` **sí** registraba la escena dormida (`autoStart: false`) al frame
+  siguiente.
+- **Causa raíz (Phaser 3.90.0, probada contra `node_modules/phaser/src/scene/SceneManager.js`):**
+  `SceneManager.add()` **se defiere a `_pending`** cuando `isProcessing` es `true` (no
+  registra la escena todavía), mientras `SceneManager.start()` **no** se defiere:
+  consulta `getScene` de forma síncrona → warning → no arranca nada. La pareja
+  `add()` + `start()` en el mismo tick es una carrera contra la cola del SceneManager;
+  el frame siguiente la resolvía (por eso solo fallaba el primer ad).
+- **Decisión nueva:** `AdOverlayScene` entra en el `config.scene` de `main.ts` **al
+  final** de la lista — misma posición que le daba el registro en runtime (última = se
+  dibuja arriba de todo), arranca dormida y solo se activa con `game.scene.start()`.
+  `presentAdOverlay()` ya **no** llama a `scene.add()`: solo pide el `start`; y si la
+  escena faltara del Scene Manager → `console.error` +
+  `Promise.resolve({ completed: false })` (**degradación en 0 s**, nunca cuelga hasta
+  el watchdog). Cubierto por `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en
+  node): arranque con data sin `add` en runtime · degradación 0 s (test red→verde: el
+  cuelgue reproducía `Received: "sin resolver"`) · destrucción del juego antes de
+  resolver.

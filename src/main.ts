@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
 import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdService';
 import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
-import { presentAdOverlay } from './presentation/scenes/AdOverlayScene';
+import { AdOverlayScene, presentAdOverlay } from './presentation/scenes/AdOverlayScene';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
 import { ProgressionManager } from './infrastructure/persistence/ProgressionManager';
 import { installCompactTextFloor } from './presentation/mobile/CompactTextFloor';
@@ -197,7 +197,23 @@ const config: Phaser.Types.Core.GameConfig = {
     // muestra.
     fullscreenTarget: document.documentElement
   },
-  scene: [BootScene, PreloadScene, MainMenuScene, HowToPlayScene, DeckSelectionScene, GameScene, UIScene, ShopScene, ResultScene]
+  scene: [
+    BootScene,
+    PreloadScene,
+    MainMenuScene,
+    HowToPlayScene,
+    DeckSelectionScene,
+    GameScene,
+    UIScene,
+    ShopScene,
+    ResultScene,
+    // Última de la lista = se dibuja arriba de todo (era la posición que le
+    // daba el registro en runtime del presenter). Arranca dormida: solo se
+    // activa con `game.scene.start()`. ADR-007 enmienda 2026-10-04: estar
+    // en el boot elimina la carrera add/start con la cola de Phaser
+    // ("Scene key not found" + watchdog de 15 s en el primer ad).
+    AdOverlayScene
+  ]
 };
 
 const game = new Phaser.Game(config);
