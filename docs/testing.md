@@ -185,7 +185,7 @@ llamada (`CrazyGamesService.ts:155`). Resultados:
 Los flujos además siguen cubiertos por `MultiplyRewardUseCase.spec.ts` (16 tests) y
 `ReviveWithAdUseCase.spec.ts` (19 tests).
 
-### Smoke del modo `portal` (`VITE_ADS=portal`) — VERIFICADO 2026-10-02
+### Smoke del modo `portal` (`VITE_ADS=portal`) — VERIFICADO 2026-10-02 (regresión del primer ad: 2026-10-04)
 
 Creado el 2026-10-02 con la unidad ADR-007. **Los 11 ítems de arriba corren en modo
 default** (`crazygames`); estos 6 son el equivalente para el adapter propio. Los 6
@@ -214,9 +214,11 @@ partida siguió; el midgame mostró su overlay corto con `AD_OVERLAY_HINT_MIDGAM
 flujo de la pantalla de resultado; y en `none`, `window.CrazyGames` quedó `undefined` con
 Duplicar/Triplicar/Revivir ausentes y el resto de mejoras visibles (en ambos idiomas).
 
-> **Regresión de cara (2026-10-04, ADR-007 enmienda):** el ítem 2 debe poder hacerse
-> **de primera, con la página recargada** — era justo el caso que rompía la carrera
-> `scene.add()`+`scene.start()` en runtime (`Scene key not found: AdOverlayScene` →
+> **✅ Regresión verificada en vivo 2026-10-04** (usuario: "funciona todo ok") — el
+> ítem 2 se hizo **de primera, con la página recargada** en `VITE_ADS=portal`: overlay al
+> instante, consola **sin** `Scene key not found` ni warn del watchdog. Era justo el caso
+> que rompía la carrera `scene.add()`+`scene.start()` en runtime
+> (`Scene key not found: AdOverlayScene` →
 > watchdog 15 s → `RESULT_AD_COOLDOWN` en el primer ad de la sesión). Hoy
 > `AdOverlayScene` está en el `config.scene` de `main.ts` y `presentAdOverlay()` degrada
 > en 0 s si faltara; repetir ítem 2 con **sesión fresca** (recargar y reclamar Duplicar

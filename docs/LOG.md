@@ -40,13 +40,15 @@ nueva: `add()` difiere / `start()` no), esta entrada.
 **Cómo se verificó:** gates en verde — `npx jest src/presentation/scenes` → 2 suites /
 7 tests ✓ · rojo→verde del test de degradación (antes de fix: `Received: "sin resolver"`)
 ✓ · `npm run typecheck` 0 ✓ · `npm run lint` 0 ✓ · `npm test` → **43 suites / 504 tests**
-(base 42/501) ✓ · `npm run build` ✓.
+(base 42/501) ✓ · `npm run build` ✓ · **smoke manual PASADO (2026-10-04, en vivo con el
+usuario):** recargó con `VITE_ADS=portal` y reclamó Duplicar **de primera** → overlay al
+instante, consola **sin** `Scene key not found` ni warn del watchdog.
 
-**Qué quedó pendiente:** smoke manual en el navegador del usuario: **recargar y reclamar
-Duplicar de primera** (ítem 2 del smoke de portal con sesión fresca); posible follow-up
-si aparecen errores `Uncaught` en la consola — un frame que aborta antes de `render()`
-deja `isProcessing` trabado, la misma condición que gatilló la carrera; sobrantes sin
-resolver: `dist.zip` y `M .env.example`.
+**Qué quedó pendiente:** sobrantes sin resolver: `dist.zip` y `M .env.example`.
+**Observación opcional (no reproducida):** si algún día aparecen errores `Uncaught` en la
+consola, un frame que aborta antes de `render()` deja `isProcessing` trabado — la misma
+condición que gatilló la carrera; el usuario **no** reportó errores en el smoke del
+2026-10-04, así que no es pendiente activo.
 
 ---
 
