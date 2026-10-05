@@ -21,6 +21,15 @@ interface ImportMetaEnv {
    * seguro) con warn — ver `resolveAdsMode()`.
    */
   readonly VITE_ADS?: 'crazygames' | 'portal' | 'none';
+
+  /**
+   * Muestra el botón de pantalla completa **propio** del juego (ADR-008):
+   * literales `'true'` | `'false'`. La escribe la tool `/ads-adapter`
+   * junto a `VITE_ADS` (crazygames → `false`: la plataforma prohíbe el
+   * botón propio; portal/none → `true`). Si falta, el botón NO se
+   * muestra (default seguro) — ver `resolveFullscreenEnabled()`.
+   */
+  readonly VITE_FULLSCREEN?: 'true' | 'false';
 }
 
 interface ImportMeta {

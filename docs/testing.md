@@ -1,12 +1,14 @@
 # Testing
 
-> Estado al 2026-10-04 (enmienda **ADR-007**: `AdOverlayScene` al boot): **43 suites · 504 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · `npm run build` OK; medido: 43
-> `*.spec.ts` en `src`; 480 declaraciones `it(`/`test(` sin contar `it.each` + 24 filas
-> de `it.each` (21 previas + 3 de `resolveAdsMode.spec`) = 504 → **501 del cierre
-> ADR-007 + 3** de `AdOverlayScene.spec` (nueva, red→verde). Detalle del cierre
-> 2026-10-02 (467 + 34 = 501): `resolveAdsMode` 7 · `RewardCooldownTracker` 8 ·
-> `OwnRewardedAdService` 15 · `AdOverlayScene.resolution` 4).
+> Estado al 2026-10-04 (unidad **A1 / ADR-008**: botón fullscreen propio): **45 suites · 513 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 45
+> `*.spec.ts` en `src`; 489 declaraciones `it(`/`test(` sin contar `it.each` + 24 filas
+> de `it.each` (21 previas + 3 de `resolveAdsMode.spec`) = 513 → **504 del cierre
+> ADR-007 + 9**: `resolveFullscreenEnabled.spec` **5** (red→verde: `Cannot find module`)
+> y `SoundFullscreenControls.spec` **4** (red→verde: `Expected 1, Received 2` — el bug
+> CG-PUB-002 reproducido). Detalle del cierre 2026-10-02 (467 + 34 = 501):
+> `resolveAdsMode` 7 · `RewardCooldownTracker` 8 · `OwnRewardedAdService` 15 ·
+> `AdOverlayScene.resolution` 4).
 > Runner: **Jest + ts-jest** (no vitest). Entorno: `node` (sin DOM).
 
 ---
@@ -46,9 +48,9 @@ npm run lint                  # eslint src
 |---|---|---|---|
 | `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
-| `infrastructure/` | 7 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+3 specs nuevas con ADR-007: `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService`) |
+| `infrastructure/` | 8 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+4 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — y `resolveFullscreenEnabled` con ADR-008, 5 tests) |
 | `shared/` | 5 | buena | 🟢 |
-| `presentation/` | 3 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura) y `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node); el resto de escenas sin test |
+| `presentation/` | 4 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
 
 ---
 
@@ -87,8 +89,11 @@ npm run lint                  # eslint src
 
 ## 5. Huecos y estrategia
 
-**`presentation/` no se unit-testea con Phaser** (decisión mantenida): las escenas
-dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks.
+**Las escenas de `presentation/` no se unit-testean con Phaser** (decisión mantenida):
+dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks. Lo que sí se
+testea en `presentation/` es **lógica pura o componentes con `'phaser'` mockeado en node**
+(`DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
+`SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002).
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
 testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el

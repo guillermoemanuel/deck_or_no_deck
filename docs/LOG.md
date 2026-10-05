@@ -7,6 +7,62 @@
 
 ---
 
+## 2026-10-04 · Publicación A1 — CG-PUB-002: botón de fullscreen propio fuera de CrazyGames (ADR-008)
+
+**Qué pasó (hallazgo de la auditoría de publicación 2026-10-04, P0 `CG-PUB-002`):**
+CrazyGames **prohíbe** los botones de pantalla completa propios (*"Custom in-game
+fullscreen buttons are prohibited"*). `SoundFullscreenControls.ts:85` tenía
+`showFullscreenButton = true` como default mientras su JSDoc juraba `false` — drift
+desde `c9680f4` (2026-09-28) — y ninguna de las 4 escenas pasaba el 3.er argumento →
+`MainMenuScene:197`, `HowToPlayScene:599`, `DeckSelectionScene:167`, `UIScene:130`
+heredaban el botón prohibido **en todos los modos**, incluido el default
+`VITE_ADS=crazygames` (el que se publica).
+
+**Fix (`src/`, diseño del usuario = env pareja del adapter):**
+1. **Nuevo `resolveFullscreenEnabled(raw, adsMode)`** (`infrastructure/config/`, al lado
+   de `resolveAdsMode`, misma rigidez de literales exactos): default seguro **`false`**
+   sin env/basura; en `crazygames` **siempre** `false` (si el env dice `'true'` se
+   ignora + `console.warn` — la plataforma manda); en `portal`/`none` acepta solo
+   `'true'`/`'false'` exactos; cualquier variante (espacios, mayúsculas, typos) →
+   `false` + warn con el valor crudo; `undefined`/vacío → `false` sin warn.
+2. **Wiring**: `main.ts:40` resuelve `import.meta.env.VITE_FULLSCREEN` con el `adsMode`
+   ya resuelto y lo inyecta en el bag como **`GameServices.fullscreenEnabled`** (campo
+   nuevo); las 4 escenas pasan `services.fullscreenEnabled` como 3.er argumento;
+   default del constructor → **`false`** y JSDoc de la clase corregido (borró la
+   afirmación falsa + cita ADR-008). Presentation no lee env directo.
+3. **`vite-env.d.ts`** tipa `readonly VITE_FULLSCREEN?: 'true' | 'false'`.
+4. **Tool `/ads-adapter`** (`.opencode/agents/ads-adapter.md` 74 L +
+   `.opencode/commands/ads-adapter.md` 16 L): ahora escribe el **PAR** en `.env` —
+   `crazygames` → `VITE_FULLSCREEN=false`; `portal`/`none` → `true`; el reporte
+   MODO/BUILD/BUNDLE muestra ambas envs.
+5. **`.env.example`**: bloque comentado de `VITE_FULLSCREEN` con el mapping.
+6. **Specs red→verde (9 tests):** `resolveFullscreenEnabled.spec.ts` (5; el rojo era
+   `Cannot find module`) y `SoundFullscreenControls.spec.ts` (4; el rojo era
+   `Expected 1, Received 2` — el bug reproducido; mockea `phaser` + `HudIconButton` al
+   estilo de `DeckCelebrationEffect.spec`).
+
+**Docs (tarea de esta sesión, `memory-keeper`):** `docs/DECISIONS/ADR-008…md` + fila en
+`docs/DECISIONS/README.md`, `docs/MAP.md` (censo → **162 archivos / 45 specs / 23.775 L**,
+fila nueva `resolveFullscreenEnabled` 70 L, `main.ts` 348→353, `GameServices` 44→49,
+`vite-env.d.ts` 28→37, `presentation/` 4 specs), `docs/testing.md` (45/513, filas
+`infrastructure/` 8 y `presentation/` 4), `docs/ARCHITECTURE.md` §2 (par de envs
+`VITE_ADS` + `VITE_FULLSCREEN`), `AGENTS.md` §3 (mención en la fila de `main.ts`),
+esta entrada.
+
+**Cómo se verificó:** gates en verde — `npx jest` specs afectados (16 en
+`config/` + `components/`) ✓ · rojo→verde de los 9 tests nuevos ✓ · `npm run typecheck` 0 ✓ ·
+`npm run lint` 0 ✓ · `npm test` → **45 suites / 513 tests** (base 43/504) ✓ ·
+**verificación en vivo de la tool**: `/ads-adapter crazygames` → PASS (`.env` =
+crazygames/false, bundle 1 match `sdk.crazygames.com`) y `/ads-adapter portal` → PASS
+(0 matches); los 2 builds PASS.
+
+**Qué quedó pendiente:** **A3** (ads_disabled) en curso · **A4** (README/package con el
+nombre canónico **"Deck or No Deck"**) · **APS en portal** (decisión del usuario —
+acción fuera del repo) · sobrantes **`dist.zip`** (dejado como está por decisión del
+usuario). `.env` local restaurado en `portal`/`true`.
+
+---
+
 ## 2026-10-04 · BUGFIX ADR-007: `AdOverlayScene` al boot — carrera `add`/`start` en el primer ad del modo portal
 
 **Qué pasó (bug en `src/`, ya fixeado):** en modo `VITE_ADS=portal` el **primer**

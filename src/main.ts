@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
 import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdService';
 import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
+import { resolveFullscreenEnabled } from './infrastructure/config/resolveFullscreenEnabled';
 import { AdOverlayScene, presentAdOverlay } from './presentation/scenes/AdOverlayScene';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
 import { ProgressionManager } from './infrastructure/persistence/ProgressionManager';
@@ -34,6 +35,9 @@ import languageManager from './shared/i18n/LanguageManager';
 // VITE_ADS. Sin env (dev local) o con cualquier valor inválido manda el
 // default 'crazygames' — el comportamiento previo al ADR queda intacto.
 const adsMode = resolveAdsMode(import.meta.env.VITE_ADS);
+// Botón de pantalla completo propio (ADR-008): pareja de VITE_ADS — en
+// crazygames queda false SIEMPRE (la plataforma prohíbe el botón propio).
+const fullscreenEnabled = resolveFullscreenEnabled(import.meta.env.VITE_FULLSCREEN, adsMode);
 
 /**
  * Firma común de los dos adapters de ads (ADR-007): el puerto
@@ -309,7 +313,8 @@ const services: GameServices = {
   recordsRepository,
   dailyChallengeRepository,
   outcomeRecorder: new GameOutcomeRecorder(recordsRepository, dailyChallengeRepository, progressionManager),
-  listAvailableUpgrades: new ListAvailableUpgradesUseCase(crazyGamesService)
+  listAvailableUpgrades: new ListAvailableUpgradesUseCase(crazyGamesService),
+  fullscreenEnabled
 };
 
 game.registry.set('services', services);

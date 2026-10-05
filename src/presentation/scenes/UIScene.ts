@@ -127,7 +127,7 @@ export class UIScene extends Phaser.Scene {
     // derecha: componente compartido (ver SoundFullscreenControls.ts),
     // el MISMO que usan MainMenuScene/HowToPlayScene/DeckSelectionScene,
     // para mantener coherencia total en todo el juego.
-    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
 
     // Posiciona el renglón superior por primera vez, y lo vuelve a
     // calcular en cada resize del canvas/iframe (activar/desactivar

@@ -164,7 +164,7 @@ export class DeckSelectionScene extends Phaser.Scene {
     // GameScene (ver UIScene.ts), MainMenuScene y HowToPlayScene: el
     // botón "Aceptar" queda centrado (width/2, height-30), así que no
     // compite con esta esquina.
-    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hudControls.destroy());
   }
 

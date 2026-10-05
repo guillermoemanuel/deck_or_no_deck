@@ -33,6 +33,11 @@ export interface GameServices {
   // de rewarded ads cuando no se pueden mostrar) — misma razón por la que
   // outcomeRecorder viaja acá: única instancia compartida entre escenas.
   readonly listAvailableUpgrades: ListAvailableUpgradesUseCase;
+  // Muestra el botón de pantalla completa propio (ADR-008): resuelto en
+  // main.ts desde `VITE_FULLSCREEN` + `VITE_ADS` — en modo crazygames
+  // SIEMPRE false (la plataforma prohíbe el botón propio, CG-PUB-002).
+  // Las 4 escenas con SoundFullscreenControls lo leen de acá.
+  readonly fullscreenEnabled: boolean;
 }
 
 export function getServices(scene: Phaser.Scene): GameServices {

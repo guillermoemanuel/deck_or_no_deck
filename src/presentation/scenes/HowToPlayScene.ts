@@ -596,7 +596,7 @@ export class HowToPlayScene extends Phaser.Scene {
     // el tamaño de pantalla o silenciar/activar el audio también desde
     // el tutorial.
     const services = getServices(this);
-    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
 
     // Limpieza al apagar la escena: además de `hudControls` (sus propios
     // listeners del ScaleManager viven a nivel Game, ver

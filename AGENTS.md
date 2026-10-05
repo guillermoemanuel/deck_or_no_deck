@@ -48,7 +48,7 @@ Verificación: `grep -rn "from '\.\./" src/domain` → vacío.
 | `presentation/scenes/GameScene.ts` | composition root de la partida (37 imports) |
 | `presentation/scenes/ShopScene.ts` | escena de 771 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades`); compra de mazos sin use-case |
 | `domain/entities/GameSession.ts` | raíz del agregado + `EnergyDrainRule` |
-| `main.ts` | composition root global + **selección del adapter de ads por `VITE_ADS`** (ADR-007: `crazygames`\|`portal`\|`none`, carga dinámica del SDK) + anti-cheat de `beforeunload` |
+| `main.ts` | composition root global + **selección del adapter de ads por `VITE_ADS`** (ADR-007: `crazygames`\|`portal`\|`none`, carga dinámica del SDK) + **resolución de `VITE_FULLSCREEN` → `GameServices.fullscreenEnabled`** (ADR-008: en `crazygames` siempre `false`) + anti-cheat de `beforeunload` |
 | `shared/i18n/LanguageData.ts` | 148 claves; agregá siempre `en` **y** `es` |
 
 Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.

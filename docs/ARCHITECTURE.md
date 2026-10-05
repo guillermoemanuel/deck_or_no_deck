@@ -60,6 +60,16 @@ Hay **dos** lugares donde se instancian concretos:
    **espejo deliberado** de `resolveAdsMode()`: en un build `portal`/`none` la URL
    `sdk.crazygames.com` no aparece en el bundle. Orden de boot en modo `crazygames`:
    `script → init → juego` (el resto del archivo corre en paralelo mientras carga).
+
+   **Botón de pantalla completo propio (ADR-008)** —
+   `resolveFullscreenEnabled(import.meta.env.VITE_FULLSCREEN, adsMode)`
+   (`infrastructure/config/resolveFullscreenEnabled.ts`) produce el booleano que
+   `main.ts` inyecta en el bag como `GameServices.fullscreenEnabled`; las 4 escenas con
+   `SoundFullscreenControls` lo pasan como 3.er argumento (**presentation no lee env
+   directo**). Es la **pareja invariante de `VITE_ADS`**, escrita por la misma tool
+   `/ads-adapter` en `.env`: `crazygames` → `false` (la plataforma prohíbe los botones
+   fullscreen propios, CG-PUB-002 — el modo manda, aunque el env diga `'true'`),
+   `portal`/`none` → `true`; sin env o con basura → `false` (default seguro).
 2. **`src/presentation/scenes/GameScene.ts`** (por partida): elige la carta secreta,
    crea la `GameSession` vía `GameSessionFactory`, instancia los 7 use-cases
    (`PurchaseSessionUpgradeUseCase` recibe además el puerto de ads, para rechazar

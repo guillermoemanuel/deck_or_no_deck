@@ -194,7 +194,7 @@ export class MainMenuScene extends Phaser.Scene {
     // Sonido/Pantalla Completa — esquina inferior derecha, igual que en
     // GameScene (ver UIScene.ts). Se limpia en el SHUTDOWN ya existente
     // de esta escena (el mismo que usa el selector de idioma).
-    this.hudControls = new SoundFullscreenControls(this, services.audioService);
+    this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.hudControls.destroy();
       this.newGameDialog?.destroy();

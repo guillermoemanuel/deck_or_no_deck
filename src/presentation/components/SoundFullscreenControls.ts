@@ -17,26 +17,27 @@ const EDGE_MARGIN = 20; // distancia del borde del botón al borde de la cámara
  * cada escena) para que MainMenuScene, HowToPlayScene, DeckSelectionScene
  * y UIScene compartan EXACTAMENTE el mismo comportamiento y look & feel.
  *
- * BOTÓN DE PANTALLA COMPLETA — apagado por defecto (build CrazyGames):
+ * BOTÓN DE PANTALLA COMPLETA — apagado por defecto (ADR-008):
  * CrazyGames prohíbe explícitamente los botones de pantalla completa
  * dentro del propio juego ("Custom in-game fullscreen buttons are
  * prohibited, as they can interfere with other features") — ellos ya
- * proveen el suyo alrededor del iframe. Por eso `showFullscreenButton`
- * default a `false`: NINGÚN llamado existente a este componente lo pasa,
- * así que hoy el botón queda desactivado en las 4 escenas que lo usan,
- * SIN tocar esas escenas ni borrar el código del botón en sí — el ícono,
- * el toggle de fullscreen y su sincronización con el ScaleManager siguen
- * ahí, listos para reactivarse con el flag en una build de otra plataforma.
+ * proveen el suyo alrededor del iframe. Por eso el default del flag es
+ * `false`: un build sin configuración nunca incumple (default seguro,
+ * coherente con el default `'crazygames'` de `VITE_ADS`).
  *
- * Para una build de otra plataforma que sí lo permita, se reactiva
- * pasando `true` explícitamente en esa build:
+ * El flag real viaja en el bag `services.fullscreenEnabled`
+ * (`GameServices`), resuelto por `main.ts` desde `VITE_FULLSCREEN` +
+ * `VITE_ADS` con `resolveFullscreenEnabled()` (ADR-008): en modo
+ * crazygames es `false` SIEMPRE (la prohibición de la plataforma manda
+ * sobre la env); en portal/none lo decide la env que escribe la tool
+ * `/ads-adapter` junto a `VITE_ADS`. Las 4 escenas que instancian este
+ * componente lo pasan explícitamente:
  * ```ts
- * new SoundFullscreenControls(this, services.audioService, true);
+ * new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
  * ```
- * (Hoy no hay un flag de plataforma en el proyecto — ver vite.config.ts —
- * así que ese `true` se pasaría a mano en los 4 call sites de esa build
- * en particular. El día que exista un flag de build por plataforma, ese
- * booleano es el único lugar que hace falta tocar acá.)
+ * (Antes de ADR-008 el default era `true` mientras este JSDoc juraba lo
+ * contrario: las 4 escenas heredaban el botón prohibido — CG-PUB-002 de
+ * la auditoría de publicación, con spec rojo→verde.)
  *
  * Uso en cualquier escena (CrazyGames, con Sonido únicamente):
  * ```ts
@@ -77,12 +78,11 @@ export class SoundFullscreenControls {
   private readonly unsubscribeLanguageChanged: () => void;
 
   /**
-   * @param showFullscreenButton Default `false` — ver el comentario de
-   * la clase (prohibición de CrazyGames). Pasar `true` solo en builds de
-   * plataformas donde un botón de pantalla completa propio esté
-   * permitido.
+   * @param showFullscreenButton Default `false` (ADR-008 — prohibición de
+   * CrazyGames, ver el comentario de la clase). Las escenas pasan el
+   * flag resuelto: `services.fullscreenEnabled`.
    */
-  constructor(scene: Phaser.Scene, audioService: IAudioService, showFullscreenButton: boolean = true) {
+  constructor(scene: Phaser.Scene, audioService: IAudioService, showFullscreenButton: boolean = false) {
     this.scene = scene;
     this.audioService = audioService;
 
