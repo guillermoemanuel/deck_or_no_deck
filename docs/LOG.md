@@ -7,6 +7,35 @@
 
 ---
 
+## 2026-10-04 · Publicación A4 — nombre canónico "Deck or No Deck" alineado en docs
+
+**Qué se tocó (solo docs + README; `src/` intacto):**
+1. `README.md:1` H1 → `# Deck or No Deck (speculation-game)`.
+2. `docs/ARCHITECTURE.md:1` H1 → `# Arquitectura — Deck or No Deck (speculation-game)`.
+3. `package.json` `description` → arranca con "Deck or No Deck — …" (tocado por el
+   orquestador, fuera de este agente); **`name: speculation-game` se mantiene**
+   (decisión del usuario).
+4. `index.html` `<title>` ya era `Deck or No Deck` ✓ — sin tocar.
+5. `docs/MAP.md` H1 ("MAPA del código") no nombra el proyecto — sin cambios.
+
+**Cómo se verificó (grep):** grep del nombre erróneo anterior → **0** en docs/ y README
+tras el fix (solo estaba en los 2 H1 corregidos; este LOG tampoco lo repite, para no
+ensuciar greps futuros). Referencias legítimas al programa TV
+*Deal or No Deal* intactas: `README.md:3` ("estilo *Deal or No Deal*") y el "estilo
+Deal or No Deal" del `description` de `package.json`. Las otras apariciones de "Deck or
+No Deck" son historial de este LOG (append-only, no se reescribe) e i18n en
+`LanguageData.ts` (correcto).
+
+**Gates (DoD):** corridos por el orquestador después de esta entrada → `npm run typecheck`
+**0 errores** · `npm run lint` **0** · `npm test` → **45 suites / 522 tests en verde**
+(idéntico a A3: solo cambiaron 2 H1 de docs + `description` de `package.json`, nada de
+`src/`).
+
+**Qué quedó pendiente:** cierra el ítem "naming canónico" que venía
+abierto desde las entradas 2026-10-01/02. Sin ADR (cambio de naming, no de diseño).
+
+---
+
 ## 2026-10-04 · Publicación A3 — CG-PUB-003: `ads_disabled` como estado permanente (ADR-009)
 
 **Qué pasó (hallazgo de la auditoría de publicación 2026-10-04, `CG-PUB-003`):** en

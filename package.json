@@ -1,7 +1,7 @@
 {
   "name": "speculation-game",
   "version": "0.1.0",
-  "description": "Juego arcade tactico de especulacion (Deal or No Deal-like) construido con TypeScript + Phaser 3, para CrazyGames.",
+  "description": "Deck or No Deck — juego arcade tactico de especulacion (estilo Deal or No Deal) construido con TypeScript + Phaser 3, para CrazyGames.",
   "private": true,
   "scripts": {
     "dev": "vite",

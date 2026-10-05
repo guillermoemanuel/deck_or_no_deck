@@ -1,4 +1,4 @@
-# Arquitectura — Deck or No Deal (speculation-game)
+# Arquitectura — Deck or No Deck (speculation-game)
 
 > **Documento vivo.** Es la fuente de verdad sobre *cómo está construido* el código.
 > Si un cambio altera este texto, se actualiza en el mismo commit.

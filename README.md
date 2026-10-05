@@ -1,4 +1,4 @@
-# Deck or No Deal (speculation-game)
+# Deck or No Deck (speculation-game)
 
 Juego arcade táctico de especulación estilo *Deal or No Deal*, en **TypeScript + Phaser 3**
 con **Vite**, pensado para **CrazyGames**. Por partida: 13 cartas (1 secreta + 12 en el
