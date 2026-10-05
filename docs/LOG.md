@@ -7,6 +7,57 @@
 
 ---
 
+## 2026-10-04 · Sprint B B3 — CG-MON-005: aviso de rewarded en la fila de la tienda
+
+**Qué pasó (hallazgo P2 de la auditoría de publicación 2026-10-04):** la tienda no
+declaraba que Duplicar/Triplicar/Revivir **exigen mirar un anuncio** — el "(Ad)" solo
+aparecía en los botones `RESULT_*` (`RESULT_DOUBLE_BUTTON` y cía), ya **dentro** del flujo
+de uso. Requisito de CrazyGames (docs.crazygames.com/requirements/ads/): los rewarded no
+pueden dispararse "deceptively". La fila es lo único que ve el jugador antes de comprar y
+`ShopScene` renderiza `definition.description` (wordWrap 280 px, hasta 3 líneas por
+`ROW_SPACING_Y`), así que el marcador vive en la descripción del catálogo.
+
+**Fix (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**
+1. **`shared/i18n/LanguageData.ts`** (solo 6 strings: las 3 descripciones con
+   `requiresRewardedAd: true`, EN + ES; LOC neto **467 → 467**): ahora cierran con el
+   requisito visible en la fila — EN `(requires ad)` · ES `(requiere anuncio)` (ej.
+   `Habilita "Duplicar x2" en la pantalla final de esta partida (requiere anuncio).`).
+   En ES el tag es **castellano** aunque los `RESULT_*` existentes usan `(Ad)` en ambos
+   idiomas: esos quedaron intactos (fuera del alcance del hallazgo).
+2. **Nuevo contrato en `LanguageData.spec.ts`** (red primero): *'every upgrade that
+   requires a rewarded ad declares the requirement in its description (EN and ES)'* —
+   filtra `SESSION_UPGRADE_CATALOG` por `requiresRewardedAd === true`, exige
+   `/\(requires ad\)/` en EN y `/\(requiere anuncio\)/` en ES sobre `upgrade.description` y
+   acumula faltantes como `lang:id` (mensaje de fallo legible). Rojo: `sinAviso` con **6
+   entradas** (`en/es × double_reward/triple_reward/revive`); verde: **+1 test**.
+   Importa el catálogo desde `domain/value-objects/SessionUpgradeCatalog` (los specs
+   pueden cruzar capas).
+
+**Specs red→verde:** `LanguageData.spec` **+1** (5 → **6 tests**) → **48 suites / 541
+tests** (base B2: 48/540). Sin archivos nuevos.
+
+**Docs (tarea de esta sesión, `memory-keeper`):** **sin ADR** (cambio de copy i18n, no de
+diseño); `docs/MAP.md` (censo → **167 archivos / 48 specs / 24.776 L**, medido con
+`wc -l`/`grep -c ""`: `LanguageData.spec.ts` 44 → **75 L** (+31), `LanguageData.ts`
+**467 sin cambio de LOC**, `shared/` 1.254 → **1.285**), `docs/testing.md` (**48/541**;
+`shared/i18n` suma 1 test → `LanguageData.spec` con 6), esta entrada.
+
+**Cómo se verificó:** gates en verde corridos por la unidad (a esta sesión el runner le
+fue denegado por permisos): `npm run typecheck` 0 ✓ · `npm run lint` 0 ✓ · `npm test` →
+**48 suites / 541 tests** (base 48/540) ✓ · build no hizo falta re-correr (solo strings).
+Verificación de docs por esta sesión: `wc -l`/`grep -c ""` en los 2 archivos tocados,
+`git diff --numstat` (6/6 en `LanguageData.ts`, +31/0 en el spec), conteo de `it(` en
+`LanguageData.spec` (6) y grep en `*.md`: **ninguna doc afirmaba que la tienda no
+advirtiera** el requisito de ad (el único "aviso" documentado es el bloqueador de UI de
+ADR-010).
+
+**Qué queda pendiente:** smoke visual de la tienda dentro del **smoke general del Sprint
+B** (modo `crazygames` con QA Tool): ver el marcador en las 3 filas de la tienda y que el
+wrap de 280 px no corte el texto más allá de las 3 líneas de `ROW_SPACING_Y`. Siguen
+abiertos `CG-MON-006` y los smokes de B1/B2.
+
+---
+
 ## 2026-10-04 · Sprint B B2 — CG-MON-002: `muteAudio` de la plataforma (ADR-011)
 
 **Qué pasó (hallazgo P1 de la auditoría de publicación 2026-10-04):** `muteAudio`

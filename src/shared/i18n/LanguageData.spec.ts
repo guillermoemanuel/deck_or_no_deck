@@ -1,4 +1,5 @@
 import { TRANSLATIONS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from './LanguageData';
+import { SESSION_UPGRADE_CATALOG } from '../../domain/value-objects/SessionUpgradeCatalog';
 
 describe('LanguageData', () => {
   it('SUPPORTED_LANGUAGES matches the keys actually defined in TRANSLATIONS', () => {
@@ -40,5 +41,35 @@ describe('LanguageData', () => {
         expect(extractPlaceholders(translatedText)).toEqual(referencePlaceholders);
       }
     }
+  });
+
+  // CG-MON-005 (auditoría de publicación 2026-10-04): la tienda no
+  // advertía que Duplicar/Triplicar/Revivir exigen mirar un anuncio —
+  // el "(Ad)" solo aparecía en los botones de ResultScene, ya DENTRO del
+  // flujo de uso. Requisito de CrazyGames: los rewarded no pueden
+  // dispararse "deceptively" — el aviso tiene que estar donde se compra.
+  // La descripción es lo visible en cada fila de ShopScene (wordWrap
+  // 280px, hasta 3 líneas), por eso vive ahí el marcador, en ambos
+  // idiomas.
+  it('every upgrade that requires a rewarded ad declares the requirement in its description (EN and ES)', () => {
+    const marcadorPorIdioma: Record<string, RegExp> = {
+      en: /\(requires ad\)/,
+      es: /\(requiere anuncio\)/
+    };
+
+    const rewarded = SESSION_UPGRADE_CATALOG.filter(upgrade => upgrade.requiresRewardedAd === true);
+    expect(rewarded.length).toBeGreaterThan(0); // el contrato tiene qué cubrir
+
+    const sinAviso: string[] = [];
+    for (const upgrade of rewarded) {
+      for (const lang of SUPPORTED_LANGUAGES) {
+        const descripcion = (TRANSLATIONS[lang] as Record<string, string>)[upgrade.description];
+        if (!marcadorPorIdioma[lang].test(descripcion)) {
+          sinAviso.push(`${lang}:${upgrade.id}`);
+        }
+      }
+    }
+
+    expect(sinAviso).toEqual([]);
   });
 });

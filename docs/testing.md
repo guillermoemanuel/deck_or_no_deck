@@ -1,13 +1,18 @@
 # Testing
 
-> Estado al 2026-10-04 (unidad **B2 / ADR-011**: `muteAudio` de la plataforma —
-> CG-MON-002): **48 suites · 540 tests** —
+> Estado al 2026-10-04 (unidad **B3 / CG-MON-005**: aviso de rewarded en la fila de la
+> tienda): **48 suites · 541 tests** —
 > verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 48
-> `*.spec.ts` en `src`; **527 del cierre B1/ADR-010 + 13 de B2** = 5 declaraciones `it(`
+> `*.spec.ts` en `src`; **540 del cierre B2/ADR-011 + 1 de B3** = 1 declaración `it(`
+> nueva en `LanguageData.spec` — *'every upgrade that requires a rewarded ad declares the
+> requirement in its description (EN and ES)'*, rojo con `sinAviso` de 6 entradas
+> `en/es × double_reward/triple_reward/revive` → ese spec queda en **6 tests** y
+> `shared/i18n` suma 1 → **540 + 1** = 541).
+> Conteo previo (B2): **527 del cierre B1/ADR-010 + 13 de B2** = 5 declaraciones `it(`
 > nuevas en `AudioService.spec` (primer spec de `audio/`) + 4 en
 > `resolveMuteAudioOverride.spec` (los dos rojos por módulo inexistente) + 4 nuevas en
 > el describe de muteAudio de `CrazyGamesService.spec` (16 → **20**) → **527 + 13** = 540.
-> Conteo previo: **522 del cierre A3/ADR-009 + 5 de B1** = 5 declaraciones `it(`
+> Conteo previo (B1): **522 del cierre A3/ADR-009 + 5 de B1** = 5 declaraciones `it(`
 > nuevas, todas en el spec nuevo `AdBlockerScene.spec` — rojo por módulo inexistente;
 > `CrazyGamesService.spec` **sin cambio de conteo** (16): sus 4 tests de phases se
 > actualizaron al contrato nuevo y 1 sumó la aserción **de par** en el timeout de 15 s →
@@ -63,7 +68,7 @@ npm run lint                  # eslint src
 | `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 10 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider` (+6 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (5 tests, primer spec de `audio/`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**) |
-| `shared/` | 5 | buena | 🟢 |
+| `shared/` | 5 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) |
 | `presentation/` | 5 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
 
 ---

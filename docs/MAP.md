@@ -4,10 +4,11 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-04 (cierre de la **unidad B2 — ADR-011**, `muteAudio` de la
-> plataforma, CG-MON-002; el mismo día cerraron la unidad B1/ADR-010, la unidad
+> Fecha del censo: 2026-10-04 (cierre de la **unidad B3 — CG-MON-005**, aviso de rewarded
+> en la fila de la tienda; el mismo día cerraron la unidad **B2 — ADR-011**, `muteAudio`
+> de la plataforma, CG-MON-002, la unidad B1/ADR-010, la unidad
 > A1/ADR-008, la unidad A3/ADR-009, la enmienda ADR-007 y la unidad ADR-007 del 2026-10-02) ·
-> **167 archivos TS · 24.745 líneas · 119 fuente + 48 specs**
+> **167 archivos TS · 24.776 líneas · 119 fuente + 48 specs**
 > (LOC = conteo de líneas por archivo, **incluyen specs** — en los cierres previos no corrieron
 > `cloc` ni `wc -l` (el total de entonces se derivó del censo previo **21.806** + deltas uno a
 > uno) —, mientras el cierre A1 del 2026-10-04 sí midió con `wc -l`; el detalle histórico: **+1.403** de los 10 archivos nuevos + **119** de
@@ -71,6 +72,15 @@
 > `presentation/` **11.651** y `shared/` **1.254** (sin cambios; la suma de las capas +
 > raíz `main.ts` 385 + `vite-env.d.ts` 37 = 24.746 ≈ total `wc -l` 24.745, el ±1 es la
 > diferencia `wc -l` vs conteo ya conocida).
+> **Cierre B3 2026-10-04 (CG-MON-005 — aviso de rewarded en la fila de la tienda):**
+> **sin archivos nuevos** (mismo censo de 167 archivos / 48 specs); tocaron solo 2
+> archivos: `shared/i18n/LanguageData.ts` **467 → 467** (6 líneas de descripción
+> reescritas, LOC neto cero — `git diff --numstat` 6/6) y su spec `LanguageData.spec.ts`
+> 44 → **75** (+31, test de contrato nuevo) →
+> **167 archivos / 48 specs / 24.776 L**; por capa: `shared/` **1.254 → 1.285** (+31),
+> el resto igual (suma de capas + `main.ts` 385 + `vite-env.d.ts` 37 = 24.777 ≈ total 24.776;
+> el ±1 sigue siendo `wc -l` vs conteo: `LanguageData.ts` no termina en newline, `wc -l`
+> da 466 y el conteo de líneas 467).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
@@ -203,11 +213,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.254 líneas · 5 specs 🟢
+## `src/shared/` — 1.285 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `i18n/LanguageData.ts` | 467 | ✅ | **148 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. |
+| `i18n/LanguageData.ts` | 467 | ✅ 75 L | **148 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |
