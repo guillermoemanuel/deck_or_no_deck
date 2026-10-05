@@ -1,15 +1,19 @@
 # Testing
 
-> Estado al 2026-10-04 (unidad **A3 / ADR-009**: `ads_disabled` como estado permanente
-> de `rewardedAdStatus()`): **45 suites · 522 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 45
-> `*.spec.ts` en `src`; **513 del cierre A1/ADR-008 + 9 de A3** = 5 declaraciones `it(`
+> Estado al 2026-10-04 (unidad **B1 / ADR-010**: bloqueador de UI durante todo el
+> ciclo del ad — CG-MON-001): **46 suites · 527 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 46
+> `*.spec.ts` en `src`; **522 del cierre A3/ADR-009 + 5 de B1** = 5 declaraciones `it(`
+> nuevas, todas en el spec nuevo `AdBlockerScene.spec` — rojo por módulo inexistente;
+> `CrazyGamesService.spec` **sin cambio de conteo** (16): sus 4 tests de phases se
+> actualizaron al contrato nuevo y 1 sumó la aserción **de par** en el timeout de 15 s →
+> hoy **499 + 28** = 527. Conteo previo: **513 del cierre A1/ADR-008 + 9 de A3** = 5 `it(`
 > nuevas + 2 filas `it.each` de 2 casos c/u → `CrazyGamesService.spec` **+2**,
 > `ReviveWithAdUseCase.spec` **+3**, `MultiplyRewardUseCase.spec` **+3**,
 > `ListAvailableUpgradesUseCase.spec` **+1** — todos rojo→verde; el rojo de infra era
 > `Expected: "ads_disabled"/"adblock", Received: "cooldown_retryable"`). Conteo del 513:
 > 489 declaraciones `it(`/`test(` sin contar `it.each` + 24 casos de `it.each` (21
-> previas + 3 de `resolveAdsMode.spec`) → hoy **494 + 28** = 522. El cierre A1 fue
+> previas + 3 de `resolveAdsMode.spec`) → A3 **494 + 28** = 522. El cierre A1 fue
 > **504 + 9**: `resolveFullscreenEnabled.spec` **5** (red→verde: `Cannot find module`)
 > y `SoundFullscreenControls.spec` **4** (red→verde: `Expected 1, Received 2` — el bug
 > CG-PUB-002 reproducido). Detalle del cierre 2026-10-02 (467 + 34 = 501):
@@ -56,7 +60,7 @@ npm run lint                  # eslint src
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
 | `infrastructure/` | 8 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+4 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — y `resolveFullscreenEnabled` con ADR-008, 5 tests) |
 | `shared/` | 5 | buena | 🟢 |
-| `presentation/` | 4 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
+| `presentation/` | 5 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
 
 ---
 
@@ -99,6 +103,7 @@ npm run lint                  # eslint src
 dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks. Lo que sí se
 testea en `presentation/` es **lógica pura o componentes con `'phaser'` mockeado en node**
 (`DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
+`AdBlockerScene.spec` — solo el cable `createAdBlockerListener`, ADR-010 —,
 `SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002).
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
@@ -234,6 +239,21 @@ Duplicar/Triplicar/Revivir ausentes y el resto de mejoras visibles (en ambos idi
 > `AdOverlayScene` está en el `config.scene` de `main.ts` y `presentAdOverlay()` degrada
 > en 0 s si faltara; repetir ítem 2 con **sesión fresca** (recargar y reclamar Duplicar
 > sin jugar antes) al tocar el registro de escenas o el presenter.
+
+### Smoke del modo `crazygames` con el QA Tool — **PENDIENTE** (B1 / ADR-010, 2026-10-04)
+
+CG-MON-001 tapó la UI durante todo el ciclo del ad con `AdBlockerScene` (fase
+`'requesting'` + garantía de par `requesting→ended` en el puerto). Cubierto por specs
+(5 tests del listener en `AdBlockerScene.spec` + las 4 secuencias de phases y la
+aserción de par del timeout de 15 s en `CrazyGamesService.spec`), **falta el smoke en
+vivo con el QA Tool de CrazyGames** (último smoke de ese modo: 2026-10-01):
+
+1. Con el QA Tool en modo `crazygames`, clic en **"Jugar de nuevo"** durante el
+   rewarded → **NO navega** hasta `adFinished`/`adError` (spinner visible, tablero
+   detrás bloqueado y en pausa).
+2. Consola: **nunca aparece un 2.º `requestAd`** con el ad en vuelo.
+3. Regresión modo `portal`: el overlay de countdown de `AdOverlayScene` sigue intacto
+   (**sin** spinner/segundo fondo encima — `AdBlockerScene` no se cablea en portal).
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

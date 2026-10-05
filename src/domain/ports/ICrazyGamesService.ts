@@ -26,15 +26,24 @@ export type RewardedAdStatus =
   | 'cooldown_retryable';
 
 /**
- * Fases reales del ciclo de vida de un anuncio en pantalla:
- * - 'started': el SDK confirmó (adStarted) que el anuncio EMPEZÓ a
+ * Fases reales del ciclo de vida de un ciclo de anuncio (CG-MON-001,
+ * ADR-010):
+ * - `'requesting'`: el adapter va a pedir el anuncio (la emite el que
+ *   tiene ad network externo — hoy `CrazyGamesService`): es la señal de
+ *   BLOQUEAR la UI antes de que el ad se vea, porque en la ventana
+ *   request→started el juego sigue visible y clicable (criterio QA
+ *   "block the UI until adFinished/adError").
+ * - `'started'`: el SDK confirmó (adStarted) que el anuncio EMPEZÓ a
  *   reproducirse — recién ahí corresponde silenciar el juego. Pedir el
  *   anuncio NO es empezarlo: puede terminar sin fill (adError) y silenciar
  *   antes sería un corte de audio sin cambio visual (lo penaliza QA).
- * - 'ended': terminó (adFinished) o falló (adError) DESPUÉS de haber
- *   empezado — es el momento de restaurar el audio.
+ * - `'ended'`: terminó (adFinished) o falló (adError / timeout).
+ *   **Garantía de par**: todo ciclo abierto con `'requesting'` cierra
+ *   con EXACTAMENTE un `'ended'`, aunque nunca haya habido `'started'`
+ *   (sin fill o timeout de arranque también cierran) — sin eso el
+ *   bloqueador de UI quedaría clavado.
  */
-export type AdLifecyclePhase = 'started' | 'ended';
+export type AdLifecyclePhase = 'requesting' | 'started' | 'ended';
 export type AdLifecycleListener = (phase: AdLifecyclePhase, type: AdType) => void;
 
 export interface ICrazyGamesService {
@@ -69,7 +78,7 @@ export interface ICrazyGamesService {
    *   Reembolsar acá sería un forfeit autoinfligido (ver ADR-006).
    */
   rewardedAdStatus(): RewardedAdStatus;
-  /** Suscribe a las fases 'started'/'ended' de cualquier anuncio. Devuelve la función para desuscribirse. */
+  /** Suscribe a las fases 'requesting'/'started'/'ended' de cualquier anuncio (ver AdLifecyclePhase). Devuelve la función para desuscribirse. */
   onAdLifecycle(listener: AdLifecycleListener): () => void;
   showRewardedAd(): Promise<AdResult>;
   showMidgameAd(): Promise<AdResult>;

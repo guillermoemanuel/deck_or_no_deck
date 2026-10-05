@@ -51,7 +51,7 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
     this.rewardedStatus = status;
   }
 
-  /** Permite a los tests simular las fases started/ended que emitiría el SDK real. */
+  /** Permite a los tests simular las fases 'requesting'/'started'/'ended' que emitiría el SDK real. */
   emitAdLifecycle(phase: AdLifecyclePhase, type: AdType = 'midgame'): void {
     this.lifecycleListeners.forEach(listener => listener(phase, type));
   }

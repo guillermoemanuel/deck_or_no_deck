@@ -151,6 +151,16 @@ nunca `adblock`, `ads_disabled` ni `sdk_unavailable` (sin ad network no hay qué
 su cancelación por ✕
 sí emite `user_cancelled` honesto (motivo "muerto" resuelto, R5 de la auditoría previa).
 
+**Ciclo de vida del ad (ADR-010, CG-MON-001):** `onAdLifecycle()` emite
+**`AdLifecyclePhase` = `'requesting' | 'started' | 'ended'`** — `'requesting'` al abrir
+el `requestAd` (señal de **bloquear la UI** antes de que el ad se vea), `'started'` en
+`adStarted` (recién ahí se silencia el audio), `'ended'` en `adFinished`/`adError`.
+**Garantía de par (contrato del puerto):** todo ciclo abierto con `'requesting'` cierra
+con EXACTAMENTE un `'ended'`, aunque no haya habido `'started'` (sin fill, timeout de
+15 s o excepción del SDK también cierran). Consumidores: el audio (`main.ts`) y
+**`AdBlockerScene` vía `createAdBlockerListener()`** — este último **solo si
+`adsMode !== 'portal'`**, porque en portal el bloqueador es `AdOverlayScene`.
+
 ---
 
 ## 6. Modelo de dominio
@@ -191,11 +201,13 @@ sí emite `user_cancelled` honesto (motivo "muerto" resuelto, R5 de la auditorí
 
 ## 7. Presentación
 
-- **Escenas** (10 en la lista de `main.ts:200`; la décima es `AdOverlayScene`, registrada
-  en el boot y **dormida hasta su primer `start()`** — ADR-007 enmienda 2026-10-04,
-  que reemplaza el registro en runtime):
+- **Escenas** (11 en la lista de `main.ts:206`; las últimas dos son `AdOverlayScene` y
+  `AdBlockerScene`, registradas en el boot y **dormidas hasta su primer `start()`** —
+  ADR-007 enmienda 2026-10-04 y ADR-010, que reemplazan el registro en runtime):
   `Boot → Preload → MainMenu → HowToPlay / DeckSelection → GameScene + UIScene → Shop / Result`
-  (+ `AdOverlayScene`, activada solo en modo `VITE_ADS=portal`).
+  (+ `AdOverlayScene`, activada solo en modo `VITE_ADS=portal`;
+  + `AdBlockerScene`, cableada solo **fuera** de `portal` — bloquea la UI del ciclo del
+  ad del SDK, ADR-010).
   Las escenas **no se importan entre sí**; se comunican por Scene Manager (payloads tipados
   en `*.types.ts`), por `game.registry` o por eventos.
 - **`GameSceneController`**: único traductor `GameEvent` → efectos visuales.

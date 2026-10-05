@@ -371,15 +371,25 @@ export class CrazyGamesService implements ICrazyGamesService {
 
     return new Promise<AdResult>((resolve) => {
       let isSettled = false;
+      // `true` mientras el ciclo abierto por 'requesting' no cierra: la
+      // garantía de par requesting→ended vive en `settle()` (y en
+      // `closeLifecycle()` cuando el ad arranca de verdad) — CG-MON-001.
+      let adCycleOpen = true;
       // `true` desde `adStarted` hasta que se emite 'ended'. Es independiente
       // de `isSettled`: si el start-timeout ya resolvió la promesa pero el SDK
       // arranca el anuncio igual, el audio se silencia Y se restaura igual.
       let lifecycleOpen = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
+      // CG-MON-001: la ventana request→started es donde el juego sigue
+      // visible y clicable — 'requesting' es la señal para levantar el
+      // bloqueador de UI ANTES de que el ad se vea.
+      this.emitLifecycle('requesting', type);
+
       const closeLifecycle = (): void => {
         if (lifecycleOpen) {
           lifecycleOpen = false;
+          adCycleOpen = false;
           this.emitLifecycle('ended', type);
         }
       };
@@ -407,6 +417,18 @@ export class CrazyGamesService implements ICrazyGamesService {
             this.rewardCooldown.noteFailure(result.reason === 'ad_unavailable' ? 'no_fill' : 'other');
           }
         }
+
+        // CG-MON-001: cierra el ciclo AUNQUE el ad nunca haya arrancado
+        // (sin fill, timeout de arranque, excepción del SDK): 'ended'
+        // está garantizado por cada 'requesting' — sin este cierre el
+        // bloqueador de UI quedaría clavado y el restore de audio no
+        // correría. Si closeLifecycle() ya emitió el 'ended' (ad normal),
+        // el flag está en false y no se repite.
+        if (adCycleOpen) {
+          adCycleOpen = false;
+          this.emitLifecycle('ended', type);
+        }
+
         resolve(result);
       };
 

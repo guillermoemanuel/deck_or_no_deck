@@ -4,6 +4,7 @@ import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdSer
 import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
 import { resolveFullscreenEnabled } from './infrastructure/config/resolveFullscreenEnabled';
 import { AdOverlayScene, presentAdOverlay } from './presentation/scenes/AdOverlayScene';
+import { AdBlockerScene, createAdBlockerListener } from './presentation/scenes/AdBlockerScene';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
 import { ProgressionManager } from './infrastructure/persistence/ProgressionManager';
 import { installCompactTextFloor } from './presentation/mobile/CompactTextFloor';
@@ -45,10 +46,11 @@ const fullscreenEnabled = resolveFullscreenEnabled(import.meta.env.VITE_FULLSCRE
  * `init()` con firmas distintas (`CrazyGamesService.init(): void` y
  * `OwnRewardedAdService.init(): Promise<void>`), y esta intersección
  * acepta las dos SIN tocar ninguna clase: `void` es asignable a
- * `Promise<void> | void` y `Promise<void>` también. Con este tipo, los 5
+ * `Promise<void> | void` y `Promise<void>` también. Con este tipo, los 6
  * usos del servicio en este archivo (getUserLocale(), onAdLifecycle del
- * audio, GameServices.crazyGamesService, ListAvailableUpgradesUseCase y
- * reportGameplayStop() en beforeunload) quedan escritos una sola vez para
+ * audio, onAdLifecycle del bloqueador de ads, GameServices.crazyGamesService,
+ * ListAvailableUpgradesUseCase y reportGameplayStop() en beforeunload) quedan
+ * escritos una sola vez para
  * los 3 modos, sin ramificar según el adapter.
  */
 type AdService = ICrazyGamesService & { init(): Promise<void> | void };
@@ -211,12 +213,16 @@ const config: Phaser.Types.Core.GameConfig = {
     UIScene,
     ShopScene,
     ResultScene,
-    // Última de la lista = se dibuja arriba de todo (era la posición que le
-    // daba el registro en runtime del presenter). Arranca dormida: solo se
-    // activa con `game.scene.start()`. ADR-007 enmienda 2026-10-04: estar
+    // Los dos overlays quedan al FINAL de la lista = se dibujan arriba de
+    // todo (era la posición que le daba el registro en runtime del
+    // presenter). Arrancan dormidos: solo se activan con
+    // `game.scene.start()`/`launch()`. ADR-007 enmienda 2026-10-04: estar
     // en el boot elimina la carrera add/start con la cola de Phaser
     // ("Scene key not found" + watchdog de 15 s en el primer ad).
-    AdOverlayScene
+    AdOverlayScene,
+    // CG-MON-001 (ADR-010): bloqueador de UI durante los ads del SDK —
+    // se levanta solo en los modos con ad network externo (main.ts).
+    AdBlockerScene
   ]
 };
 
@@ -300,6 +306,17 @@ crazyGamesService.onAdLifecycle(phase => {
     mutedBeforeAd = null;
   }
 });
+
+// CG-MON-001 (ADR-010): bloqueador de UI durante los ads del SDK —
+// 'requesting'/'started' levantan AdBlockerScene (backdrop interactivo +
+// spinner, arriba de todo) y 'ended' la baja, cubriendo toda la ventana
+// request→adFinished/adError donde el juego seguía visible y clicable
+// (ResultScene navegaba con el ad en vuelo). En modo 'portal' NO se
+// cuelga: AdOverlayScene ya ES el bloqueador del overlay propio — tener
+// los dos apilaría fondo y spinner sobre el countdown.
+if (adsMode !== 'portal') {
+  crazyGamesService.onAdLifecycle(createAdBlockerListener(game));
+}
 
 const recordsRepository = new LocalStorageRecordsRepository();
 const dailyChallengeRepository = new LocalStorageDailyChallengeRepository();

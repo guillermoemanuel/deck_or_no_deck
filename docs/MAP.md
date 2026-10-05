@@ -4,10 +4,10 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-04 (cierre de la **unidad A3 — ADR-009**, `ads_disabled`;
-> el mismo día cerraron la unidad A1/ADR-008, la enmienda ADR-007 y la unidad ADR-007
-> del 2026-10-02) ·
-> **162 archivos TS · 24.065 líneas · 117 fuente + 45 specs**
+> Fecha del censo: 2026-10-04 (cierre de la **unidad B1 — ADR-010**, bloqueador de UI
+> durante ads, CG-MON-001; el mismo día cerraron la unidad A3/ADR-009, la unidad
+> A1/ADR-008, la enmienda ADR-007 y la unidad ADR-007 del 2026-10-02) ·
+> **164 archivos TS · 24.342 líneas · 118 fuente + 46 specs**
 > (LOC = conteo de líneas por archivo, **incluyen specs** — en los cierres previos no corrieron
 > `cloc` ni `wc -l` (el total de entonces se derivó del censo previo **21.806** + deltas uno a
 > uno) —, mientras el cierre A1 del 2026-10-04 sí midió con `wc -l`; el detalle histórico: **+1.403** de los 10 archivos nuevos + **119** de
@@ -47,11 +47,20 @@
 > (+17), `infrastructure/services/testing/FakeCrazyGamesService.ts` 111→**129** (+18) →
 > **162 archivos / 45 specs / 24.065 L**; por capa: `domain/` **4.145** (+8),
 > `application/` **3.433** (+169), `infrastructure/` **3.405** (+113).
+> **Cierre B1 2026-10-04 (ADR-010 — bloqueador de UI durante el ciclo del ad,
+> CG-MON-001):** **+2 archivos nuevos** — `presentation/scenes/AdBlockerScene.ts`
+> (**118 L**) y `AdBlockerScene.spec.ts` (**95 L**) — y crecieron **4 archivos**
+> (`wc -l`): `domain/ports/ICrazyGamesService.ts` 86→**95** (+9; total `ports/*.ts`
+> 325→**334**), `infrastructure/services/CrazyGamesService.ts` 461→**483** (+22) +
+> `.spec.ts` 294→**310** (+16), `main.ts` 353→**370** (+17) →
+> **164 archivos / 46 specs / 24.342 L**; por capa: `domain/` **4.154** (+9),
+> `application/` **3.433** (sin cambios), `infrastructure/` **3.443** (+38),
+> `presentation/` **11.651** (+213).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.145 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.154 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -84,7 +93,7 @@
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 325 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"). |
+| `ports/*.ts` (8 archivos) | 334 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010). |
 
 ---
 
@@ -109,11 +118,11 @@
 
 ---
 
-## `src/infrastructure/` — 3.405 líneas · 8 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 3.443 líneas · 8 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `services/CrazyGamesService.ts` | 461 | ✅ 294 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-009:** `notePermanentError()` (llamada desde el `adError` **antes de `settle()`) cachea `adsDisabledBasicLaunch` → flag `adsDisabled` y `{code:'adblock'}` → `adblockDetected`**; el orden del status pone lo permanente primero (`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown). **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. 🟡 |
+| `services/CrazyGamesService.ts` | 483 | ✅ 310 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-009:** `notePermanentError()` (llamada desde el `adError` **antes de `settle()`) cachea `adsDisabledBasicLaunch` → flag `adsDisabled` y `{code:'adblock'}` → `adblockDetected`**; el orden del status pone lo permanente primero (`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown). **Desde ADR-010:** `requestAd()` emite `'requesting'` al abrir el Promise (después del guard `adInProgress`) y `settle()` cierra el ciclo con `'ended'` si sigue abierto (sin-fill / timeout 15 s / excepción del SDK) — **garantía de par** `requesting→ended`. **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. 🟡 |
 | `services/OwnRewardedAdService.ts` | 310 | ✅ 338 L | **Adapter propio** (ADR-007, `VITE_ADS=portal`): pide el overlay al presenter inyectado (`AdOverlayScene`, desde presentation); status solo `available`/`cooldown_*` (nunca `adblock`/`sdk_unavailable`); ✕ → `user_cancelled` honesto → `cooldown_retryable`; **watchdog 15 s** (presenter colgado → `'error'` retryable y resultado tardío descartado); midgame sin tocar el tracker; `getUserLocale()` → `navigator.language`; telemetría no-op. |
 | `services/RewardCooldownTracker.ts` | 86 | ✅ 101 L | **Fuente única del cooldown de 60 s** con motivo (`no_fill`/`other` → `cooldown_no_fill`/`cooldown_retryable`), extraído de `CrazyGamesService` para que los 2 adapters produzcan estados idénticos (ADR-006/007). Reloj inyectable; nunca lanza. 🟢 |
 | `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
@@ -131,7 +140,7 @@
 
 ---
 
-## `src/presentation/` — 11.438 líneas · 4 specs · **zona más frágil** 🔴
+## `src/presentation/` — 11.651 líneas · 5 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
@@ -145,6 +154,7 @@
 | `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
 | `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
 | `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 301 + 70 | ✅ 123 + 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **Registrada en el `config.scene` de `main.ts` (última de la lista — se dibuja arriba de todo; ADR-007 enmienda 2026-10-04); `presentAdOverlay()` — la función **presenter** que `main.ts` inyecta al adapter, inversión de dependencia: infrastructure no importa presentation — solo pide el `start` y degrada en 0 s con `{ completed: false }` si la escena faltara** (BUGFIX: la pareja `scene.add()`+`scene.start()` en runtime era una carrera con la cola de Phaser — primer ad de la sesión → `Scene key not found` → watchdog 15 s). La resolución single-shot vive en `.resolution.ts` (lógica pura); la escena además tiene `.spec.ts` (3 tests, mock de `'phaser'` en node — incluye la degradación red→verde). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
+| `scenes/AdBlockerScene.ts` | 118 | ✅ 95 L | **Bloqueador de UI durante el ciclo del ad del SDK** (ADR-010, CG-MON-001): backdrop interactivo **sin handler** (absorbe los clicks de las escenas debajo) + spinner con tween (sin texto → sin i18n) + **pausa `GameScene` con flag local**, reanuda en `SHUTDOWN` — mismo mecanismo probado de `AdOverlayScene`. **En el `config.scene` de `main.ts` al FINAL** (boot, nunca `add()` en runtime — lección ADR-007). El cable `createAdBlockerListener(game)`: `'requesting'`/`'started'` → `game.scene.start` una sola vez por ciclo (flag `active`), `'ended'` → `stop` solo si estaba activo — **`main.ts` la conecta SOLO si `adsMode !== 'portal'`** (en portal manda `AdOverlayScene`; los dos apilarían fondo y spinner sobre el countdown). API correcta: `start`, no `launch` (`SceneManager` no tiene `launch`). 🟡 |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
 `BankerOfferPanel` 305 · `CardView` 294 (color/valor derivan de `isHighCaseValue` del
@@ -194,7 +204,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (353) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 10 escenas**, con `AdOverlayScene` **al final** (dormida hasta su primer `start()`, ADR-007 enmienda 2026-10-04) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (370) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `vite-env.d.ts` (37) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` y `VITE_FULLSCREEN?: 'true' \| 'false'` — **sin lógica** (la validación vive en `resolveAdsMode.ts` y `resolveFullscreenEnabled.ts`, ADR-007/008). Script global a propósito (fusión con `vite/client`). |
 | `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |

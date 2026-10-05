@@ -70,7 +70,7 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
     await expect(pending).resolves.toEqual({ success: true });
   });
 
-  it('emite started/ended solo cuando el anuncio realmente empezó', async () => {
+  it('emite requesting al pedir, y started/ended solo cuando el anuncio realmente empezó', async () => {
     const sdk = installFakeSdk();
     const service = await createReadyService();
     const phases: AdLifecyclePhase[] = [];
@@ -78,16 +78,19 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
 
     const pending = service.showMidgameAd();
     await flushMicrotasks();
-    expect(phases).toEqual([]); // pedirlo NO silencia nada
+    // Pedirlo emite 'requesting' (CG-MON-001: señal para bloquear la UI
+    // desde el primer instante del request) pero NO 'started' — el mute
+    // de audio sigue sin activarse.
+    expect(phases).toEqual(['requesting']);
 
     sdk.lastCallbacks().adStarted?.();
     sdk.lastCallbacks().adFinished();
     await pending;
 
-    expect(phases).toEqual(['started', 'ended']);
+    expect(phases).toEqual(['requesting', 'started', 'ended']);
   });
 
-  it('un adError sin fill no emite ningún evento de audio y clasifica como ad_unavailable', async () => {
+  it('un adError sin fill cierra el ciclo con "ended" (sin "started") y clasifica como ad_unavailable', async () => {
     const sdk = installFakeSdk();
     const service = await createReadyService();
     const phases: AdLifecyclePhase[] = [];
@@ -98,18 +101,27 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
     sdk.lastCallbacks().adError({ code: 'unfilled', message: 'No ad available' });
 
     await expect(pending).resolves.toEqual({ success: false, reason: 'ad_unavailable' });
-    expect(phases).toEqual([]);
+    // El ciclo ABRE con 'requesting' y CIERRA con 'ended' aunque el ad
+    // nunca arranque: sin ese par el bloqueador de UI quedaría clavado
+    // (CG-MON-001). Sin 'started' no hay evento de audio que mute.
+    expect(phases).toEqual(['requesting', 'ended']);
   });
 
-  it('si el anuncio nunca arranca, vence a los 15 s como error', async () => {
+  it('si el anuncio nunca arranca, vence a los 15 s como error y cierra el ciclo con "ended"', async () => {
     installFakeSdk();
     const service = await createReadyService();
+    const phases: AdLifecyclePhase[] = [];
+    service.onAdLifecycle(phase => phases.push(phase));
 
     const pending = service.showRewardedAd();
     await flushMicrotasks();
     jest.advanceTimersByTime(15_000);
 
     await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+    // El timeout de arranque NO pasa por closeLifecycle (nunca hubo
+    // 'started'): sin el 'ended' de cierre del ciclo, el bloqueador de
+    // UI quedaría clavado para siempre (CG-MON-001).
+    expect(phases).toEqual(['requesting', 'ended']);
   });
 
   it('si arranca tarde (después del timeout), igual restaura el audio al terminar', async () => {
@@ -126,7 +138,11 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
     sdk.lastCallbacks().adStarted?.();
     sdk.lastCallbacks().adFinished();
 
-    expect(phases).toEqual(['started', 'ended']);
+    // El timeout de arranque cierra el primer ciclo (requesting→ended);
+    // el 'started' TARDÍO del SDK abre otro ciclo de audio/bloqueo que el
+    // 'ended' de cierre del anuncio — simétrico: se silencia y se
+    // restaura igual que con un ad puntual.
+    expect(phases).toEqual(['requesting', 'ended', 'started', 'ended']);
   });
 
   it('rechaza un segundo anuncio mientras hay uno en curso', async () => {

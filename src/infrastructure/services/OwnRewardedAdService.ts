@@ -122,7 +122,12 @@ export class OwnRewardedAdService implements ICrazyGamesService {
     return this.rewardCooldown.cooldownState() ?? 'available';
   }
 
-  /** Suscribe a las fases 'started'/'ended'. Devuelve la función para desuscribirse (igual mecánica que CrazyGamesService). */
+  /**
+   * Suscribe al ciclo de vida de este adapter: emite solo
+   * `'started'`/`'ended'` (NO `'requesting'` — su overlay propio ES el
+   * anuncio: no hay ventana de request sin cubrir, ADR-010). Devuelve la
+   * función para desuscribirse (igual mecánica que CrazyGamesService).
+   */
   onAdLifecycle(listener: AdLifecycleListener): () => void {
     this.lifecycleListeners.add(listener);
     return () => {

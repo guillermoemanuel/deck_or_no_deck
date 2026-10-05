@@ -7,6 +7,75 @@
 
 ---
 
+## 2026-10-04 · Sprint B B1 — CG-MON-001: bloqueador de UI durante el ciclo del ad (ADR-010)
+
+**Qué pasó (hallazgo P1 de la auditoría de publicación 2026-10-04):** en modo
+`crazygames` **nada bloqueaba la UI durante el ciclo del ad**
+(`request → adStarted → adFinished/adError`): `ResultScene` dejaba "Jugar de nuevo"/
+"Ir al Menú" vivos, la navegación corría con el ad en vuelo (el guard `adInProgress`
+rechazaba el 2.º `requestAd`, pero `onComplete()` navegaba igual en el `finally`,
+reiniciando GameScene a mitad de anuncio) y detrás seguían GameScene/UIScene.
+Requisito oficial incumplido: *"Block the UI until either an adFinished or adError
+event occurs"* (docs.crazygames.com/requirements/ads/). En modo `portal` NO ocurría
+(`AdOverlayScene` ya bloquea).
+
+**Fix (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**
+1. **Puerto `ICrazyGamesService.ts`:** `AdLifecyclePhase` suma **`'requesting'`**
+   (señal de bloquear ANTES de que el ad se vea, ventana request→started donde el
+   juego sigue clicable) + **garantía de par** documentada: todo ciclo abierto con
+   `'requesting'` cierra con EXACTAMENTE un `'ended'`, aunque nunca haya habido
+   `'started'` (sin fill o timeout de arranque también cierran).
+2. **`CrazyGamesService.requestAd`:** emite `'requesting'` al abrir el Promise (después
+   del guard `adInProgress`); `closeLifecycle()` cierra el ciclo; `settle()` emite
+   `'ended'` si el ciclo sigue abierto (cubre sin-fill, timeout de arranque 15 s y
+   excepción del SDK). El `'ended'` tardío de un ad que arranca después del timeout
+   sigue funcionando (ciclo visual late `started → ended`, simétrico para audio).
+3. **Nuevo `presentation/scenes/AdBlockerScene.ts`** (en el `config.scene` de `main.ts`
+   **al final** de la lista — lección ADR-007: boot, nunca `add()` en runtime):
+   backdrop interactivo **sin handler** (mismo mecanismo probado de `AdOverlayScene`)
+   + **spinner** con tween de Phaser (sin texto → sin claves i18n); **pausa GameScene**
+   con flag local (no "presta" una pausa ajena), reanuda en `SHUTDOWN`;
+   `createAdBlockerListener(game)`: `'requesting'`/`'started'` → `start` una sola vez
+   por ciclo (flag `active`), `'ended'` → `stop` solo si estaba activo. Nota: el API
+   correcto en top-level es **`game.scene.start`** — `launch` no existe en `SceneManager`
+   (es de `ScenePlugin`).
+4. **`main.ts`:** registra la escena y cablea
+   `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`**
+   (en portal manda `AdOverlayScene`; los dos apilarían fondo y spinner sobre el
+   countdown); comentario de `type AdService` "5 usos" → "6 usos".
+
+**Specs red→verde:** `CrazyGamesService.spec.ts` — 4 aserciones de phases actualizadas
+al contrato nuevo (rojo: `[]`/`['started','ended']` vs `['requesting']` /
+`['requesting','ended']` / `['requesting','started','ended']` /
+`['requesting','ended','started','ended']`), 1 test renombrado y 1 aserción **nueva de
+par** en el timeout de 15 s (conteo de la spec sin cambios: 16) ·
+**nuevo `AdBlockerScene.spec.ts`** (5 tests del listener — rojo por módulo
+inexistente).
+
+**Docs (tarea de esta sesión, `memory-keeper`):** ADR nuevo
+`docs/DECISIONS/ADR-010-bloqueador-de-ui-durante-ads.md` + fila `010` en
+`docs/DECISIONS/README.md`, `docs/MAP.md` (censo → **164 archivos / 46 specs / 24.342 L**;
+nuevos `AdBlockerScene.ts` 118 L + `.spec.ts` 95 L; deltas `ICrazyGamesService.ts`
+86→**95** [ports 325→334], `CrazyGamesService.ts` 461→**483** + spec 294→**310**,
+`main.ts` 353→**370**), `docs/testing.md` (**46/527**, `presentation/` → 5 specs,
+`AdBlockerScene.spec` 5), `docs/ARCHITECTURE.md` (§5 unión de fases
+`requesting | started | ended` + garantía de par; §7 escenas 10 → 11), esta entrada.
+
+**Cómo se verificó:** gates en verde (corridos por la unidad, no por esta sesión de
+docs) — `npm run typecheck` 0 ✓ (de paso corrigió el `TS2339` intermedio: `launch` no
+existe en `SceneManager`) · `npm run lint` 0 ✓ · `npm test` → **46 suites / 527 tests**
+(base 45/522) ✓ · `npm run build` ✓ (8 s; el warning de chunk de Phaser es
+preexistente). Verificación de docs por grep: ninguna doc describe el ciclo como solo
+`started`/`ended`.
+
+**Qué quedó pendiente:** **smoke manual en modo `crazygames` con el QA Tool de
+CrazyGames** — clic en "Jugar de nuevo" durante el rewarded NO navega hasta
+`adFinished`/`adError`; en consola nunca aparece un 2.º `requestAd`; regresión modo
+portal: overlay de countdown intacto (último smoke de ese modo: 2026-10-01). Además
+siguen abiertos el resto del Sprint B (`CG-MON-002`, `CG-MON-005`, `CG-MON-006`).
+
+---
+
 ## 2026-10-04 · Publicación A4 — nombre canónico "Deck or No Deck" alineado en docs
 
 **Qué se tocó (solo docs + README; `src/` intacto):**
