@@ -21,3 +21,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [009](ADR-009-ads-disabled-estado-permanente.md) | `ads_disabled`: dos adErrors de CrazyGames son estados permanentes (política 2 en el mismo intento) | Aceptada |
 | [010](ADR-010-bloqueador-de-ui-durante-ads.md) | Bloqueador de UI durante todo el ciclo del ad (fase `'requesting'` + `AdBlockerScene`) | Aceptada |
 | [011](ADR-011-muteaudio-de-plataforma.md) | `muteAudio` de la plataforma con prioridad sobre el toggle in-game (capa `platformMuted`) | Aceptada |
+| [012](ADR-012-aviso-inline-de-ads-en-la-tienda.md) | Aviso inline de ads ocultos en la tienda (política `adsNotice()` en aplicación) | Aceptada |

@@ -26,4 +26,26 @@ export class ListAvailableUpgradesUseCase {
     const rewardedAdsUsable = this.crazyGamesService.isRewardedAdAvailable();
     return SESSION_UPGRADE_CATALOG.filter(u => rewardedAdsUsable || !u.requiresRewardedAd);
   }
+
+  /**
+   * CG-MON-006: motivo por el que la tienda debe mostrar el aviso
+   * INLINE de "faltan filas por ads", o `null` si no corresponde. Solo
+   * motivos PERMANENTES en la sesión:
+   *
+   * - `'adblock'` / `'ads_disabled'`: las 3 filas con
+   *   `requiresRewardedAd` están ocultas hasta que cambie algo que el
+   *   jugador controla (su adblocker) o la plataforma (Basic Launch) —
+   *   sin aviso, el jugador veía 5 filas y no entendía por qué faltaban
+   *   Duplicar/Triplicar/Revivir (auditoría CG-MON-006; el aviso es
+   *   inline, un popup queda descartado por la auditoría).
+   * - `'cooldown_*'`: NO — transitorio (60 s), el aviso parpadearía y
+   *   la fila reaparece sola.
+   * - `'sdk_unavailable'`: NO — ambiguo (modo `none`/dev, SDK sin
+   *   cargar o CDN caído): avisaría "desactivá tu adblocker" donde no
+   *   lo hay.
+   */
+  adsNotice(): 'adblock' | 'ads_disabled' | null {
+    const status = this.crazyGamesService.rewardedAdStatus();
+    return status === 'adblock' || status === 'ads_disabled' ? status : null;
+  }
 }

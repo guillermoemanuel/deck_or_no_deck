@@ -219,6 +219,12 @@ export const TRANSLATIONS = {
     STATS_LINE: '🏆 {games} games · {winRate}% wins · Best: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Already active: {other}. Only one reward multiplier per game.',
     SHOP_UPGRADE_ADS_UNAVAILABLE: 'Needs a rewarded ad and ads are unavailable right now.',
+    // CG-MON-006: aviso inline (NO popup) de la pestaña Mejoras cuando
+    // las filas con rewarded quedan OCULTAS por motivo permanente.
+    // Una sola línea en la tienda: ver el comentario de layout en
+    // ShopScene.renderUpgradesTab() (hueco de ~32px bajo el caption).
+    SHOP_ADS_HIDDEN_ADBLOCK: 'Ad blocker detected: Double, Triple and Revive are hidden. Disable your ad blocker to see them.',
+    SHOP_ADS_HIDDEN_DISABLED: 'Ads are disabled right now: Double, Triple and Revive are hidden.',
 
     // --- Bono Periódico (PeriodicBonusModal) ---
     PERIODIC_BONUS_TITLE: '🎁 Periodic Bonus',
@@ -422,6 +428,12 @@ export const TRANSLATIONS = {
     STATS_LINE: '🏆 {games} partidas · {winRate}% victorias · Mejor: {bestPayout}',
     SHOP_UPGRADE_CONFLICT: 'Ya tenés activo: {other}. Solo un multiplicador de premio por partida.',
     SHOP_UPGRADE_ADS_UNAVAILABLE: 'Requiere anuncio recompensado — no hay anuncios ahora.',
+    // CG-MON-006: aviso inline (NO popup) de la pestaña Mejoras cuando
+    // las filas con rewarded quedan OCULTAS por motivo permanente.
+    // Una sola línea en la tienda: ver el comentario de layout en
+    // ShopScene.renderUpgradesTab() (hueco de ~32px bajo el caption).
+    SHOP_ADS_HIDDEN_ADBLOCK: 'Bloqueador de anuncios detectado: Duplicar, Triplicar y Revivir están ocultos. Desactívalo para verlos.',
+    SHOP_ADS_HIDDEN_DISABLED: 'Los anuncios están deshabilitados ahora: Duplicar, Triplicar y Revivir están ocultos.',
 
     // --- Bono Periódico (PeriodicBonusModal) ---
     PERIODIC_BONUS_TITLE: '🎁 Bono Periódico',

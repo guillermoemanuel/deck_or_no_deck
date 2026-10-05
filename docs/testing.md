@@ -1,9 +1,17 @@
 # Testing
 
-> Estado al 2026-10-04 (unidad **B3 / CG-MON-005**: aviso de rewarded en la fila de la
-> tienda): **48 suites · 541 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 48
-> `*.spec.ts` en `src`; **540 del cierre B2/ADR-011 + 1 de B3** = 1 declaración `it(`
+> Estado al 2026-10-04 (unidad **B4 / CG-MON-006 + ADR-012**: aviso inline de ads en la
+> tienda): **48 suites · 546 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK · `npm run build` ✓;
+> medido: 48 `*.spec.ts` en `src` — **sin archivos nuevos**; **541 del cierre B3 + 5 de
+> B4** = 5 declaraciones `it(` nuevas en el describe
+> `adsNotice() — aviso inline de la tienda (CG-MON-006)` de
+> `ListAvailableUpgradesUseCase.spec.ts` — adblock → `'adblock'` · ads_disabled →
+> `'ads_disabled'` · available → `null` · ambos cooldowns → `null` · sdk_unavailable →
+> `null` (rojo por método inexistente: la suite no compilaba) → ese spec queda en **10
+> tests** (5 previos + 5) → **541 + 5** = 546; `LanguageData.spec` cubre las 2 claves
+> nuevas por su contrato de paridad EN/ES, sin test propio extra).
+> Conteo previo (B3): **540 del cierre B2/ADR-011 + 1 de B3** = 1 declaración `it(`
 > nueva en `LanguageData.spec` — *'every upgrade that requires a rewarded ad declares the
 > requirement in its description (EN and ES)'*, rojo con `sinAviso` de 6 entradas
 > `en/es × double_reward/triple_reward/revive` → ese spec queda en **6 tests** y
@@ -119,7 +127,8 @@ Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`applicati
 testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el
 único pendiente —el filtro de ads de la tienda (`ShopScene.renderUpgradesTab`)— migró a
 `ListAvailableUpgradesUseCase` (aplicación, 100 % de cobertura) y figura abajo, en la
-tabla de resueltos.
+tabla de resueltos. El **aviso inline** de CG-MON-006 (ADR-012) siguió el mismo criterio:
+la política "¿corresponde avisar?" vive en `adsNotice()` (5 tests) y la escena solo dibuja.
 
 **Ya resueltos en Fase 4 (2026-09-30)** — mismo mecanismo (regla extraída a `domain`/`application` +
 test ahí); quedan acá solo como contexto histórico:

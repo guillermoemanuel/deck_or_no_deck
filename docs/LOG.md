@@ -7,6 +7,68 @@
 
 ---
 
+## 2026-10-04 · Sprint B B4 — CG-MON-006: aviso inline de ads en la tienda (ADR-012)
+
+**Qué pasó (hallazgo P2 de la auditoría de publicación 2026-10-04):** cuando
+`ListAvailableUpgradesUseCase` ocultaba Duplicar/Triplicar/Revivir por falta de ads, el
+jugador veía **5 filas sin ningún aviso** de por qué faltaban 3 (requisito de CrazyGames:
+manejar adblock *gracefully*; la auditoría exigió aviso **inline, NO popup**). La clave
+vieja `SHOP_UPGRADE_ADS_UNAVAILABLE` solo se mostraba como mensaje **temporal al intentar
+comprar** una fila filtrada — no servía para filas que no se ven.
+
+**Fix (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**
+1. **Nuevo `ListAvailableUpgradesUseCase.adsNotice(): 'adblock' | 'ads_disabled' |
+   null`** (aplicación): la política testeable de "¿corresponde el aviso?" vive en
+   `application/`, la escena solo dibuja. **Solo motivos PERMANENTES**: `adblock` /
+   `ads_disabled` → sí; `cooldown_retryable`/`cooldown_no_fill` → NO (transitorio 60 s,
+   el aviso parpadearía y la fila reaparece sola); `sdk_unavailable` → NO (ambiguo: modo
+   `none`/dev, SDK sin cargar o CDN caído — avisaría "desactivá tu adblocker" donde no lo
+   hay). Relee `rewardedAdStatus()` en cada llamada (como `execute()`).
+2. **`ShopScene.renderUpgradesTab()`:** dibuja el aviso **inline, UNA línea centrada a
+   `height/2 - 176`** (bajo el caption a −200, sobre la primera fila a −160; hueco
+   ~32 px → con origin 0.5 y 15 px entra una línea). Copy corto y **sin `wordWrap` a
+   propósito** (dos líneas pisarían la primera fila — comment en la escena). Ámbar
+   `#ffd166` (paleta existente); `adblock → SHOP_ADS_HIDDEN_ADBLOCK`,
+   `ads_disabled → SHOP_ADS_HIDDEN_DISABLED`.
+3. **i18n nuevas claves EN+ES** en `shared/i18n/LanguageData.ts` (junto a
+   `SHOP_UPGRADE_ADS_UNAVAILABLE`; esa queda intacta para el path de compra):
+   `SHOP_ADS_HIDDEN_ADBLOCK` y `SHOP_ADS_HIDDEN_DISABLED` → **148 → 150 claves** × en/es.
+
+**Specs red→verde:** `ListAvailableUpgradesUseCase.spec.ts` gana
+`describe('adsNotice() — aviso inline de la tienda (CG-MON-006)')` con **5 tests**
+(adblock→`'adblock'` · ads_disabled→`'ads_disabled'` · available→`null` · ambos
+cooldowns→`null` · sdk_unavailable→`null`); rojo por método inexistente (la suite no
+compilaba). El spec pasa de 5 a **10 tests** (`grep -c "it("`) → **48 suites / 546
+tests** (base B3: 48/541). Sin archivos nuevos (48 `*.spec.ts`); `LanguageData.spec`
+cubre las claves nuevas por su contrato de paridad EN/ES.
+
+**Docs (tarea de esta sesión, `memory-keeper`):** **ADR-012** nuevo
+(`ADR-012-aviso-inline-de-ads-en-la-tienda.md`) + fila `012` en
+`docs/DECISIONS/README.md`; `docs/MAP.md` (censo → **167 archivos / 48 specs / 24.881 L**,
+medido con `wc -l` + `git diff --numstat` 49/0, 22/0, 22/0 y 12/0 = +105 L: `ListAvailableUpgradesUseCase.ts`
+29→**51**, su spec 91→**140**, `ShopScene.ts` 771→**793**, `LanguageData.ts` 466→**478**
+de `wc -l` = **479** de conteo); `docs/testing.md` (**48/546**, spec en 10);
+`docs/ARCHITECTURE.md` (`adsNotice()` en la invariante "mejoras con rewarded ad" +
+**150 claves** i18n); **`AGENTS.md`** §3 corregido: `LanguageData.ts` **148 → 150 claves** y `ShopScene.ts`
+**771 → 793 L** (desincronizaciones doc↔código detectadas al cerrar — manda el código);
+esta entrada.
+
+**Cómo se verificó:** gates en verde corridos por la unidad (a esta sesión el runner
+`jest`/`npm` le fue denegado por permisos): `npm run typecheck` 0 ✓ · `npm run lint` 0 ✓ ·
+`npm test` → **48 suites / 546 tests** (base 48/541) ✓ · `npm run build` ✓ (8,4 s).
+Verificación de docs por esta sesión: `wc -l` en los 4 archivos tocados,
+`git diff --numstat` (solo adiciones: 49/22/22/12), `grep -c "it("`
+(`ListAvailableUpgradesUseCase.spec` = 10), `find src -name "*.spec.ts" | wc -l` (48) y
+grep en `docs/*.md`: **ninguna doc afirmaba que las filas ocultas "no avisan" nada** (no
+había texto que corregir).
+
+**Qué queda pendiente:** smoke visual de la tienda dentro del **smoke general del Sprint
+B** (modo `crazygames` con QA Tool): con extensión de adblock activa debe verse el aviso
+ámbar de UNA línea bajo el caption; `ads_disabled` solo es simularlo en **Basic Launch**.
+Siguen abiertos los smokes de B1/B2 y el de la tienda de B3.
+
+---
+
 ## 2026-10-04 · Sprint B B3 — CG-MON-005: aviso de rewarded en la fila de la tienda
 
 **Qué pasó (hallazgo P2 de la auditoría de publicación 2026-10-04):** la tienda no

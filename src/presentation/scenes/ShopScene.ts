@@ -431,6 +431,28 @@ export class ShopScene extends Phaser.Scene {
       }).setOrigin(0.5)
     );
 
+    // CG-MON-006: cuando el filtro de abajo OCULTA filas por un motivo
+    // permanente (adblock / ads_disabled), la tienda lo dice INLINE —
+    // sin este aviso, el jugador veía 5 filas y no entendía por qué
+    // faltaban Duplicar/Triplicar/Revivir (popup: descartado por la
+    // auditoría). La política de "¿corresponde?" vive en el use-case;
+    // acá solo se dibuja: UNA línea centrada bajo el caption — el hueco
+    // entre caption (-200, origin 0.5) y la primera fila (-160, origin
+    // 0,0) da ~32px, y una línea de 15px entra con margen. Por eso el
+    // copy es corto y SIN wordWrap: dos líneas pisarían la primera fila.
+    const avisoAds = getServices(this).listAvailableUpgrades.adsNotice();
+    if (avisoAds !== null) {
+      this.tabContainer.add(
+        new LocalizedText(
+          this,
+          width / 2,
+          height / 2 - 176,
+          avisoAds === 'adblock' ? 'SHOP_ADS_HIDDEN_ADBLOCK' : 'SHOP_ADS_HIDDEN_DISABLED',
+          { fontSize: '15px', fontFamily: 'Arial, sans-serif', color: '#ffd166' }
+        ).setOrigin(0.5)
+      );
+    }
+
     // Qué muestra la tienda lo decide la APLICACIÓN, no la escena:
     // ListAvailableUpgradesUseCase oculta hoy Duplicar/Triplicar/Revivir
     // si no se puede mostrar un rewarded ad (el porqué está ahí, en su

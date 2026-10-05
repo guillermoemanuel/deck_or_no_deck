@@ -46,10 +46,10 @@ Verificación: `grep -rn "from '\.\./" src/domain` → vacío.
 |---|---|
 | `presentation/controllers/GameSceneController.ts` | switch `handleEvent()` ~250 líneas / 14 casos; timers mágicos; único traductor evento→UI |
 | `presentation/scenes/GameScene.ts` | composition root de la partida (37 imports) |
-| `presentation/scenes/ShopScene.ts` | escena de 771 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades`); compra de mazos sin use-case |
+| `presentation/scenes/ShopScene.ts` | escena de 793 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades`); compra de mazos sin use-case |
 | `domain/entities/GameSession.ts` | raíz del agregado + `EnergyDrainRule` |
 | `main.ts` | composition root global + **selección del adapter de ads por `VITE_ADS`** (ADR-007: `crazygames`\|`portal`\|`none`, carga dinámica del SDK) + **resolución de `VITE_FULLSCREEN` → `GameServices.fullscreenEnabled`** (ADR-008: en `crazygames` siempre `false`) + anti-cheat de `beforeunload` |
-| `shared/i18n/LanguageData.ts` | 148 claves; agregá siempre `en` **y** `es` |
+| `shared/i18n/LanguageData.ts` | 150 claves; agregá siempre `en` **y** `es` |
 
 Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 
