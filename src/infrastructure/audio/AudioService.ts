@@ -43,6 +43,17 @@ export class AudioService implements IAudioService {
   private musicVolume = 0.45;
   private sfxVolume = 0.7;
   private muted = false;
+  /**
+   * CG-MON-002: silencio que impone la PLATAFORMA (`game.settings.muteAudio`
+   * de CrazyGames o el override local `?muteAudio=true`) — capa SEPARADA
+   * de `muted` (pref del jugador) porque el requisito de la plataforma es
+   * explícito: *"This setting should take priority over your in-game audio
+   * settings … be sure this doesn't enable the audio back if it is disabled
+   * in the SDK settings"*. Por eso el efectivo es `muted || platformMuted`:
+   * el toggle del HUD no puede re-encender lo que la plataforma silenció,
+   * y al liberar la plataforma manda de vuelta el pref del jugador.
+   */
+  private platformMuted = false;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private currentFadeCancel: (() => void) | null = null;
   private readonly warned = new Set<string>();
@@ -122,7 +133,7 @@ export class AudioService implements IAudioService {
   }
 
   play(key: string, options: SoundPlayOptions = {}): void {
-    if (this.muted) return;
+    if (this.isMuted()) return;
     if (!this.hasSound(key)) {
       this.warnMissing(key);
       return;
@@ -136,16 +147,36 @@ export class AudioService implements IAudioService {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.sound.mute = muted;
+    this.applyMute();
+  }
+
+  /**
+   * CG-MON-002: capa de silencio de la plataforma — ver el JSDoc del
+   * campo `platformMuted`. `true` silencia sin tocar el pref del
+   * jugador; liberar (`false`) devuelve el control a ese pref.
+   */
+  setPlatformMuted(muted: boolean): void {
+    if (this.platformMuted === muted) return;
+    this.platformMuted = muted;
+    this.applyMute();
   }
 
   toggleMuted(): boolean {
-    this.setMuted(!this.muted);
-    return this.muted;
+    // Apunta al ESTADO EFECTIVO (lo que el jugador oye): con la
+    // plataforma silenciando, el click significa "que suene" y queda
+    // registrado como pref (false) para que suene apenas la plataforma
+    // libere — jamás enciende el audio contra el mute de la plataforma.
+    this.setMuted(!this.isMuted());
+    return this.isMuted();
   }
 
   isMuted(): boolean {
-    return this.muted;
+    return this.muted || this.platformMuted;
+  }
+
+  /** Fuente única del estado audible: pref del jugador O silencio de plataforma. */
+  private applyMute(): void {
+    this.sound.mute = this.muted || this.platformMuted;
   }
 
   setMusicVolume(volume: number): void {

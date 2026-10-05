@@ -18,6 +18,8 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
   /** Ver setRewardedStatusAfterNextAd(). */
   private statusAfterNextAd: RewardedAdStatus | null = null;
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
+  /** Suscriptores de `onMuteAudioChange` (CG-MON-002) — se vacían con emitMuteAudioChange(). */
+  private readonly muteAudioListeners = new Set<(muted: boolean) => void>();
   private nextAdResult: AdResult = { success: true };
   // `null` por defecto: mismo comportamiento que el servicio real cuando
   // el SDK no está disponible o no expone locale — ejercita el "no-op,
@@ -76,6 +78,18 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
     return () => {
       this.lifecycleListeners.delete(listener);
     };
+  }
+
+  onMuteAudioChange(listener: (muted: boolean) => void): () => void {
+    this.muteAudioListeners.add(listener);
+    return () => {
+      this.muteAudioListeners.delete(listener);
+    };
+  }
+
+  /** CG-MON-002: simula un cambio de `muteAudio` llegando desde la plataforma. */
+  emitMuteAudioChange(muted: boolean): void {
+    this.muteAudioListeners.forEach(listener => listener(muted));
   }
 
   setUserLocale(locale: string | null): void {

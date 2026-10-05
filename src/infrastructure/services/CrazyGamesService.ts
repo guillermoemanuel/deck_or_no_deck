@@ -36,6 +36,16 @@ declare global {
         game: {
           gameplayStart: () => void;
           gameplayStop: () => void;
+          /**
+           * CG-MON-002: settings de la plataforma (docs.crazygames.com/sdk/game,
+           * "Game Settings"). `muteAudio` true = el jugador silenció el juego
+           * desde la UI de CrazyGames y NO debe sonar nada; es opcional en el
+           * tipado porque un build del SDK sin eso no lo expone — se lee con
+           * `?.` y se trata `undefined` como `false`.
+           */
+          settings?: { muteAudio?: boolean };
+          /** Notifica cada cambio de `settings` (callback recibe el objeto nuevo). */
+          addSettingsChangeListener?: (listener: (newSettings: { muteAudio?: boolean }) => void) => void;
         };
         user: {
           /**
@@ -109,6 +119,17 @@ export class CrazyGamesService implements ICrazyGamesService {
    */
   private readonly rewardCooldown = new RewardCooldownTracker();
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
+  /**
+   * Último valor conocido de `game.settings.muteAudio` y sus
+   * suscriptores (CG-MON-002). `muteAudioKnown` resuelve la carrera
+   * entre `init()` (asíncrono) y la suscripción de main.ts: el que se
+   * suscribe DESPUÉS de leer el setting recibe el valor al suscribirse,
+   * y el que se suscribe ANTES recibe el primer notify de
+   * `bindMuteAudioSetting()`.
+   */
+  private muteAudio = false;
+  private muteAudioKnown = false;
+  private readonly muteAudioListeners = new Set<(muted: boolean) => void>();
 
   /**
    * Dispara `SDK.init()` UNA vez. Debe llamarse apenas se instancia el
@@ -136,10 +157,49 @@ export class CrazyGamesService implements ICrazyGamesService {
       .then(() => {
         this.ready = true;
         this.detectAdblock();
+        this.bindMuteAudioSetting();
       })
       .catch((error: unknown) => {
         console.warn('[CrazyGamesService] SDK.init() failed — ads/telemetry quedan deshabilitados esta sesión.', error);
       });
+  }
+
+  /**
+   * CG-MON-002: lee `game.settings.muteAudio` y se registra en
+   * `addSettingsChangeListener` — la plataforma puede silenciar o
+   * reactivar el audio en cualquier momento desde su UI (y localmente
+   * `?muteAudio=true` lo fuerza, ver resolveMuteAudioOverride). Solo se
+   * llama con el SDK inicializado; sin `game` (SDK viejo/dev) es un
+   * no-op y el setting queda "desconocido" = sin notificaciones.
+   */
+  private bindMuteAudioSetting(): void {
+    const game = window.CrazyGames?.SDK?.game;
+    if (!game) {
+      return;
+    }
+    this.noteMuteAudio(game.settings?.muteAudio === true);
+    game.addSettingsChangeListener?.(newSettings => this.noteMuteAudio(newSettings?.muteAudio === true));
+  }
+
+  private noteMuteAudio(muted: boolean): void {
+    // Solo se notifica si cambió o si es la primera vez (el inicial, para
+    // quien ya estaba suscripto) — valores repetidos no reviven listeners.
+    const changed = !this.muteAudioKnown || this.muteAudio !== muted;
+    this.muteAudio = muted;
+    this.muteAudioKnown = true;
+    if (changed) {
+      this.muteAudioListeners.forEach(listener => listener(muted));
+    }
+  }
+
+  onMuteAudioChange(listener: (muted: boolean) => void): () => void {
+    this.muteAudioListeners.add(listener);
+    if (this.muteAudioKnown) {
+      listener(this.muteAudio);
+    }
+    return () => {
+      this.muteAudioListeners.delete(listener);
+    };
   }
 
   isAvailable(): boolean {

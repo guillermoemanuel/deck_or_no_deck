@@ -12,23 +12,46 @@ type Callbacks = {
  * cada test decide cuándo llegan adStarted / adFinished / adError, igual que
  * el SDK real, que responde de forma asíncrona.
  * `adblock` (default `false`) configura lo que reporta `hasAdblock()`.
+ * `initialMuteAudio` (default `false`) es el valor inicial de
+ * `game.settings.muteAudio` (CG-MON-002); `emitMuteAudio()` simula lo que
+ * haría `addSettingsChangeListener` al cambiar el setting.
  */
-function installFakeSdk(adblock = false): { lastCallbacks: () => Callbacks; requestAd: jest.Mock } {
+function installFakeSdk(adblock = false, initialMuteAudio = false): {
+  lastCallbacks: () => Callbacks;
+  requestAd: jest.Mock;
+  emitMuteAudio: (muted: boolean) => void;
+} {
   let callbacks: Callbacks | null = null;
   const requestAd = jest.fn((_type: string, cb: Callbacks) => {
     callbacks = cb;
   });
+  const settings = { muteAudio: initialMuteAudio };
+  const muteListeners: Array<(newSettings: { muteAudio: boolean }) => void> = [];
   (globalThis as unknown as { window: unknown }).window = {
     CrazyGames: {
       SDK: {
         init: () => Promise.resolve(),
         ad: { requestAd, hasAdblock: () => Promise.resolve(adblock) },
-        game: { gameplayStart: jest.fn(), gameplayStop: jest.fn() },
+        game: {
+          gameplayStart: jest.fn(),
+          gameplayStop: jest.fn(),
+          settings,
+          addSettingsChangeListener: (listener: (newSettings: { muteAudio: boolean }) => void) => {
+            muteListeners.push(listener);
+          }
+        },
         user: { systemInfo: { locale: 'en-US' } }
       }
     }
   };
-  return { lastCallbacks: () => callbacks!, requestAd };
+  return {
+    lastCallbacks: () => callbacks!,
+    requestAd,
+    emitMuteAudio: (muted: boolean) => {
+      settings.muteAudio = muted;
+      muteListeners.forEach(listener => listener({ muteAudio: muted }));
+    }
+  };
 }
 
 /** Deja correr las continuaciones pendientes (el `await initPromise` interno de requestAd). */
@@ -306,5 +329,72 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
     await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
     expect(service.rewardedAdStatus()).toBe('adblock');
     expect(service.isRewardedAdAvailable()).toBe(false);
+  });
+});
+
+/**
+ * CG-MON-002 (auditoría de publicación 2026-10-04): `muteAudio` del SDK —
+ * 0 matches en src/ antes de este sprint. Requisito oficial
+ * (docs.crazygames.com/sdk/game, Game Settings): leer `game.settings.muteAudio`
+ * y registrarse en `addSettingsChangeListener`; el setting tiene PRIORIDAD
+ * sobre el toggle in-game.
+ */
+describe('CrazyGamesService — muteAudio de la plataforma (CG-MON-002)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    delete (globalThis as unknown as { window?: unknown }).window;
+  });
+
+  it('lee settings.muteAudio al iniciar y notifica a quien ya estaba suscripto', async () => {
+    installFakeSdk(false, true); // la plataforma dice "silencio" desde el arranque
+    const service = new CrazyGamesService();
+    const seen: boolean[] = [];
+    service.onMuteAudioChange(muted => seen.push(muted));
+
+    service.init();
+    await service.getUserLocale(); // espera a que init() termine
+
+    expect(seen).toEqual([true]);
+  });
+
+  it('un suscriptor tardío recibe el valor inicial conocido y cada cambio posterior', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+    const seen: boolean[] = [];
+
+    service.onMuteAudioChange(muted => seen.push(muted));
+    expect(seen).toEqual([false]); // valor inicial (conocido) al suscribirse tarde
+
+    sdk.emitMuteAudio(true);
+    sdk.emitMuteAudio(false);
+    expect(seen).toEqual([false, true, false]);
+  });
+
+  it('la baja deja de notificar', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+    const seen: boolean[] = [];
+
+    const off = service.onMuteAudioChange(muted => seen.push(muted));
+    off();
+    sdk.emitMuteAudio(true);
+
+    expect(seen).toEqual([false]);
+  });
+
+  it('sin SDK cargado nunca notifica y la baja sigue siendo segura', async () => {
+    const service = new CrazyGamesService();
+    service.init();
+    await service.getUserLocale();
+
+    const seen: boolean[] = [];
+    const off = service.onMuteAudioChange(muted => seen.push(muted));
+
+    expect(seen).toEqual([]);
+    off(); // no-op sin listeners
   });
 });

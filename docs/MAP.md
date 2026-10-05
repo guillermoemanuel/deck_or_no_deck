@@ -4,10 +4,10 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-04 (cierre de la **unidad B1 — ADR-010**, bloqueador de UI
-> durante ads, CG-MON-001; el mismo día cerraron la unidad A3/ADR-009, la unidad
-> A1/ADR-008, la enmienda ADR-007 y la unidad ADR-007 del 2026-10-02) ·
-> **164 archivos TS · 24.342 líneas · 118 fuente + 46 specs**
+> Fecha del censo: 2026-10-04 (cierre de la **unidad B2 — ADR-011**, `muteAudio` de la
+> plataforma, CG-MON-002; el mismo día cerraron la unidad B1/ADR-010, la unidad
+> A1/ADR-008, la unidad A3/ADR-009, la enmienda ADR-007 y la unidad ADR-007 del 2026-10-02) ·
+> **167 archivos TS · 24.745 líneas · 119 fuente + 48 specs**
 > (LOC = conteo de líneas por archivo, **incluyen specs** — en los cierres previos no corrieron
 > `cloc` ni `wc -l` (el total de entonces se derivó del censo previo **21.806** + deltas uno a
 > uno) —, mientras el cierre A1 del 2026-10-04 sí midió con `wc -l`; el detalle histórico: **+1.403** de los 10 archivos nuevos + **119** de
@@ -56,11 +56,26 @@
 > **164 archivos / 46 specs / 24.342 L**; por capa: `domain/` **4.154** (+9),
 > `application/` **3.433** (sin cambios), `infrastructure/` **3.443** (+38),
 > `presentation/` **11.651** (+213).
+> **Cierre B2 2026-10-04 (ADR-011 — `muteAudio` de la plataforma, CG-MON-002):**
+> **+3 archivos nuevos** — `infrastructure/audio/AudioService.spec.ts` (**100 L**, el
+> primer spec de `audio/`), `infrastructure/config/resolveMuteAudioOverride.ts`
+> (**34 L**) y `.spec.ts` (**36 L**) — y crecieron **6 archivos** (`wc -l` medido,
+> `git status --short` confirma que son los únicos tocados): `domain/ports/ICrazyGamesService.ts`
+> 95→**105** (+10; total `ports/*.ts` 334→**344**), `infrastructure/audio/AudioService.ts`
+> 231→**262** (+31), `infrastructure/services/CrazyGamesService.ts` 483→**543** (+60) +
+> `.spec.ts` 310→**400** (+90), `infrastructure/services/OwnRewardedAdService.ts`
+> 310→**324** (+14), `infrastructure/services/testing/FakeCrazyGamesService.ts`
+> 129→**143** (+14), `main.ts` 370→**385** (+15) →
+> **167 archivos / 48 specs / 24.745 L**; por capa: `domain/` **4.164** (+10),
+> `application/` **3.433** (sin cambios), `infrastructure/` **3.822** (+379),
+> `presentation/` **11.651** y `shared/` **1.254** (sin cambios; la suma de las capas +
+> raíz `main.ts` 385 + `vite-env.d.ts` 37 = 24.746 ≈ total `wc -l` 24.745, el ±1 es la
+> diferencia `wc -l` vs conteo ya conocida).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.154 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.164 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -93,7 +108,7 @@
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 334 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010). |
+| `ports/*.ts` (8 archivos) | 344 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
 
 ---
 
@@ -118,25 +133,26 @@
 
 ---
 
-## `src/infrastructure/` — 3.443 líneas · 8 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 3.822 líneas · 10 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `services/CrazyGamesService.ts` | 483 | ✅ 310 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-009:** `notePermanentError()` (llamada desde el `adError` **antes de `settle()`) cachea `adsDisabledBasicLaunch` → flag `adsDisabled` y `{code:'adblock'}` → `adblockDetected`**; el orden del status pone lo permanente primero (`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown). **Desde ADR-010:** `requestAd()` emite `'requesting'` al abrir el Promise (después del guard `adInProgress`) y `settle()` cierra el ciclo con `'ended'` si sigue abierto (sin-fill / timeout 15 s / excepción del SDK) — **garantía de par** `requesting→ended`. **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. 🟡 |
-| `services/OwnRewardedAdService.ts` | 310 | ✅ 338 L | **Adapter propio** (ADR-007, `VITE_ADS=portal`): pide el overlay al presenter inyectado (`AdOverlayScene`, desde presentation); status solo `available`/`cooldown_*` (nunca `adblock`/`sdk_unavailable`); ✕ → `user_cancelled` honesto → `cooldown_retryable`; **watchdog 15 s** (presenter colgado → `'error'` retryable y resultado tardío descartado); midgame sin tocar el tracker; `getUserLocale()` → `navigator.language`; telemetría no-op. |
+| `services/CrazyGamesService.ts` | 543 | ✅ 400 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-009:** `notePermanentError()` (llamada desde el `adError` **antes de `settle()`) cachea `adsDisabledBasicLaunch` → flag `adsDisabled` y `{code:'adblock'}` → `adblockDetected`**; el orden del status pone lo permanente primero (`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown). **Desde ADR-010:** `requestAd()` emite `'requesting'` al abrir el Promise (después del guard `adInProgress`) y `settle()` cierra el ciclo con `'ended'` si sigue abierto (sin-fill / timeout 15 s / excepción del SDK) — **garantía de par** `requesting→ended`. **Desde ADR-011:** `bindMuteAudioSetting()` (en `init().then()`) lee `game.settings?.muteAudio` y registra `game.addSettingsChangeListener?`; `noteMuteAudio()` notifica al Set `muteAudioListeners` solo si cambió o es el inicial (`muteAudioKnown` resuelve la carrera init↔suscripción) — sin SDK nunca notifica. **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. 🟡 |
+| `services/OwnRewardedAdService.ts` | 324 | ✅ 338 L | **Adapter propio** (ADR-007, `VITE_ADS=portal`): pide el overlay al presenter inyectado (`AdOverlayScene`, desde presentation); status solo `available`/`cooldown_*` (nunca `adblock`/`sdk_unavailable`); ✕ → `user_cancelled` honesto → `cooldown_retryable`; **watchdog 15 s** (presenter colgado → `'error'` retryable y resultado tardío descartado); midgame sin tocar el tracker; `getUserLocale()` → `navigator.language`; telemetría no-op; **`onMuteAudioChange()` stub que nunca notifica** (sin plataforma no hay setting — ADR-011). |
 | `services/RewardCooldownTracker.ts` | 86 | ✅ 101 L | **Fuente única del cooldown de 60 s** con motivo (`no_fill`/`other` → `cooldown_no_fill`/`cooldown_retryable`), extraído de `CrazyGamesService` para que los 2 adapters produzcan estados idénticos (ADR-006/007). Reloj inyectable; nunca lanza. 🟢 |
 | `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
 | `config/resolveFullscreenEnabled.ts` | 70 | ✅ 71 L | `VITE_FULLSCREEN` + `adsMode` → booleano del botón fullscreen propio (**pareja invariante de `VITE_ADS`**, ADR-008): default seguro `false` sin env/basura; en `crazygames` **siempre** `false` aunque el env diga `'true'` (se ignora + `console.warn` — la plataforma prohíbe el botón, CG-PUB-002); en `portal`/`none` solo los literales exactos `'true'`/`'false'` (cualquier variante → `false` + warn con el crudo). El flag sale de `main.ts` en el bag `GameServices.fullscreenEnabled` — presentation no lee env directo. 🟢 |
+| `config/resolveMuteAudioOverride.ts` | 34 | ✅ 36 L | **Override local de `?muteAudio=`** (ADR-011, patrón de `resolveFullscreenEnabled`): `true`/`false` si el parámetro está presente y es válido, `null` si no está (**manda el SDK**) o si el valor es basura (`?muteAudio=si`, `TRUE`, vacío → `null` + `console.warn`). `false` sirve para **negar** el mute de plataforma en local y probar en modos sin SDK. 🟢 |
 | `persistence/LocalStorageProgressionRepository.ts` | 165 | ❌ | **Sin spec directo.** Migración v3→v4. Bloque de comentarios con merge artifact (L17-28). 🔴 |
 | `persistence/ProgressionManager.ts` | 152 | ✅ 246 L | Fachada de meta-progresión + eventos. |
-| `audio/AudioService.ts` | 231 | ❌ | **Sin spec ni fake.** Anclado a `Phaser.Game`. `preload()` muerto con path erróneo. 🔴 |
+| `audio/AudioService.ts` | 262 | ✅ 100 L | **Desde ADR-011:** capa `platformMuted` (mute de la plataforma) separada del pref `muted`; fuente única `applyMute()` → `sound.mute = muted \|\| platformMuted`; `isMuted()` = **efectivo**; `setPlatformMuted()` es método **concreto** (no está en el puerto `IAudioService`, solo lo llama `main.ts`). Anclado a `Phaser.Game`. `preload()` muerto con path erróneo (PLAYBOOK §3). 🟡 |
 | `persistence/LocalStorageOnboardingRepository.ts` | 75 | ✅ | — |
 | `persistence/LocalStorageRecordsRepository.ts` | 46 | ✅ (compartido) | `gamesPlayed` se recalcula = wins+losses. |
 | `persistence/LocalStorageDailyChallengeRepository.ts` | 43 | ✅ (compartido) | — |
 | `services/CryptoRandomProvider.ts` | 57 | ❌ | Muestreo por rechazo con `crypto.getRandomValues`. |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
 | `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
-| `testing/*` (5 archivos · 6 fakes) | 277 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case). |
+| `testing/*` (5 archivos · 6 fakes) | 291 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
 
 ---
 
@@ -204,7 +220,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (370) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (385) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **mute de la plataforma** `resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, y si no hay override `onMuteAudioChange(→ setPlatformMuted)` (ADR-011: override gana y se saltea la suscripción, funciona en los 3 modos) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `vite-env.d.ts` (37) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` y `VITE_FULLSCREEN?: 'true' \| 'false'` — **sin lógica** (la validación vive en `resolveAdsMode.ts` y `resolveFullscreenEnabled.ts`, ADR-007/008). Script global a propósito (fusión con `vite/client`). |
 | `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |

@@ -7,6 +7,78 @@
 
 ---
 
+## 2026-10-04 · Sprint B B2 — CG-MON-002: `muteAudio` de la plataforma (ADR-011)
+
+**Qué pasó (hallazgo P1 de la auditoría de publicación 2026-10-04):** `muteAudio`
+tenía **0 matches en `src/`** — el juego ignoraba que el jugador pudo silenciarlo desde
+la UI de CrazyGames, y `game.settings` no estaba tipado. Requisito oficial
+(docs.crazygames.com/sdk/game, *Game Settings*): leer `game.settings.muteAudio`,
+registrarse en `addSettingsChangeListener` y — *"This setting should take priority over
+your in-game audio settings … be sure this doesn't enable the audio back if it is
+disabled in the SDK settings."* También documenta `?muteAudio=true` como override local.
+
+**Fix (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**
+1. **`infrastructure/audio/AudioService.ts`:** capa `platformMuted` **SEPARADA** del
+   pref del jugador (`muted`): `setPlatformMuted()` nuevo método **concreto** (NO subió
+   al puerto `IAudioService` — solo lo consume `main.ts`); fuente única
+   `applyMute()` → `sound.mute = muted || platformMuted`; `isMuted()` devuelve el
+   **efectivo**; `toggleMuted()` apunta al efectivo (con la plataforma silenciando, el
+   click queda como pref "que suene" y suena al liberar — jamás re-enciende contra la
+   plataforma); guard de `play()` con `isMuted()`. `playMusic` intacto (la capa no toca
+   `this.muted`: la música nace a volumen normal y la silencia el mixer).
+2. **Puerto `ICrazyGamesService.ts`:** `onMuteAudioChange(listener) → () => void` —
+   notifica el valor **INICIAL** (si ya se conoció) y cada cambio, orden libre entre
+   `init()` y la suscripción; los 3 implementadores: `CrazyGamesService` (real),
+   `OwnRewardedAdService` (stub que nunca notifica), `FakeCrazyGamesService`
+   (Set + `emitMuteAudioChange()` para specs).
+3. **`CrazyGamesService.ts`:** `game.settings?: { muteAudio?: boolean }` +
+   `game.addSettingsChangeListener?` en el `declare global`; campos
+   `muteAudio`/`muteAudioKnown`/`muteAudioListeners`; `bindMuteAudioSetting()` en
+   `init().then()`; `noteMuteAudio()` solo notifica si cambió o es el inicial. Sin SDK →
+   nunca notifica.
+4. **Nuevo `infrastructure/config/resolveMuteAudioOverride.ts`** (patrón
+   `resolveFullscreenEnabled`): `?muteAudio=true|false` → booleano; ausente → `null`
+   (manda el SDK); inválido → `null` + `console.warn`. `false` sirve para negar el mute
+   de plataforma en local.
+5. **`main.ts`:** wiring tras `new AudioService(game)` — override gana y se saltea la
+   suscripción; si no, `onMuteAudioChange(→ setPlatformMuted)`. Funciona en los 3 modos
+   de `VITE_ADS`.
+
+**Specs red→verde:** nuevo `AudioService.spec.ts` (5 tests — rojo por módulo sin spec) ·
+nuevo `resolveMuteAudioOverride.spec.ts` (4 tests) · `CrazyGamesService.spec.ts` describe
+nuevo de muteAudio (**+4**; `installFakeSdk` extendido con `game.settings` +
+`addSettingsChangeListener` + `emitMuteAudio()`) → **48 suites / 540 tests** (base B1:
+46/527).
+
+**Docs (tarea de esta sesión, `memory-keeper`):** ADR nuevo
+`docs/DECISIONS/ADR-011-muteaudio-de-plataforma.md` + fila `011` en
+`docs/DECISIONS/README.md`, `docs/MAP.md` (censo → **167 archivos / 48 specs /
+24.745 L**, medido con `wc -l`; nuevos `AudioService.spec.ts` 100 L,
+`resolveMuteAudioOverride.ts` 34 L + `.spec.ts` 36 L; deltas `ICrazyGamesService.ts`
+95→**105** [ports 334→344], `AudioService.ts` 231→**262**, `CrazyGamesService.ts`
+483→**543** + spec 310→**400**, `OwnRewardedAdService.ts` 310→**324**,
+`FakeCrazyGamesService.ts` 129→**143**, `main.ts` 370→**385**),
+`docs/testing.md` (**48/540**; `infrastructure/` → 10 specs, `audio` gana su primer
+spec, `config` → 3 specs), `docs/ARCHITECTURE.md` (§2 wiring del override, §5 contrato
+`onMuteAudioChange`, §7 capa `platformMuted`, conteo de specs 43→48), `AGENTS.md`
+(conteo de specs del typecheck 42→48), esta entrada.
+
+**Cómo se verificó:** gates en verde (corridos por la unidad, no por esta sesión de
+docs — a esta sesión el runner le fue denegado por permisos): `npm run typecheck` 0 ✓ ·
+`npm run lint` 0 ✓ · `npm test` → **48 suites / 540 tests** (base 46/527) ✓ ·
+`npm run build` ✓ (7,6 s). Verificación de docs por esta sesión: censo nuevo con
+`wc -l` (total y por capa), conteo de `it(`/`it.each` en los 3 specs tocados (5 + 4 + 4
+= 13 → 527 + 13 = 540) y grep en `*.md`: ninguna doc decía que `muteAudio` estuviera
+sin implementar ni describía el ciclo de ads como solo `started`/`ended`.
+
+**Qué quedó pendiente:** **smoke manual** — modo `crazygames` con el QA Tool: silenciar
+desde la UI de la plataforma → el juego se calla y el botón del HUD **no** re-enciende;
+localmente verificar `?muteAudio=true` y `?muteAudio=false` (último smoke de ese modo:
+2026-10-01). Además siguen abiertos el resto del Sprint B (`CG-MON-005`, `CG-MON-006`)
+y el smoke de B1 (bloqueador de UI, ver entrada siguiente).
+
+---
+
 ## 2026-10-04 · Sprint B B1 — CG-MON-001: bloqueador de UI durante el ciclo del ad (ADR-010)
 
 **Qué pasó (hallazgo P1 de la auditoría de publicación 2026-10-04):** en modo

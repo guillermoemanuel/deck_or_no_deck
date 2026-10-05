@@ -135,6 +135,15 @@ export class OwnRewardedAdService implements ICrazyGamesService {
     };
   }
 
+  /**
+   * CG-MON-002: el overlay propio no tiene plataforma que reporte
+   * `muteAudio` — nunca notifica. Devuelve la baja por simetría de
+   * contrato (el consumidor de main.ts se cablea igual en los 3 modos).
+   */
+  onMuteAudioChange(_listener: (muted: boolean) => void): () => void {
+    return () => undefined;
+  }
+
   showRewardedAd(): Promise<AdResult> {
     return this.requestAd('rewarded');
   }

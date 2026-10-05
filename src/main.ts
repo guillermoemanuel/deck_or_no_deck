@@ -3,6 +3,7 @@ import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
 import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdService';
 import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
 import { resolveFullscreenEnabled } from './infrastructure/config/resolveFullscreenEnabled';
+import { resolveMuteAudioOverride } from './infrastructure/config/resolveMuteAudioOverride';
 import { AdOverlayScene, presentAdOverlay } from './presentation/scenes/AdOverlayScene';
 import { AdBlockerScene, createAdBlockerListener } from './presentation/scenes/AdBlockerScene';
 import { LocalStorageProgressionRepository } from './infrastructure/persistence/LocalStorageProgressionRepository';
@@ -285,6 +286,20 @@ game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => {
 // del fix de superposición de audio. Por eso se instancia recién acá,
 // después de `new Phaser.Game(config)`, y no junto a los demás servicios.
 const audioService = new AudioService(game);
+
+// CG-MON-002 (ADR-011): muteAudio de la plataforma con PRIORIDAD sobre el
+// toggle in-game — la doc de CrazyGames (sdk/game, Game Settings) es
+// tajante: "This setting should take priority over your in-game audio
+// settings". AudioService lo aplica como capa separada (efectivo =
+// toggle || plataforma), así el botón del HUD no puede re-encender lo que
+// la plataforma silenció. El override local `?muteAudio=true|false` gana
+// sobre el valor del SDK y funciona en los 3 modos (también sin SDK).
+const muteAudioOverride = resolveMuteAudioOverride(window.location.search);
+if (muteAudioOverride !== null) {
+  audioService.setPlatformMuted(muteAudioOverride);
+} else {
+  crazyGamesService.onMuteAudioChange(muted => audioService.setPlatformMuted(muted));
+}
 
 // Audio durante anuncios (requisito de CrazyGames): se silencia SOLO cuando
 // el SDK confirma que el anuncio empezó (`adStarted`), no al pedirlo — si el

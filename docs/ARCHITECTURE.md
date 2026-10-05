@@ -43,7 +43,10 @@ Hay **dos** lugares donde se instancian concretos:
    `ListAvailableUpgradesUseCase` (necesita solo el puerto de ads → se instancia global).
    Todo se guarda en `game.registry.set('services', services)`.
    También: init del SDK, locale detectado, `beforeunload` (gameplayStop + anti-cheat),
-   manejo de fullscreen/orientación, mute durante anuncios.
+   manejo de fullscreen/orientación, mute durante anuncios y **mute de la plataforma**
+   (`resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, o si no
+   hay override `onMuteAudioChange(→ setPlatformMuted)` — el override gana y se saltea
+   la suscripción; ADR-011).
 
    **Selección del adapter de ads por env (ADR-007)** — `resolveAdsMode(import.meta.env.VITE_ADS)`
    (`infrastructure/config/resolveAdsMode.ts`, estricto: solo los literales exactos, el resto →
@@ -131,6 +134,11 @@ Reglas:
 | `IRandomProvider` | `CryptoRandomProvider` | `DeterministicRandomProvider` |
 | `IAudioService` | `infrastructure/audio/AudioService` | **no existe** |
 
+Nota: **`AudioService.setPlatformMuted()` NO está en el puerto `IAudioService`** — es
+método concreto de la implementación, consumido solo por `main.ts` (composition root);
+si application/presentación lo necesitan algún día, hay que decidir primero si sube al
+puerto (ADR-011).
+
 Estrategia inyectada fuera de `ports/`: `EnergyDrainRule` (definida en `GameSession.ts`,
 impl `DefaultEnergyDrainRule` en el mismo archivo; los specs definen doubles inline).
 
@@ -160,6 +168,16 @@ con EXACTAMENTE un `'ended'`, aunque no haya habido `'started'` (sin fill, timeo
 15 s o excepción del SDK también cierran). Consumidores: el audio (`main.ts`) y
 **`AdBlockerScene` vía `createAdBlockerListener()`** — este último **solo si
 `adsMode !== 'portal'`**, porque en portal el bloqueador es `AdOverlayScene`.
+
+**Setting de audio de la plataforma (ADR-011, CG-MON-002):** `onMuteAudioChange(listener)`
+→ `() => void` notifica `game.settings.muteAudio` del SDK: el valor **INICIAL** (aunque
+la suscripción sea anterior o posterior a `init()` — `muteAudioKnown` resuelve la
+carrera) y cada cambio. **Los adapters sin plataforma nunca notifican**
+(`OwnRewardedAdService` es un stub; sin SDK tampoco). Contrato de consumidor: aplicarlo
+como capa **con prioridad** sobre el toggle in-game — la doc oficial dice
+*"This setting should take priority over your in-game audio settings"*; en `main.ts` el
+override `?muteAudio=true|false` (`resolveMuteAudioOverride`) gana y se saltea la
+suscripción.
 
 ---
 
@@ -232,6 +250,14 @@ con EXACTAMENTE un `'ended'`, aunque no haya habido `'started'` (sin fill, timeo
   El idioma activo es conocimiento de presentación: **el dominio jamás ramifica por idioma.**
 - **Audio**: `AudioService` se ancla a `Phaser.Game` (no a una Scene) para sobrevivir al
   ciclo de vida de escenas; fades por `requestAnimationFrame` (no por tweens de escena).
+  **Estado audible (ADR-011):** dos capas — el pref del jugador (`muted`) y el silencio
+  de la plataforma (`platformMuted`, desde `main.ts` vía `onMuteAudioChange` o el
+  override `?muteAudio=`); la fuente única es `applyMute()` → `sound.mute = muted ||
+  platformMuted` y `isMuted()` devuelve el **efectivo**, así que el toggle del HUD no
+  puede re-encender lo que la plataforma silenció (su click queda como pref "que suene"
+  para cuando se libere). El guard de `play()` y el botón del HUD leen el efectivo.
+  Borde aceptado: el mute de anuncios de `main.ts` captura `isMuted()` (efectivo) y
+  restaura con `setMuted()` (pref) — ver ADR-011.
 
 ---
 
@@ -270,7 +296,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 43 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 48 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

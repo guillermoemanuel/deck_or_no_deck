@@ -1,13 +1,17 @@
 # Testing
 
-> Estado al 2026-10-04 (unidad **B1 / ADR-010**: bloqueador de UI durante todo el
-> ciclo del ad — CG-MON-001): **46 suites · 527 tests** —
-> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 46
-> `*.spec.ts` en `src`; **522 del cierre A3/ADR-009 + 5 de B1** = 5 declaraciones `it(`
+> Estado al 2026-10-04 (unidad **B2 / ADR-011**: `muteAudio` de la plataforma —
+> CG-MON-002): **48 suites · 540 tests** —
+> verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK; medido: 48
+> `*.spec.ts` en `src`; **527 del cierre B1/ADR-010 + 13 de B2** = 5 declaraciones `it(`
+> nuevas en `AudioService.spec` (primer spec de `audio/`) + 4 en
+> `resolveMuteAudioOverride.spec` (los dos rojos por módulo inexistente) + 4 nuevas en
+> el describe de muteAudio de `CrazyGamesService.spec` (16 → **20**) → **527 + 13** = 540.
+> Conteo previo: **522 del cierre A3/ADR-009 + 5 de B1** = 5 declaraciones `it(`
 > nuevas, todas en el spec nuevo `AdBlockerScene.spec` — rojo por módulo inexistente;
 > `CrazyGamesService.spec` **sin cambio de conteo** (16): sus 4 tests de phases se
 > actualizaron al contrato nuevo y 1 sumó la aserción **de par** en el timeout de 15 s →
-> hoy **499 + 28** = 527. Conteo previo: **513 del cierre A1/ADR-008 + 9 de A3** = 5 `it(`
+> en B1 quedó **499 + 28** = 527. Conteo previo: **513 del cierre A1/ADR-008 + 9 de A3** = 5 `it(`
 > nuevas + 2 filas `it.each` de 2 casos c/u → `CrazyGamesService.spec` **+2**,
 > `ReviveWithAdUseCase.spec` **+3**, `MultiplyRewardUseCase.spec` **+3**,
 > `ListAvailableUpgradesUseCase.spec` **+1** — todos rojo→verde; el rojo de infra era
@@ -58,7 +62,7 @@ npm run lint                  # eslint src
 |---|---|---|---|
 | `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
 | `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
-| `infrastructure/` | 8 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider`, `AudioService` (+4 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — y `resolveFullscreenEnabled` con ADR-008, 5 tests) |
+| `infrastructure/` | 10 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider` (+6 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (5 tests, primer spec de `audio/`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**) |
 | `shared/` | 5 | buena | 🟢 |
 | `presentation/` | 5 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
 
@@ -71,7 +75,7 @@ npm run lint                  # eslint src
 | `FakeProgressionRepository` | `infrastructure/persistence/testing/` | monedas/mazos/bono en memoria; helpers `seedCoins()`, `seedPeriodicBonusCycleStart()` |
 | `FakeRecordsRepository` · `FakeDailyChallengeRepository` | ídem | estado inicial sembrado por constructor |
 | `FakeOnboardingRepository` | ídem | hints vistos/saltados |
-| `FakeCrazyGamesService` | `infrastructure/services/testing/` | `setNextAdResult()`, `setAvailable()`, `setRewardedStatus()`, **`setRewardedStatusAfterNextAd()`** (ADR-009: el próximo rewarded falla y el estado queda permanente **en vuelo**, como el SDK real), contadores de llamadas, `emitAdLifecycle()` |
+| `FakeCrazyGamesService` | `infrastructure/services/testing/` | `setNextAdResult()`, `setAvailable()`, `setRewardedStatus()`, **`setRewardedStatusAfterNextAd()`** (ADR-009: el próximo rewarded falla y el estado queda permanente **en vuelo**, como el SDK real), contadores de llamadas, `emitAdLifecycle()`, **`emitMuteAudioChange()`** (ADR-011: dispara `onMuteAudioChange` a sus suscriptores) |
 | `DeterministicRandomProvider` | ídem | shuffle invertido o `fixedOrder` → tableros deterministas |
 | `collectEvents(bus)` | `application/use-cases/testing/` | acumula eventos para asserts de secuencia (usado en 6 de 8 specs de use-cases) |
 | `installStorage()` | helper en `LocalStorageRecordsRepositories.spec.ts` | `window.localStorage` con Map |
@@ -254,6 +258,21 @@ vivo con el QA Tool de CrazyGames** (último smoke de ese modo: 2026-10-01):
 2. Consola: **nunca aparece un 2.º `requestAd`** con el ad en vuelo.
 3. Regresión modo `portal`: el overlay de countdown de `AdOverlayScene` sigue intacto
    (**sin** spinner/segundo fondo encima — `AdBlockerScene` no se cablea en portal).
+
+### Smoke del `muteAudio` de la plataforma (B2 / ADR-011) — **PENDIENTE** (2026-10-04)
+
+CG-MON-002 cableó `game.settings.muteAudio` → `AudioService.setPlatformMuted()` como
+capa con prioridad sobre el toggle in-game. Cubierto por specs (`AudioService.spec` 5 ·
+`resolveMuteAudioOverride.spec` 4 · `CrazyGamesService.spec` describe de muteAudio 4),
+**falta el smoke en vivo** (último smoke del modo `crazygames`: 2026-10-01):
+
+1. Con el QA Tool en modo `crazygames`, **silenciar desde la UI de la plataforma** →
+   el juego se calla (música y sfx) y el **botón del HUD NO re-enciende** el audio.
+2. **Reactivar** desde la plataforma → vuelve el sonido y manda el pref del jugador
+   (si el jugador lo había apagado a mano, sigue apagado).
+3. Localmente, sin QA Tool: `http://localhost:5173/?muteAudio=true` → silenciado;
+   `?muteAudio=false` → sonido (niega el mute de plataforma) — corre en los 3 modos de
+   `VITE_ADS`.
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

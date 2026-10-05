@@ -80,6 +80,16 @@ export interface ICrazyGamesService {
   rewardedAdStatus(): RewardedAdStatus;
   /** Suscribe a las fases 'requesting'/'started'/'ended' de cualquier anuncio (ver AdLifecyclePhase). Devuelve la función para desuscribirse. */
   onAdLifecycle(listener: AdLifecycleListener): () => void;
+  /**
+   * CG-MON-002: suscribe al setting de audio de la plataforma
+   * (`game.settings.muteAudio` del SDK de CrazyGames). Notifica el valor
+   * INICIAL (si ya se conoció — sin importar el orden entre `init()` y
+   * esta suscripción) y cada cambio posterior; el consumidor lo aplica
+   * como capa con prioridad sobre el toggle in-game (ver
+   * `AudioService.setPlatformMuted`). Los adapters sin plataforma
+   * (portal / sin SDK) nunca notifican. Devuelve la función de baja.
+   */
+  onMuteAudioChange(listener: (muted: boolean) => void): () => void;
   showRewardedAd(): Promise<AdResult>;
   showMidgameAd(): Promise<AdResult>;
   reportGameplayStart(): void;
