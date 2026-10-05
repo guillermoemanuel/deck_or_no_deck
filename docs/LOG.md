@@ -7,6 +7,51 @@
 
 ---
 
+## 2026-10-05 · Sprint B — smoke manual APROBADO (modo `crazygames`, QA Tool de CrazyGames)
+
+**Qué se verificó (smoke guiado por el usuario; build de Vite servido en
+`localhost:4173`, modo `crazygames`, QA Tool de CrazyGames + adblocker real) — los 5
+puntos PASARON:**
+
+1. **Carga/SDK:** 1 request a `sdk.crazygames.com/crazygames-sdk-v3.js` (200), consola
+   sin errores.
+2. **B1 · CG-MON-001 (ADR-010):** backdrop + spinner al instante del click en "Jugar de
+   nuevo" (midgame); los botones NO navegan durante el ad; el bloqueador se cierra solo
+   al terminar/fallar el anuncio — verificado también el caso **sin fill** (no se queda
+   clavado); **un solo `requestAd`** por click.
+3. **B2 · CG-MON-002 (ADR-011):** `?muteAudio=true` → juego totalmentemente mudo desde
+   el arranque y el botón de sonido del HUD **NO** re-enciende; `?muteAudio=false` / sin
+   parámetro → sonido normal (música a volumen correcto).
+4. **B3 · CG-MON-005:** tienda pestaña Mejoras — las 3 filas rewarded visibles con
+   `(requiere anuncio)` / `(requires ad)` en la descripción.
+5. **B4 · CG-MON-006 (ADR-012):** con adblocker activo — 3 filas ocultas + **línea ámbar
+   de una sola línea** bajo el caption (`SHOP_ADS_HIDDEN_ADBLOCK` ES: *"Bloqueador de
+   anuncios detectado: Duplicar, Triplicar y Revivir están ocultos. Desactívalo para
+   verlos."*), sin popup y sin errores de consola: el status fue `adblock` (no
+   `sdk_unavailable`) — la distinción del ADR-012 funcionó en la vida real.
+
+**Cierre técnico post-smoke:** `.env` revierto a `VITE_ADS=portal` +
+`VITE_FULLSCREEN=true` (config dev del usuario), preview detenido y `npm run build`
+corrido para dejar `dist/` consistente con el `.env` revierto. Repo limpio (solo
+`dist.zip` untracked).
+
+**Docs (tarea de esta sesión, `memory-keeper`, solo `docs/`):** esta entrada · cierre de
+los 4 smokes del Sprint B en sus entradas (B1-B4) y en la lista global de la entrada A3 ·
+`docs/testing.md` (secciones B1 y `muteAudio` → **PASSED 2026-10-05** + sección nueva
+*Smoke general del Sprint B*) · `ADR-010`/`ADR-011`/`ADR-012`: el bullet de verificación
+sin correr → estado **"Cerrado (smoke 2026-10-05)"**. **Sin ADR nuevo** (es
+verificación, no decisión).
+
+**Cómo se verificó (grep en `docs/`):** **0** frases de smoke sin cerrar del Sprint B ni
+del `muteAudio`; los smokes heredados de sprints anteriores (ítems 1-4 de
+`docs/testing.md`, ADR-006) quedan como estaban — histórico, no se reescribe.
+
+**Qué queda pendiente:** nada del Sprint B. Siguen abiertos los pendientes heredados de
+sprints anteriores y las acciones fuera del repo (APS en Developer Portal, Vite 8,
+`dist.zip`), sin cambios.
+
+---
+
 ## 2026-10-04 · Sprint B B4 — CG-MON-006: aviso inline de ads en la tienda (ADR-012)
 
 **Qué pasó (hallazgo P2 de la auditoría de publicación 2026-10-04):** cuando
@@ -62,10 +107,12 @@ Verificación de docs por esta sesión: `wc -l` en los 4 archivos tocados,
 grep en `docs/*.md`: **ninguna doc afirmaba que las filas ocultas "no avisan" nada** (no
 había texto que corregir).
 
-**Qué queda pendiente:** smoke visual de la tienda dentro del **smoke general del Sprint
-B** (modo `crazygames` con QA Tool): con extensión de adblock activa debe verse el aviso
-ámbar de UNA línea bajo el caption; `ads_disabled` solo es simularlo en **Basic Launch**.
-Siguen abiertos los smokes de B1/B2 y el de la tienda de B3.
+**Estado (smoke):** **APROBADO 2026-10-05** — el aviso inline de la tienda se vio en
+vivo: las 3 filas con el tag del ad (punto 4) y, con adblocker real, las 3 ocultas +
+línea ámbar de UNA línea bajo el caption (punto 5) — status `adblock`, no
+`sdk_unavailable`: la distinción del ADR-012 funcionó en la vida real. Ver la entrada
+del 2026-10-05. `ads_disabled` quedó fuera de esa corrida (solo simularlo en **Basic
+Launch**). **Deuda nueva:** ninguna.
 
 ---
 
@@ -113,10 +160,10 @@ Verificación de docs por esta sesión: `wc -l`/`grep -c ""` en los 2 archivos t
 advirtiera** el requisito de ad (el único "aviso" documentado es el bloqueador de UI de
 ADR-010).
 
-**Qué queda pendiente:** smoke visual de la tienda dentro del **smoke general del Sprint
-B** (modo `crazygames` con QA Tool): ver el marcador en las 3 filas de la tienda y que el
-wrap de 280 px no corte el texto más allá de las 3 líneas de `ROW_SPACING_Y`. Siguen
-abiertos `CG-MON-006` y los smokes de B1/B2.
+**Estado (smoke):** **APROBADO 2026-10-05** — las 3 filas rewarded visibles con
+`(requiere anuncio)` / `(requires ad)` en la descripción (punto 4; ver entrada del
+2026-10-05). `CG-MON-006` también quedó verificado en vivo (punto 5) y los smokes de
+B1/B2 cerraron el mismo día (puntos 2 y 3). **Deuda nueva:** ninguna.
 
 ---
 
@@ -184,11 +231,14 @@ docs — a esta sesión el runner le fue denegado por permisos): `npm run typech
 = 13 → 527 + 13 = 540) y grep en `*.md`: ninguna doc decía que `muteAudio` estuviera
 sin implementar ni describía el ciclo de ads como solo `started`/`ended`.
 
-**Qué quedó pendiente:** **smoke manual** — modo `crazygames` con el QA Tool: silenciar
-desde la UI de la plataforma → el juego se calla y el botón del HUD **no** re-enciende;
-localmente verificar `?muteAudio=true` y `?muteAudio=false` (último smoke de ese modo:
-2026-10-01). Además siguen abiertos el resto del Sprint B (`CG-MON-005`, `CG-MON-006`)
-y el smoke de B1 (bloqueador de UI, ver entrada siguiente).
+**Estado (smoke):** **APROBADO 2026-10-05** — `?muteAudio=true` → juego totalmente
+mudo desde el arranque y el botón del HUD **no** re-enciende; `?muteAudio=false` / sin
+parámetro → sonido normal (música a volumen correcto); punto 3, ver entrada del
+2026-10-05. El smoke ejecutó el camino del override local, que alimenta la misma
+`setPlatformMuted()`; la conmutación desde la UI de la plataforma queda cubierta por
+specs (`CrazyGamesService.spec` describe de muteAudio + `AudioService.spec`).
+`CG-MON-005`, `CG-MON-006` y B1 cerraron el mismo día (puntos 4, 5 y 2). **Deuda
+nueva:** ninguna.
 
 ---
 
@@ -253,11 +303,13 @@ existe en `SceneManager`) · `npm run lint` 0 ✓ · `npm test` → **46 suites 
 preexistente). Verificación de docs por grep: ninguna doc describe el ciclo como solo
 `started`/`ended`.
 
-**Qué quedó pendiente:** **smoke manual en modo `crazygames` con el QA Tool de
-CrazyGames** — clic en "Jugar de nuevo" durante el rewarded NO navega hasta
-`adFinished`/`adError`; en consola nunca aparece un 2.º `requestAd`; regresión modo
-portal: overlay de countdown intacto (último smoke de ese modo: 2026-10-01). Además
-siguen abiertos el resto del Sprint B (`CG-MON-002`, `CG-MON-005`, `CG-MON-006`).
+**Estado (smoke):** **APROBADO 2026-10-05** — backdrop + spinner al instante del click
+en "Jugar de nuevo" (midgame), los botones no navegan durante el ad, el bloqueador se
+cierra solo al terminar/fallar (incluido el caso **sin fill**) y **un solo `requestAd`**
+por click; punto 2, ver entrada del 2026-10-05. La regresión del modo `portal` (overlay
+de countdown intacto) ya constaba verificada el 2026-10-04. `CG-MON-002`,
+`CG-MON-005` y `CG-MON-006` cerraron el mismo día (puntos 3, 4 y 5). **Deuda nueva:**
+ninguna.
 
 ---
 
@@ -354,8 +406,9 @@ enumeración desactualizada por el fix), esta entrada.
 **Qué quedó pendiente:** **A4** (README + `package.json` `description` con el nombre
 canónico **"Deck or No Deck"**) · **APS en Developer Portal** (acción fuera del repo —
 decisión del usuario) · **Sprint B** de la auditoría (`CG-MON-001`, `CG-MON-002`,
-`CG-MON-005`, `CG-MON-006`) · **smoke en modo `crazygames` con el QA Tool** (último smoke
-de ese modo: 2026-10-01) · **Vite 8** (decisión del usuario) · **`dist.zip`** dejado como
+`CG-MON-005`, `CG-MON-006`) — **cerrado con smoke APROBADO 2026-10-05**, ver entrada
+nueva · **smoke en modo `crazygames` con el QA Tool** (último smoke de ese modo:
+**2026-10-05**) · **Vite 8** (decisión del usuario) · **`dist.zip`** dejado como
 está (decisión del usuario).
 
 ---

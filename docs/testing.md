@@ -187,7 +187,9 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     **vivos** y reintento efectivo a los 60 s.
 
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
-`http://localhost:5174`):** los **11 ítems verificados en vivo** — ítems **1-4 y 9-11**
+`http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección
+*Smoke general del Sprint B* más abajo). Los **11 ítems verificados en vivo** — ítems
+**1-4 y 9-11**
 el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
 penalidad −5000 que puede dejar saldo negativo, bono periódico forzado). Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
@@ -258,35 +260,69 @@ Duplicar/Triplicar/Revivir ausentes y el resto de mejoras visibles (en ambos idi
 > en 0 s si faltara; repetir ítem 2 con **sesión fresca** (recargar y reclamar Duplicar
 > sin jugar antes) al tocar el registro de escenas o el presenter.
 
-### Smoke del modo `crazygames` con el QA Tool — **PENDIENTE** (B1 / ADR-010, 2026-10-04)
+### Smoke general del Sprint B (modo `crazygames` con el QA Tool) — **PASSED 2026-10-05**
+
+Ejecutado el **2026-10-05** por el usuario: build de Vite servido en `localhost:4173`,
+modo `crazygames`, QA Tool de CrazyGames + adblocker real. **Los 5 puntos PASARON:**
+
+1. **Carga/SDK:** 1 request a `sdk.crazygames.com/crazygames-sdk-v3.js` (200), consola
+   sin errores.
+2. **CG-MON-001 (ADR-010):** backdrop + spinner al instante del click en "Jugar de
+   nuevo" (midgame); botones sin navegar durante el ad; bloqueador que se cierra solo al
+   terminar/fallar (incluido el caso sin fill); un solo `requestAd` por click — detalle
+   en la sección B1 de abajo.
+3. **CG-MON-002 (ADR-011):** `?muteAudio=true` mudo total desde el arranque y botón del
+   HUD sin re-encender; `?muteAudio=false`/ausente → sonido normal — detalle en la
+   sección `muteAudio` de abajo.
+4. **CG-MON-005:** tienda pestaña Mejoras — las 3 filas rewarded visibles con
+   `(requiere anuncio)` / `(requires ad)` en la descripción.
+5. **CG-MON-006 (ADR-012):** con adblocker activo — 3 filas ocultas + **línea ámbar de
+   UNA sola línea** bajo el caption (`SHOP_ADS_HIDDEN_ADBLOCK` ES: *"Bloqueador de
+   anuncios detectado: Duplicar, Triplicar y Revivir están ocultos. Desactívalo para
+   verlos."*), sin popup y sin errores de consola: status `adblock` (no
+   `sdk_unavailable`) — la distinción del ADR-012 funcionó en la vida real.
+
+**Cierre técnico post-smoke:** `.env` revierto a `VITE_ADS=portal` +
+`VITE_FULLSCREEN=true` (config dev del usuario), preview detenido y `npm run build`
+corrido para dejar `dist/` consistente con el `.env` revierto; repo limpio (solo
+`dist.zip` untracked).
+
+### Smoke del modo `crazygames` con el QA Tool — **PASSED 2026-10-05** (B1 / ADR-010)
 
 CG-MON-001 tapó la UI durante todo el ciclo del ad con `AdBlockerScene` (fase
 `'requesting'` + garantía de par `requesting→ended` en el puerto). Cubierto por specs
 (5 tests del listener en `AdBlockerScene.spec` + las 4 secuencias de phases y la
-aserción de par del timeout de 15 s en `CrazyGamesService.spec`), **falta el smoke en
-vivo con el QA Tool de CrazyGames** (último smoke de ese modo: 2026-10-01):
+aserción de par del timeout de 15 s en `CrazyGamesService.spec`); **smoke en vivo con el
+QA Tool APROBADO 2026-10-05**:
 
-1. Con el QA Tool en modo `crazygames`, clic en **"Jugar de nuevo"** durante el
-   rewarded → **NO navega** hasta `adFinished`/`adError` (spinner visible, tablero
-   detrás bloqueado y en pausa).
-2. Consola: **nunca aparece un 2.º `requestAd`** con el ad en vuelo.
-3. Regresión modo `portal`: el overlay de countdown de `AdOverlayScene` sigue intacto
-   (**sin** spinner/segundo fondo encima — `AdBlockerScene` no se cablea en portal).
+1. ✓ Con el QA Tool en modo `crazygames`, clic en **"Jugar de nuevo"** durante el
+   rewarded (midgame) → backdrop + spinner **al instante** y **NO navega** hasta
+   `adFinished`/`adError` (tablero detrás bloqueado y en pausa); los botones no navegan
+   durante el ad.
+2. ✓ El bloqueador se **cierra solo** al terminar/fallar el anuncio — también en el caso
+   **sin fill** (no se queda clavado).
+3. ✓ Consola: **un solo `requestAd` por click** (nunca un 2.º con el ad en vuelo).
+4. ✓ Regresión modo `portal`: overlay de countdown de `AdOverlayScene` intacto, **sin**
+   spinner/segundo fondo encima (`AdBlockerScene` no se cablea en portal) — verificado
+   2026-10-04, ver *Smoke del modo `portal`*.
 
-### Smoke del `muteAudio` de la plataforma (B2 / ADR-011) — **PENDIENTE** (2026-10-04)
+### Smoke del `muteAudio` de la plataforma (B2 / ADR-011) — **PASSED 2026-10-05**
 
 CG-MON-002 cableó `game.settings.muteAudio` → `AudioService.setPlatformMuted()` como
 capa con prioridad sobre el toggle in-game. Cubierto por specs (`AudioService.spec` 5 ·
-`resolveMuteAudioOverride.spec` 4 · `CrazyGamesService.spec` describe de muteAudio 4),
-**falta el smoke en vivo** (último smoke del modo `crazygames`: 2026-10-01):
+`resolveMuteAudioOverride.spec` 4 · `CrazyGamesService.spec` describe de muteAudio 4);
+**smoke en vivo APROBADO 2026-10-05** (build en `localhost:4173`, modo `crazygames`):
 
-1. Con el QA Tool en modo `crazygames`, **silenciar desde la UI de la plataforma** →
-   el juego se calla (música y sfx) y el **botón del HUD NO re-enciende** el audio.
-2. **Reactivar** desde la plataforma → vuelve el sonido y manda el pref del jugador
-   (si el jugador lo había apagado a mano, sigue apagado).
-3. Localmente, sin QA Tool: `http://localhost:5173/?muteAudio=true` → silenciado;
-   `?muteAudio=false` → sonido (niega el mute de plataforma) — corre en los 3 modos de
-   `VITE_ADS`.
+1. ✓ **`?muteAudio=true`** → juego **totalmente mudo desde el arranque** (música y sfx)
+   y el **botón del HUD NO re-enciende** el audio — la capa `platformMuted` manda sobre
+   el pref del jugador.
+2. ✓ **`?muteAudio=false` / sin parámetro** → sonido normal, **música a volumen
+   correcto** (el override `false` niega el mute de plataforma; la ausencia deja el mando
+   al SDK) — corre en los 3 modos de `VITE_ADS`.
+
+Receta de re-ejecución con el QA Tool (silenciar/reactivar desde la UI de la plataforma)
+— mismo camino observable que el ítem 1: `onMuteAudioChange → setPlatformMuted`; el
+pref del jugador sigue mandando cuando la plataforma no silencia.
 
 ### Límites del guard de compra por ads — estado al 2026-10-01
 

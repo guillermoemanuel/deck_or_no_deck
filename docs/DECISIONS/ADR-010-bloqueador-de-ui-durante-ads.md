@@ -92,7 +92,9 @@ llegaba tarde.
   **nuevo `AdBlockerScene.spec.ts`** (5 tests del listener: ciclo sin start, sin doble
   start, adapter que arranca en `started`, `ended` aislado, dos ciclos) — rojo por
   módulo inexistente. Suite: **46 suites / 527 tests**.
-- **Pendiente (no cubierto por unit tests):** smoke manual en modo `crazygames` con el
-  QA Tool de CrazyGames — clic en "Jugar de nuevo" durante el rewarded no navega hasta
-  `adFinished`/`adError`; en consola nunca aparece un 2.º `requestAd`; regresión modo
-  portal: overlay de countdown intacto (último smoke de ese modo: 2026-10-01).
+- **Cerrado (smoke 2026-10-05):** smoke manual en modo `crazygames` con el QA Tool de
+  CrazyGames **APROBADO 2026-10-05** — clic en "Jugar de nuevo" durante el rewarded no
+  navega hasta `adFinished`/`adError` (backdrop + spinner al instante), el bloqueador se
+  cierra solo también en el caso **sin fill**, en consola un solo `requestAd` por click;
+  regresión modo portal: overlay de countdown intacto (verificada 2026-10-04). Detalle en
+  `docs/testing.md` y `docs/LOG.md`.

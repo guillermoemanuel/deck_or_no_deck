@@ -100,7 +100,7 @@ el silencio impuesto por la plataforma.
   baja es segura) con `installFakeSdk` extendido con `game.settings` +
   `addSettingsChangeListener` + `emitMuteAudio()`. Suite: **48 suites / 540 tests**
   (base B1: 46/527).
-- **Pendiente (no cubierto por unit tests):** smoke manual en modo `crazygames` con el
-  QA Tool — silenciar desde la UI de la plataforma → el juego se calla y el botón del
-  HUD **no** re-enciende; localmente verificar `?muteAudio=true` y `?muteAudio=false`
-  (último smoke de ese modo: 2026-10-01).
+- **Cerrado (smoke 2026-10-05):** smoke manual **APROBADO 2026-10-05** — `?muteAudio=true`
+  → juego totalmentemente mudo desde el arranque y el botón del HUD **no** re-enciende;
+  `?muteAudio=false` / sin parámetro → sonido normal (música a volumen correcto). Detalle
+  en `docs/testing.md` y `docs/LOG.md`.

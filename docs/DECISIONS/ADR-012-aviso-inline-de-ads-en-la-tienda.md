@@ -63,7 +63,8 @@ no había ningún canal de aviso.
   cooldowns → `null`; sdk_unavailable → `null`) — rojo por método inexistente (la suite
   ni compilaba); el spec pasa de 5 a **10 tests**. Suite: **48 suites / 546 tests**
   (base B3: 48/541); sin archivos nuevos.
-- **Pendiente (no cubierto por unit tests):** smoke visual de la tienda dentro del smoke
-  general del Sprint B — modo `crazygames` con extensión de adblock activa debe verse el
-  aviso ámbar de UNA línea bajo el caption; `ads_disabled` solo puede simularse en Basic
-  Launch.
+- **Cerrado (smoke 2026-10-05):** smoke visual de la tienda dentro del smoke general del
+  Sprint B **APROBADO 2026-10-05** — con adblocker real: 3 filas ocultas + aviso ámbar de
+  UNA línea bajo el caption, sin popup ni errores de consola (status `adblock`, no
+  `sdk_unavailable`). `ads_disabled` no fue parte del smoke (solo simularse en Basic
+  Launch; cubierto por specs). Detalle en `docs/testing.md` y `docs/LOG.md`.
