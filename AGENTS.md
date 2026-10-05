@@ -67,9 +67,10 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
   `cooldown_retryable` → motivo **`'ads_cooldown'` SIN reembolsar**, sin setear
   `refunded` y sin pedir el anuncio (UI: `RESULT_AD_COOLDOWN`, botones **encendidos** —
   reintento real a los 60 s; ese cooldown puede ser autoinfligido por la cancelación del
-  jugador); `sdk_unavailable`/`adblock`/`cooldown_no_fill` → reembolso único `costOf(id)`
-  con resultado `'refunded'` que bloquea todo reclamo posterior. `ad_failed` **no**
-  reembolsa y sigue reintentable.
+  jugador); `sdk_unavailable`/`adblock`/`ads_disabled`/`cooldown_no_fill` → reembolso único
+  `costOf(id)` con resultado `'refunded'` que bloquea todo reclamo posterior. `ad_failed`
+  **no** reembolsa y sigue reintentable — salvo que ese fallo haya dejado el estado
+  permanente (`ads_disabled`/`adblock`): ahí se reembolsa en el MISMO intento (ADR-009).
 
 ## 5. Eventos
 

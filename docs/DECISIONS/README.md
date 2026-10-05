@@ -18,3 +18,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [006](ADR-006-reembolso-por-fallo-ambiental.md) | Reembolso por fallo ambiental al consumir una mejora de ads | Aceptada |
 | [007](ADR-007-anuncio-propio-countdown-y-adapter-por-vite.md) | Anuncio propio (countdown) + adapter de ads por `VITE_ADS` | Aceptada |
 | [008](ADR-008-vite-fullscreen-boton-propio.md) | Botón de pantalla completo propio sujeto al modo de ads (`VITE_FULLSCREEN`) | Aceptada |
+| [009](ADR-009-ads-disabled-estado-permanente.md) | `ads_disabled`: dos adErrors de CrazyGames son estados permanentes (política 2 en el mismo intento) | Aceptada |

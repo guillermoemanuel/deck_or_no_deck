@@ -14,12 +14,14 @@ export type AdType = 'rewarded' | 'midgame';
  * Estado del rewarded ad AHORA, con el motivo que le interesa a la
  * política de reembolso (ver ICrazyGamesService.rewardedAdStatus).
  * El cooldown de 60 s SIEMPRE vence (no es permanente); los únicos
- * estados permanentes en la sesión son `sdk_unavailable` y `adblock`.
+ * estados permanentes en la sesión son `sdk_unavailable`, `adblock` y
+ * `ads_disabled` (Basic Launch, ADR-009).
  */
 export type RewardedAdStatus =
   | 'available'
   | 'sdk_unavailable'
   | 'adblock'
+  | 'ads_disabled'
   | 'cooldown_no_fill'
   | 'cooldown_retryable';
 
@@ -51,8 +53,14 @@ export interface ICrazyGamesService {
    * se puede). A diferencia del booleano, el motivo determina la
    * POLÍTICA de reembolso al consumir una mejora comprada (ADR-006):
    *
-   * - `sdk_unavailable` / `adblock` → permanente en la sesión: se
-   *   reembolsa (el jugador nunca podría recibir el efecto).
+   * - `sdk_unavailable` / `adblock` / `ads_disabled` → permanente en la
+   *   sesión: se reembolsa (el jugador nunca podría recibir el efecto).
+   *   `ads_disabled` es Basic Launch: el SDK reporta los rewarded con
+   *   adError `{code: 'adsDisabledBasicLaunch'}` y el adapter lo cachea
+   *   como estado definitivo (ADR-009) — sin esto caía como un fallo
+   *   genérico reintentable y el jugador pagaba monedas por un botón
+   *   que nunca funciona (criterio de rechazo QA de la auditoría
+   *   CG-PUB-003).
    * - `cooldown_no_fill` → el cooldown de 60 s viene de un fallo
    *   AMBIENTAL (sin fill): se reembolsa — reintentar no promete nada.
    * - `cooldown_retryable` → el cooldown viene de cualquier otro fallo,

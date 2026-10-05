@@ -136,11 +136,19 @@ impl `DefaultEnergyDrainRule` en el mismo archivo; los specs definen doubles inl
 
 Contrato clave: **`ICrazyGamesService` retorna `AdResult`, nunca lanza excepciones** — y
 **`rewardedAdStatus()`** (motivo `'available' | 'sdk_unavailable' | 'adblock' |
-'cooldown_no_fill' | 'cooldown_retryable'`) es la fuente de la política de reembolso al
-consumir (2 grupos, ADR-006); `isRewardedAdAvailable()` queda como azúcar.
+'ads_disabled' | 'cooldown_no_fill' | 'cooldown_retryable'`) es la fuente de la política de
+reembolso al consumir (2 grupos, ADR-006); `isRewardedAdAvailable()` queda como azúcar.
+**Orden del status: lo permanente manda sobre el cooldown de 60 s**
+(`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown → `available`). ADR-009:
+`ads_disabled` nace del adError `{code: 'adsDisabledBasicLaunch'}` de **Basic Launch** y
+`adblock` también puede encenderse desde el adError `{code: 'adblock'}` (ya no solo con
+`hasAdblock()` en el init) — `CrazyGamesService.notePermanentError()` lo cachea **antes de
+`settle()`**; los use-cases re-leen el motivo tras un rewarded fallido y aplican la
+política 2 **en ese mismo intento**.
 Los fallos de anuncio son flujo normal (`user_cancelled | sdk_unavailable | ad_unavailable | error`).
 El adapter propio (`VITE_ADS=portal`) solo produce `available | cooldown_*` en su status —
-nunca `adblock` ni `sdk_unavailable` (sin ad network no hay qué bloquear); su cancelación por ✕
+nunca `adblock`, `ads_disabled` ni `sdk_unavailable` (sin ad network no hay qué bloquear);
+su cancelación por ✕
 sí emite `user_cancelled` honesto (motivo "muerto" resuelto, R5 de la auditoría previa).
 
 ---

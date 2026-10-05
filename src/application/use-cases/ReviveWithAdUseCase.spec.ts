@@ -512,4 +512,60 @@ describe('ReviveWithAdUseCase', () => {
     // El punto central del bug: el anuncio NO se vuelve a mostrar la segunda vez.
     expect(crazyGamesService.rewardedAdCallCount).toBe(1);
   });
+
+  // CG-PUB-003 (auditoría de publicación 2026-10-04): Basic Launch →
+  // adError {code: 'adsDisabledBasicLaunch'} → el adapter lo cachea como
+  // estado PERMANENTE 'ads_disabled' (ADR-009). Si el motivo ya es
+  // permanente ANTES de consumir, entra directo en la POLÍTICA 2.
+  it('con rewardedAdStatus() "ads_disabled" el revive reembolsa costOf("revive") exactamente una vez (política 2)', async () => {
+    const session = buildLostSession();
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedStatus('ads_disabled');
+    const eventBus = new SimpleEventEmitter<GameEvent>();
+    const { repository, progressionManager } = buildProgression(10000);
+    const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus, progressionManager);
+
+    // Simula la compra previa en la Tienda: el monto sale del catálogo.
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('revive'))).toBe(true);
+
+    const result = await useCase.execute();
+
+    expect(result).toEqual({ revived: false, reason: 'refunded' });
+    // El saldo vuelve EXACTAMENTE al anterior a la compra: ni un moneda de más.
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    // Nunca se pide el anuncio: el estado ya lo dice todo.
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+    expect(session.getStatus()).toBe('lost');
+  });
+
+  // El caso REAL de CG-PUB-003: al consumir el status todavía era
+  // 'available' (recién el adError del SDK lo vuelve permanente). Antes
+  // del fix el resultado era 'ad_failed' SIN reembolso — el jugador
+  // pagaba monedas por un botón que nunca iba a funcionar. Re-evaluar el
+  // motivo DESPUÉS del fallo y entrar en la política 2 es lo que cierra
+  // el criterio de rechazo QA.
+  it.each(['ads_disabled', 'adblock'] as const)(
+    'si el adError del SDK vuelve el estado "%s" al consumir, el PRIMER intento ya reembolsa (no "ad_failed")',
+    async (statusAfterFailure) => {
+      const session = buildLostSession();
+      const crazyGamesService = new FakeCrazyGamesService();
+      crazyGamesService.setNextAdResult({ success: false, reason: 'error' });
+      crazyGamesService.setRewardedStatusAfterNextAd(statusAfterFailure);
+      const eventBus = new SimpleEventEmitter<GameEvent>();
+      const { repository, progressionManager } = buildProgression(10000);
+      const useCase = new ReviveWithAdUseCase(session, crazyGamesService, eventBus, progressionManager);
+
+      const balanceBeforePurchase = repository.getCoins();
+      expect(progressionManager.spendCoins(costOf('revive'))).toBe(true);
+
+      const result = await useCase.execute();
+
+      expect(result).toEqual({ revived: false, reason: 'refunded' });
+      expect(repository.getCoins()).toBe(balanceBeforePurchase);
+      // El anuncio SÍ se pidió (falló en vuelo): el reembolso es post-fallo.
+      expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+      expect(session.getStatus()).toBe('lost');
+    }
+  );
 });

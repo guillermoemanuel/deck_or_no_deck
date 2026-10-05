@@ -4,10 +4,10 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-04 (cierre de la **unidad A1 — ADR-008**, `VITE_FULLSCREEN`;
-> los cierres previos del mismo día fueron la enmienda ADR-007 y la unidad ADR-007
+> Fecha del censo: 2026-10-04 (cierre de la **unidad A3 — ADR-009**, `ads_disabled`;
+> el mismo día cerraron la unidad A1/ADR-008, la enmienda ADR-007 y la unidad ADR-007
 > del 2026-10-02) ·
-> **162 archivos TS · 23.775 líneas · 117 fuente + 45 specs**
+> **162 archivos TS · 24.065 líneas · 117 fuente + 45 specs**
 > (LOC = conteo de líneas por archivo, **incluyen specs** — en los cierres previos no corrieron
 > `cloc` ni `wc -l` (el total de entonces se derivó del censo previo **21.806** + deltas uno a
 > uno) —, mientras el cierre A1 del 2026-10-04 sí midió con `wc -l`; el detalle histórico: **+1.403** de los 10 archivos nuevos + **119** de
@@ -37,11 +37,21 @@
 > Fuera del censo TS: `.opencode/agents/ads-adapter.md` 74 L y
 > `.opencode/commands/ads-adapter.md` 16 L (la tool `/ads-adapter` ahora escribe el par
 > de envs `VITE_ADS` + `VITE_FULLSCREEN`).
+> **Cierre A3 2026-10-04 (ADR-009 — `ads_disabled` como estado permanente, CG-PUB-003):**
+> **sin archivos nuevos** (mismo censo de 162 archivos / 45 specs); crecieron **9 archivos
+> → +290 L** (`git diff --numstat`, medido con `wc -l`): `domain/ports/ICrazyGamesService.ts`
+> 78→**86** (+8; total `ports/*.ts` 317→**325**), `infrastructure/services/CrazyGamesService.ts`
+> 408→**461** (+53) + `.spec.ts` 252→**294** (+42), `application/use-cases/ReviveWithAdUseCase.ts`
+> 143→**168** (+25) + `.spec.ts` 515→**571** (+56), `MultiplyRewardUseCase.ts` 130→**154**
+> (+24) + `.spec.ts` 392→**439** (+47), `ListAvailableUpgradesUseCase.spec.ts` 74→**91**
+> (+17), `infrastructure/services/testing/FakeCrazyGamesService.ts` 111→**129** (+18) →
+> **162 archivos / 45 specs / 24.065 L**; por capa: `domain/` **4.145** (+8),
+> `application/` **3.433** (+169), `infrastructure/` **3.405** (+113).
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.137 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.145 líneas · 16 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -74,22 +84,22 @@
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 317 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso, ADR-006). |
+| `ports/*.ts` (8 archivos) | 325 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"). |
 
 ---
 
-## `src/application/` — 3.264 líneas · 12 specs · casi toda verde 🟢
+## `src/application/` — 3.433 líneas · 12 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
 | `use-cases/PurchaseSessionUpgradeUseCase.ts` | 184 | ✅ 438 L | Cobra + aplica efecto; delega en `SessionUpgrades` (`isOwned`/`canPurchase`) — Fase 4: los 2 switches privados de reglas se movieron al dominio, queda solo el switch de efectos/eventos. **Guard de ads**: 4.º parámetro `ICrazyGamesService`; rechaza `ads_unavailable` sin `spendCoins` cuando `requiresRewardedAd` y no hay rewarded disponible (después de `conflicting_upgrade`/`not_applicable`). **Exhaustividad**: guarda `const exhaustive: never = upgradeId` al final de `applyEffect` (2026-10-01) + spec `it.each` que recorre los ids del catálogo (36 tests). 🟡 |
 | `use-cases/OpenCardUseCase.ts` | 94 | ✅ 288 L | Cascada de prioridades de outcome. **Orden es contrato.** Penalidad de derrota desde `GamePenalties`. 🟡 |
-| `use-cases/ReviveWithAdUseCase.ts` | 143 | ✅ 515 L | Orden: consumir revive → revivir. Política por **`rewardedAdStatus()`** (ADR-006 enmendado): `sdk_unavailable`/`adblock`/`cooldown_no_fill` → reembolso único (`'refunded'`, invariante XOR); `cooldown_retryable` → `'ads_cooldown'` sin reembolso y sin tocar `refunded`; sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. 🟡 |
-| `use-cases/MultiplyRewardUseCase.ts` | 130 | ✅ 392 L | Flag `isProcessing` sincrónico (carrera de doble click). Misma política por **`rewardedAdStatus()`** (2 grupos, ADR-006); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
+| `use-cases/ReviveWithAdUseCase.ts` | 168 | ✅ 571 L | Orden: consumir revive → revivir. Política por **`rewardedAdStatus()`** (ADR-006 enmendado + ADR-009): `sdk_unavailable`/`adblock`/`ads_disabled`/`cooldown_no_fill` → reembolso único (`'refunded'`, invariante XOR, vía `policyTwoRefund()`); `cooldown_retryable` → `'ads_cooldown'` sin reembolso y sin tocar `refunded`; sin puerto de progresión devuelve el motivo real `'sdk_unavailable'`. **Tras un rewarded fallido re-evalúa el motivo**: si quedó permanente reembolsa en el MISMO intento. 🟡 |
+| `use-cases/MultiplyRewardUseCase.ts` | 154 | ✅ 439 L | Flag `isProcessing` sincrónico (carrera de doble click). Misma política por **`rewardedAdStatus()`** (2 grupos, ADR-006 + ADR-009: `ads_disabled` pre-consumo y re-evaluación post-fallo → `policyTwoRefund()`); **precondición**: no recibe la sesión, la tenencia de la mejora la garantiza presentación (JSDoc). |
 | `use-cases/ResolveDealUseCase.ts` | 40 | ✅ | Emite `DealAccepted` **y** `GameWon` (ver ADR-001). |
 | `use-cases/SwapFinalSecretCardUseCase.ts` | 37 | ✅ | — |
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |
-| `use-cases/ListAvailableUpgradesUseCase.ts` | 29 | ✅ 74 L | **Qué muestra la tienda**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. Su contraparte de compra es `PurchaseSessionUpgradeUseCase` (ver arriba). |
+| `use-cases/ListAvailableUpgradesUseCase.ts` | 29 | ✅ 91 L | **Qué muestra la tienda**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. Con ADR-009 basta que `rewardedAdStatus()` sea `ads_disabled`: el predicado vuelve `false` solo y **ocultan/filtran las 3 filas de rewarded** (spec nuevo: 5 filas). Su contraparte de compra es `PurchaseSessionUpgradeUseCase` (ver arriba). |
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
@@ -99,11 +109,11 @@
 
 ---
 
-## `src/infrastructure/` — 3.292 líneas · 8 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 3.405 líneas · 8 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `services/CrazyGamesService.ts` | 408 | ✅ 252 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. |
+| `services/CrazyGamesService.ts` | 461 | ✅ 294 L | Init memoizado, ads single-flight, timeouts 15 s/120 s, `AdResult` nunca lanza. **`rewardedAdStatus()`** clasifica el cooldown por MOTIVO (`cooldown_no_fill` vs `cooldown_retryable`) — define la política de reembolso (ADR-006). **Desde ADR-009:** `notePermanentError()` (llamada desde el `adError` **antes de `settle()`) cachea `adsDisabledBasicLaunch` → flag `adsDisabled` y `{code:'adblock'}` → `adblockDetected`**; el orden del status pone lo permanente primero (`sdk_unavailable` → `adblock` → `ads_disabled` → cooldown). **Desde ADR-007:** el cooldown de 60 s lo delega en `RewardCooldownTracker` (fuente única) y el `<script>` del SDK ya no lo pone `index.html` — la inyección es dinámica desde `main.ts`, solo en modo `crazygames`. 🟡 |
 | `services/OwnRewardedAdService.ts` | 310 | ✅ 338 L | **Adapter propio** (ADR-007, `VITE_ADS=portal`): pide el overlay al presenter inyectado (`AdOverlayScene`, desde presentation); status solo `available`/`cooldown_*` (nunca `adblock`/`sdk_unavailable`); ✕ → `user_cancelled` honesto → `cooldown_retryable`; **watchdog 15 s** (presenter colgado → `'error'` retryable y resultado tardío descartado); midgame sin tocar el tracker; `getUserLocale()` → `navigator.language`; telemetría no-op. |
 | `services/RewardCooldownTracker.ts` | 86 | ✅ 101 L | **Fuente única del cooldown de 60 s** con motivo (`no_fill`/`other` → `cooldown_no_fill`/`cooldown_retryable`), extraído de `CrazyGamesService` para que los 2 adapters produzcan estados idénticos (ADR-006/007). Reloj inyectable; nunca lanza. 🟢 |
 | `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
@@ -117,7 +127,7 @@
 | `services/CryptoRandomProvider.ts` | 57 | ❌ | Muestreo por rechazo con `crypto.getRandomValues`. |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
 | `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
-| `testing/*` (6 archivos) | 259 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus`). |
+| `testing/*` (5 archivos · 6 fakes) | 277 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case). |
 
 ---
 

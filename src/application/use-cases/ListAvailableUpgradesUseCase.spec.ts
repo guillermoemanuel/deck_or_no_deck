@@ -71,4 +71,21 @@ describe('ListAvailableUpgradesUseCase', () => {
     expect(idsOf(useCase.execute())).toEqual(SESSION_UPGRADE_CATALOG.map(u => u.id));
     expect(useCase.execute()).toHaveLength(8);
   });
+
+  // CG-PUB-003: 'ads_disabled' es el estado que reporta el adapter en
+  // Basic Launch — las 3 filas dependientes de rewarded tienen que
+  // desaparecer igual que con cualquier otro motivo no-disponible, o QA
+  // rechaza botones de rewarded sin efecto.
+  it('with rewardedAdStatus() "ads_disabled" the 3 rewarded rows disappear (5 left)', () => {
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedStatus('ads_disabled');
+    const useCase = new ListAvailableUpgradesUseCase(crazyGamesService);
+
+    const ids = idsOf(useCase.execute());
+
+    expect(ids).toHaveLength(5);
+    expect(ids).not.toContain('double_reward');
+    expect(ids).not.toContain('triple_reward');
+    expect(ids).not.toContain('revive');
+  });
 });

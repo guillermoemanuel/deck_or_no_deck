@@ -249,4 +249,46 @@ describe('CrazyGamesService — ciclo de vida de anuncios', () => {
     expect(service.rewardedAdStatus()).toBe('available');
     expect(service.isRewardedAdAvailable()).toBe(true);
   });
+
+  // CG-PUB-003 (auditoría de publicación 2026-10-04): en Basic Launch el
+  // SDK reporta los rewarded con adError {code: 'adsDisabledBasicLaunch'}.
+  // Sin este mapping el error caía como 'error' genérico → cooldown
+  // reintentable → el jugador perdía monedas cada 60 s en un botón que
+  // nunca funciona (criterio de rechazo QA: "no rewarded buttons without
+  // effect"). El estado nuevo es PERMANENTE en la sesión, igual que
+  // 'adblock'/'sdk_unavailable' — por eso manda sobre el cooldown.
+  it('un adError adsDisabledBasicLaunch deja rewardedAdStatus() en "ads_disabled" PERMANENTE (no vuelve con el cooldown)', async () => {
+    const sdk = installFakeSdk();
+    const service = await createReadyService();
+
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'adsDisabledBasicLaunch', message: 'Ads are disabled' });
+
+    await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+    expect(service.rewardedAdStatus()).toBe('ads_disabled');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+
+    // Ni siquiera vencido el cooldown de 60 s: el estado no caduca.
+    jest.advanceTimersByTime(60_000);
+    expect(service.rewardedAdStatus()).toBe('ads_disabled');
+  });
+
+  // hasAdblock() puede no detectar la extensión (corre al init, antes de
+  // que exista) y el SDK también avisa con adError {code: 'adblock'} al
+  // pedir el anuncio. Sin mapearlo caía en 'error' → cooldown
+  // reintentable → SIN reembolso, cuando ADR-006 trata el adblock como
+  // PERMANENCIA, que SÍ reembolsa al consumir.
+  it('un adError {code: "adblock"} setea adblock permanente aunque hasAdblock() lo haya negado', async () => {
+    const sdk = installFakeSdk(false); // hasAdblock() dice "sin adblock"
+    const service = await createReadyService();
+
+    const pending = service.showRewardedAd();
+    await flushMicrotasks();
+    sdk.lastCallbacks().adError({ code: 'adblock', message: 'Adblock detected' });
+
+    await expect(pending).resolves.toEqual({ success: false, reason: 'error' });
+    expect(service.rewardedAdStatus()).toBe('adblock');
+    expect(service.isRewardedAdAvailable()).toBe(false);
+  });
 });

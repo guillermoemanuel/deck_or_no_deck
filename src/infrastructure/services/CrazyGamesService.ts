@@ -95,6 +95,11 @@ export class CrazyGamesService implements ICrazyGamesService {
   private ready = false;
   private initPromise: Promise<void> | null = null;
   private adblockDetected = false;
+  /**
+   * Ver notePermanentError(): cachea el adError del SDK
+   * `{code: 'adsDisabledBasicLaunch'}` de Basic Launch (ADR-009).
+   */
+  private adsDisabled = false;
   private adInProgress = false;
   /**
    * Cooldown de 60 s del rewarded y el motivo del último fallo, extraídos
@@ -170,9 +175,10 @@ export class CrazyGamesService implements ICrazyGamesService {
   /**
    * Motivo por el que hoy NO se puede ofrecer un rewarded (o
    * `'available'`). El orden importa y es contrato del puerto:
-   * lo permanente (sin SDK, adblock) manda sobre el cooldown de 60 s,
-   * porque solo eso define si al consumir una mejora se reembolsa
-   * (política ADR-006 — ver ICrazyGamesService.rewardedAdStatus).
+   * lo permanente (sin SDK, adblock, ads deshabilitados por Basic
+   * Launch) manda sobre el cooldown de 60 s, porque solo eso define si
+   * al consumir una mejora se reembolsa (política ADR-006 — ver
+   * ICrazyGamesService.rewardedAdStatus).
    */
   rewardedAdStatus(): RewardedAdStatus {
     if (!this.isAvailable()) {
@@ -180,6 +186,9 @@ export class CrazyGamesService implements ICrazyGamesService {
     }
     if (this.adblockDetected) {
       return 'adblock';
+    }
+    if (this.adsDisabled) {
+      return 'ads_disabled';
     }
     const cooldown = this.rewardCooldown.cooldownState();
     if (cooldown !== null) {
@@ -295,12 +304,52 @@ export class CrazyGamesService implements ICrazyGamesService {
     });
   }
 
-  private static isUnfilled(error: unknown): boolean {
+  /**
+   * Lee el código del adError del SDK: el mismo dato puede llegar en
+   * `code` o en `reason` (tolerancia heredada de cómo se detectaba
+   * 'unfilled'). Devuelve `null` si no hay ningún código legible.
+   */
+  private static errorCodeOf(error: unknown): string | null {
     if (typeof error !== 'object' || error === null) {
-      return false;
+      return null;
     }
     const data = error as { code?: unknown; reason?: unknown };
-    return data.code === 'unfilled' || data.reason === 'unfilled';
+    if (typeof data.code === 'string' && data.code !== '') {
+      return data.code;
+    }
+    if (typeof data.reason === 'string' && data.reason !== '') {
+      return data.reason;
+    }
+    return null;
+  }
+
+  private static isUnfilled(error: unknown): boolean {
+    return CrazyGamesService.errorCodeOf(error) === 'unfilled';
+  }
+
+  /**
+   * CG-PUB-003 (auditoría de publicación 2026-10-04): dos códigos de
+   * adError del SDK son ESTADOS PERMANENTES, no fallos genéricos:
+   *
+   * - `adsDisabledBasicLaunch`: Basic Launch deshabilita los rewarded.
+   *   Sin cachearlo cada intento se cobraba y fallaba como 'error'
+   *   reintentable → el jugador perdía monedas cada 60 s en un botón que
+   *   nunca funciona (criterio de rechazo QA "no rewarded buttons
+   *   without effect"). Cachearlo hace que `rewardedAdStatus()` lo
+   *   reporte como `'ads_disabled'`: filas de la tienda ocultas +
+   *   política 2 de reembolso al consumir (ADR-009).
+   * - `adblock`: `hasAdblock()` puede no detectar la extensión (corre en
+   *   `init`, antes de que exista) y el SDK avisa recién acá. Mapearlo a
+   *   `adblockDetected` respeta ADR-006: permanencia → reembolsa — antes
+   *   caía en 'error' → cooldown reintentable → SIN reembolso.
+   */
+  private notePermanentError(error: unknown): void {
+    const code = CrazyGamesService.errorCodeOf(error);
+    if (code === 'adsDisabledBasicLaunch') {
+      this.adsDisabled = true;
+    } else if (code === 'adblock') {
+      this.adblockDetected = true;
+    }
   }
 
   private async requestAd(type: AdType): Promise<AdResult> {
@@ -392,6 +441,10 @@ export class CrazyGamesService implements ICrazyGamesService {
           adError: (error: unknown) => {
             console.warn('[CrazyGamesService] Ad error received from SDK:', error);
             closeLifecycle();
+            // ANTES de settle: el settle de rewarded arranca el cooldown
+            // de 60 s, y el status nuevo ('ads_disabled'/'adblock') tiene
+            // que mandar sobre ese cooldown — ver notePermanentError.
+            this.notePermanentError(error);
             settle({
               success: false,
               reason: CrazyGamesService.isUnfilled(error) ? 'ad_unavailable' : 'error'

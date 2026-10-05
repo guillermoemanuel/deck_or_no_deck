@@ -15,6 +15,8 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
   private available = true;
   /** Estado configurable de rewardedAdStatus() — el test simula adblock, cooldown, etc. */
   private rewardedStatus: RewardedAdStatus = 'available';
+  /** Ver setRewardedStatusAfterNextAd(). */
+  private statusAfterNextAd: RewardedAdStatus | null = null;
   private readonly lifecycleListeners = new Set<AdLifecycleListener>();
   private nextAdResult: AdResult = { success: true };
   // `null` por defecto: mismo comportamiento que el servicio real cuando
@@ -84,12 +86,28 @@ export class FakeCrazyGamesService implements ICrazyGamesService {
     this.nextAdResult = result;
   }
 
+  /**
+   * Simula el SDK REAL de CG-PUB-003: un adError puede VOLVERSE
+   * PERMANENTE al fallar (`adsDisabledBasicLaunch` o `adblock` llegan
+   * cuando `showRewardedAd()` ya estaba en vuelo, así que el status
+   * PREVIO al consumo era 'available'). Si se setea y el próximo
+   * rewarded FALLA, el fake pasa el estado antes de resolver, igual que
+   * el adapter real (adError → estado permanente → status nuevo).
+   * Solo aplica cuando `nextAdResult.success === false`.
+   */
+  setRewardedStatusAfterNextAd(status: RewardedAdStatus): void {
+    this.statusAfterNextAd = status;
+  }
+
   isAvailable(): boolean {
     return this.available;
   }
 
   async showRewardedAd(): Promise<AdResult> {
     this.rewardedAdCallCount += 1;
+    if (!this.nextAdResult.success && this.statusAfterNextAd !== null) {
+      this.rewardedStatus = this.statusAfterNextAd;
+    }
     return this.nextAdResult;
   }
 

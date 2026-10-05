@@ -7,6 +7,76 @@
 
 ---
 
+## 2026-10-04 · Publicación A3 — CG-PUB-003: `ads_disabled` como estado permanente (ADR-009)
+
+**Qué pasó (hallazgo de la auditoría de publicación 2026-10-04, `CG-PUB-003`):** en
+**Basic Launch** el SDK de CrazyGames reporta cada rewarded con
+`adError {code: 'adsDisabledBasicLaunch'}` y el repo **no mapeaba** ese código **ni**
+`{code: 'adblock'}` → ambos caían en `reason: 'error'` genérico → `ad_failed` + cooldown
+`cooldown_retryable` = **POLÍTICA 1 de ADR-006 (sin reembolso)** para un fallo que nunca
+se cura. Resultado: en la Tienda el jugador **pagaba monedas** por
+Duplicar/Triplicar/Revivir y cada 60 s perdía más intentos en un botón que **nunca
+funciona** — criterio de rechazo QA *"no rewarded buttons without effect"* — y el dinero
+quedaba trabado (`ad_failed` no reembolsa por diseño). Agravante: `hasAdblock()` corre **en
+el init** (antes de que exista la extensión) y puede no detectarla, así que el único aviso
+disponible — el `adError` del SDK — se descartaba.
+
+**Fix (`src/`, red→verde):**
+1. **Dominio — puerto `ICrazyGamesService.ts`:** nuevo motivo permanente
+   **`'ads_disabled'`** en la unión `RewardedAdStatus`, documentado en su JSDoc y en el de
+   `rewardedAdStatus()`: los permanentes son `sdk_unavailable`, `adblock`, `ads_disabled`.
+2. **Infra — `CrazyGamesService.ts`:** campo `adsDisabled`; helper `errorCodeOf()` (lee
+   `code` o `reason`, tolerancia heredada — `isUnfilled()` ahora lo usa);
+   `notePermanentError(error)` invocado desde el `adError` **ANTES de `settle()`**:
+   `adsDisabledBasicLaunch` → `adsDisabled = true`; `adblock` → `adblockDetected = true`.
+   `rewardedAdStatus()` orden: `sdk_unavailable` → `adblock` → **`ads_disabled`** →
+   cooldown → `available` (**lo permanente manda sobre el cooldown de 60 s**).
+3. **Aplicación:** `ReviveWithAdUseCase` y `MultiplyRewardUseCase` — bloque de POLÍTICA 2
+   extraído a `policyTwoRefund(...)`; `case 'ads_disabled'` pre-consumo (junto a
+   `sdk_unavailable`/`adblock`/`cooldown_no_fill`); y **clave**: después de un
+   `showRewardedAd()` fallido **re-evalúan `rewardedAdStatus()`** — si el adError volvió el
+   estado permanente (`'ads_disabled'`/`'adblock'`) aplican la política 2 **YA** (reembolso
+   exacto `costOf(id)`) en vez de `'ad_failed'` sin reembolso. Invariante **reembolso XOR
+   efecto intacto**. `ListAvailableUpgradesUseCase` y el guard de
+   `PurchaseSessionUpgradeUseCase` **sin cambios**: `isRewardedAdAvailable()` vuelve
+   `false` solo → ocultan/filtran las 3 filas de rewarded.
+4. **Fake (testing):** `FakeCrazyGamesService.setRewardedStatusAfterNextAd(status)` —
+   simula el SDK real: si el próximo rewarded falla, el estado pasa a ser permanente en
+   vuelo.
+
+**Specs red→verde (9 tests nuevos):** `CrazyGamesService.spec.ts` **+2** (rojo
+`Expected: "ads_disabled"/"adblock", Received: "cooldown_retryable"`; además afirma que
+**no** vuelve con el cooldown a los 60 s) · `ReviveWithAdUseCase.spec.ts` **+3** (rojo:
+`ad_failed` sin reembolso) · `MultiplyRewardUseCase.spec.ts` **+3** ·
+`ListAvailableUpgradesUseCase.spec.ts` **+1** (`setRewardedStatus('ads_disabled')` → 5
+filas, sin double/triple/revive).
+
+**Docs (tarea de esta sesión, `memory-keeper`):** `docs/DECISIONS/ADR-009-ads-disabled-estado-permanente.md`
++ fila `009` en `docs/DECISIONS/README.md`, `docs/MAP.md` (censo → **162 archivos / 45
+specs / 24.065 L**; deltas: `ICrazyGamesService.ts` 78→86 [ports 317→325],
+`CrazyGamesService.ts` 408→**461** + spec 252→**294**, `ReviveWithAdUseCase.ts` 143→**168**
++ spec 515→**571**, `MultiplyRewardUseCase.ts` 130→**154** + spec 392→**439**,
+`ListAvailableUpgradesUseCase.spec.ts` 74→**91**, `FakeCrazyGamesService.ts` 111→**129**
+[`testing/*` 259→277]), `docs/testing.md` (45/**522**, +9 desglosados por spec,
+`FakeCrazyGamesService` con `setRewardedStatusAfterNextAd`), `docs/ARCHITECTURE.md` §5
+(unión `rewardedAdStatus()` con `ads_disabled` + adapter propio nunca lo produce),
+`AGENTS.md` §4 (el grupo permanente de la política 2 ahora incluye `ads_disabled` —
+enumeración desactualizada por el fix), esta entrada.
+
+**Cómo se verificó:** gates en verde (corridos por la unidad, no por esta sesión de docs) —
+`npx jest` 4 specs (62 tests) ✓ con rojo→verde de los 9 · `npm run typecheck` 0 ✓ ·
+`npm run lint` 0 ✓ · `npm test` → **45 suites / 522 tests** (base 45/513) ✓ ·
+`npm run build` ✓ (6,5 s; el warning de chunk >750 kB de Phaser es preexistente).
+
+**Qué quedó pendiente:** **A4** (README + `package.json` `description` con el nombre
+canónico **"Deck or No Deck"**) · **APS en Developer Portal** (acción fuera del repo —
+decisión del usuario) · **Sprint B** de la auditoría (`CG-MON-001`, `CG-MON-002`,
+`CG-MON-005`, `CG-MON-006`) · **smoke en modo `crazygames` con el QA Tool** (último smoke
+de ese modo: 2026-10-01) · **Vite 8** (decisión del usuario) · **`dist.zip`** dejado como
+está (decisión del usuario).
+
+---
+
 ## 2026-10-04 · Publicación A1 — CG-PUB-002: botón de fullscreen propio fuera de CrazyGames (ADR-008)
 
 **Qué pasó (hallazgo de la auditoría de publicación 2026-10-04, P0 `CG-PUB-002`):**

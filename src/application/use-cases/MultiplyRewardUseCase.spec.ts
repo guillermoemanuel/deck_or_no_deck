@@ -389,4 +389,51 @@ describe('MultiplyRewardUseCase', () => {
 
     expect(result).toMatchObject({ success: true, newTotal: 1500 });
   });
+
+  // CG-PUB-003 (auditoría de publicación 2026-10-04): 'ads_disabled' es
+  // el estado permanente que reporta el adapter en Basic Launch — debe
+  // entrar en la POLÍTICA 2 (reembolso) igual que 'adblock'/'sdk_unavailable'.
+  it('con rewardedAdStatus() "ads_disabled" el reclamo reembolsa costOf(id) exactamente una vez (política 2)', async () => {
+    const repository = new FakeProgressionRepository();
+    repository.seedCoins(10000);
+    const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+    const crazyGamesService = new FakeCrazyGamesService();
+    crazyGamesService.setRewardedStatus('ads_disabled');
+    const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+    // Simula la compra previa en la Tienda: el monto sale del catálogo.
+    const balanceBeforePurchase = repository.getCoins();
+    expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+
+    const result = await useCase.execute(2);
+
+    expect(result).toEqual({ success: false, reason: 'refunded' });
+    expect(repository.getCoins()).toBe(balanceBeforePurchase);
+    expect(crazyGamesService.rewardedAdCallCount).toBe(0);
+  });
+
+  // El caso REAL de CG-PUB-003: el status al consumir era 'available' y
+  // el adError del SDK lo vuelve permanente EN VUELO. Antes del fix era
+  // 'ad_failed' sin reembolso → monedas perdidas por un botón muerto.
+  it.each(['ads_disabled', 'adblock'] as const)(
+    'si el adError del SDK vuelve el estado "%s" al consumir, el PRIMER intento ya reembolsa (no "ad_failed")',
+    async (statusAfterFailure) => {
+      const repository = new FakeProgressionRepository();
+      repository.seedCoins(10000);
+      const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
+      const crazyGamesService = new FakeCrazyGamesService();
+      crazyGamesService.setNextAdResult({ success: false, reason: 'error' });
+      crazyGamesService.setRewardedStatusAfterNextAd(statusAfterFailure);
+      const useCase = new MultiplyRewardUseCase(1000, crazyGamesService, progressionManager);
+
+      const balanceBeforePurchase = repository.getCoins();
+      expect(progressionManager.spendCoins(costOf('double_reward'))).toBe(true);
+
+      const result = await useCase.execute(2);
+
+      expect(result).toEqual({ success: false, reason: 'refunded' });
+      expect(repository.getCoins()).toBe(balanceBeforePurchase);
+      expect(crazyGamesService.rewardedAdCallCount).toBe(1);
+    }
+  );
 });

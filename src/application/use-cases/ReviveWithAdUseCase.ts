@@ -74,37 +74,32 @@ export class ReviveWithAdUseCase {
         return { revived: false, reason: 'ads_cooldown' };
       case 'sdk_unavailable':
       case 'adblock':
-      case 'cooldown_no_fill': {
-        // POLÍTICA 2 — PERMANENCIA en la sesión (SDK entero ausente: Basic
-        // Launch sin ads o el script del SDK que nunca cargó; ADBLOCK
-        // DETECTADO) o cooldown AMBIENTAL sin FILL: el reintento no promete
-        // nada y el dinero quedaría trabado.
-        //
-        // Sin puerto de progresión no hay forma de acreditar el reembolso:
-        // se devuelve el motivo REAL `sdk_unavailable` (único de esta
-        // política disponible en la unión) en vez de un 'refunded' que no
-        // cumpliría — el jugador queda como antes, con la jugada
-        // reintentable, y no se le promete una devolución que no llegó.
-        if (!this.progressionService) {
-          return { revived: false, reason: 'sdk_unavailable' };
-        }
-
-        // BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la
-        // Tienda y NO hay anuncio rewarded para consumirla — sin esto el
-        // jugador se iba de la pantalla con las monedas perdidas y sin
-        // revivir. Se reembolsa el costo del catálogo UNA sola vez y
-        // `refunded` (chequeado arriba) bloquea el revive posterior:
-        // invariante reembolso XOR efecto, nunca ambos (cobrar devuelta y
-        // revivir igual cuando vuelva el anuncio sería explotable).
-        this.progressionService.awardGameplayCoins(costOf('revive'));
-        this.refunded = true;
-        return { revived: false, reason: 'refunded' };
-      }
+      case 'ads_disabled':
+      case 'cooldown_no_fill':
+        // POLÍTICA 2 — PERMANENCIA en la sesión (SDK entero ausente: el
+        // script del SDK que nunca cargó; ADBLOCK DETECTADO; ADS
+        // DESHABILITADOS por Basic Launch, ADR-009) o cooldown AMBIENTAL
+        // sin FILL: el reintento no promete nada y el dinero quedaría
+        // trabado.
+        return this.policyTwoRefund();
     }
 
     const adResult = await this.crazyGamesService.showRewardedAd();
 
     if (!adResult.success) {
+      // CG-PUB-003: el adError del SDK puede VOLVERSE PERMANENTE justo al
+      // fallar ('adsDisabledBasicLaunch' → 'ads_disabled', o un 'adblock'
+      // que hasAdblock() no detectó), cuando el status previo seguía en
+      // 'available'. Re-evaluamos el motivo DESPUÉS del fallo: si pasó a
+      // ser permanente, aplica la POLÍTICA 2 (reembolso) YA — de lo
+      // contrario el único intento de Basic Launch terminaba en
+      // 'ad_failed' sin reembolso y, con las filas de la tienda ocultas,
+      // el jugador nunca volvía a reclamar: monedas pagadas por un botón
+      // que nunca iba a funcionar.
+      const statusAfterFailure = this.crazyGamesService.rewardedAdStatus();
+      if (statusAfterFailure === 'ads_disabled' || statusAfterFailure === 'adblock') {
+        return this.policyTwoRefund();
+      }
       return { revived: false, reason: 'ad_failed' };
     }
 
@@ -139,5 +134,35 @@ export class ReviveWithAdUseCase {
     this.eventBus.emit({ type: 'GameRevived', energyPercentage: this.session.getEnergyPercentage() });
 
     return { revived: true };
+  }
+
+  /**
+   * POLÍTICA 2 (ADR-006): reembolso por motivos PERMANENTES en la sesión
+   * (`sdk_unavailable`, `adblock`, `ads_disabled`) o cooldown ambiental
+   * sin fill — extraído del switch para poder aplicarlo TAMBIÉN después
+   * de un adError que vuelve el estado permanente en vuelo (CG-PUB-003).
+   *
+   * Sin puerto de progresión no hay forma de acreditar el reembolso: se
+   * devuelve el motivo REAL `sdk_unavailable` (único de esta política
+   * disponible en la unión) en vez de un 'refunded' que no cumpliría — el
+   * jugador queda como antes, con la jugada reintentable, y no se le
+   * promete una devolución que no llegó.
+   *
+   * BUGFIX (TOCTOU compra→consumo): "Revivir" YA se cobró en la Tienda y
+   * NO hay anuncio rewarded para consumirla — sin esto el jugador se iba
+   * de la pantalla con las monedas perdidas y sin revivir. Se reembolsa
+   * el costo del catálogo UNA sola vez y `refunded` (chequeado al inicio
+   * de execute) bloquea el revive posterior: invariante reembolso XOR
+   * efecto, nunca ambos (cobrar devuelta y revivir igual cuando vuelva
+   * el anuncio sería explotable).
+   */
+  private policyTwoRefund(): ReviveResult {
+    if (!this.progressionService) {
+      return { revived: false, reason: 'sdk_unavailable' };
+    }
+
+    this.progressionService.awardGameplayCoins(costOf('revive'));
+    this.refunded = true;
+    return { revived: false, reason: 'refunded' };
   }
 }
