@@ -80,7 +80,15 @@ export class PreloadScene extends Phaser.Scene {
     // DECK" y el subtítulo encima). Tampoco depende del mazo activo.
     this.load.image('main-menu-bg', 'assets/ui/main-menu.webp');
 
-    this.load.audio('music_gameplay','assets/audio/music/clasic_gameplay.mp3');
+    // Música de gameplay del mazo activo: clave GENÉRICA + archivo
+    // dinámico desde DeckSetups.musicGameplay (mismo patrón que card-back/
+    // card-front — GameScene sigue pidiendo 'music_gameplay' sin saber qué
+    // mazo está activo). Sin removeAudioIfExists() el LoaderPlugin SALTEA
+    // la recarga (File.hasCacheConflict: la clave ya existe en la caché de
+    // audio) y seguiría sonando la pista del mazo anterior — mismo
+    // mecanismo del BUGFIX de texturas de más arriba.
+    this.removeAudioIfExists('music_gameplay');
+    this.load.audio('music_gameplay', `assets/audio/music/${activeSetup.musicGameplay}.mp3`);
     this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');
     this.load.audio('sfx-offer', 'assets/audio/sfx/offer.mp3');
   }
@@ -88,6 +96,15 @@ export class PreloadScene extends Phaser.Scene {
   private removeTextureIfExists(key: string): void {
     if (this.textures.exists(key)) {
       this.textures.remove(key);
+    }
+  }
+
+  // Espejo de removeTextureIfExists() para la caché de audio (Cache.audio,
+  // un BaseCache con el mismo contrato add/s/remove/exists). Ver comentario
+  // del load.audio('music_gameplay') por qué hace falta.
+  private removeAudioIfExists(key: string): void {
+    if (this.cache.audio.exists(key)) {
+      this.cache.audio.remove(key);
     }
   }
 

@@ -8,10 +8,10 @@ export type DeckSetupId = 'basic' | 'cyberpunk' | 'medieval' | 'tarot' | 'vegas'
 /**
  * Configuración de un mazo temático coleccionable. Estructura pensada
  * para escalar: los campos actuales cubren lo visual imprescindible
- * (fondo, reverso, frente, precio); los comentados abajo son
- * PLACEHOLDERS explícitos para la siguiente ronda de temas (audio y
- * color de acento) — se agregan como campos opcionales para no romper
- * los mazos ya definidos el día que se sumen.
+ * (fondo, reverso, frente, precio) y la música de gameplay propia; los
+ * comentados abajo son PLACEHOLDERS explícitos para la siguiente ronda
+ * de temas (sfx de flip y color de acento) — se agregan como campos
+ * opcionales para no romper los mazos ya definidos el día que se sumen.
  */
 export interface IDeckConfig {
   readonly id: DeckSetupId;
@@ -32,13 +32,20 @@ export interface IDeckConfig {
   //** Imagenes de barra de energía para cada escenario */
   readonly energyBarBg: string;
   readonly energyBarFill: string;
+  /**
+   * Música de gameplay de este mazo: nombre de archivo (sin extensión)
+   * bajo assets/audio/music/. PreloadScene lo carga en cada recarga de
+   * mazo bajo la clave genérica 'music_gameplay' (mismo patrón que
+   * 'card-back': GameScene no necesita saber qué tema está activo) y
+   * GameScene la reproduce con playMusic() como hasta ahora.
+   */
+  readonly musicGameplay: string;
   //**Color numeros de carta */
   readonly numberColor: string;
   //**Color resplandor de carta */
   readonly glowBorder: number;
 
   // --- Extensibilidad futura (placeholders — aún no implementados) ---
-  // readonly bgmKey?: string;       // clave de audio para la música de fondo de este tema
   // readonly sfxFlipKey?: string;   // clave de audio para el sonido de flip de carta de este tema
   // readonly accentColor?: string;  // color hex para marcos/foco de botones acorde a la estética
 }
@@ -56,6 +63,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'presentador-portrait',
     energyBarBg: 'basic-energy-bar-bg',
     energyBarFill: 'basic-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#f39c12',
     glowBorder: 0x00e5ff,
     price: 0
@@ -70,6 +78,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'hacker-portrait',
     energyBarBg: 'cyberpunk-energy-bar-bg',
     energyBarFill: 'cyberpunk-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#00e5ff',
     glowBorder: 0x00e5ff,
     price: DECK_PRICE
@@ -84,6 +93,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'rey-portrait',
     energyBarBg: 'medieval-energy-bar-bg',
     energyBarFill: 'medieval-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#e27519',
     glowBorder: 0xe27519,
     price: DECK_PRICE
@@ -98,6 +108,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'tarotista-portrait',
     energyBarBg: 'tarot-energy-bar-bg',
     energyBarFill: 'tarot-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#e0b84a',
     glowBorder: 0xffffff,
     price: DECK_PRICE
@@ -112,6 +123,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'crupier-portrait',
     energyBarBg: 'vegas-energy-bar-bg',
     energyBarFill: 'vegas-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#d72d3f',
     glowBorder: 0xff69b4,
     price: DECK_PRICE
@@ -126,6 +138,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'oficial-portrait',
     energyBarBg: 'ww2-energy-bar-bg',
     energyBarFill: 'ww2-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#cbcbcb',
     glowBorder: 0xffffff,
     price: DECK_PRICE
@@ -140,6 +153,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'dracula-portrait',
     energyBarBg: 'dracula-energy-bar-bg',
     energyBarFill: 'dracula-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#e63946',
     glowBorder: 0xad174d,
     price: DECK_PRICE
@@ -154,6 +168,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'esquimal-portrait',
     energyBarBg: 'glacier-energy-bar-bg',
     energyBarFill: 'glacier-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#e3f3f9',
     glowBorder: 0x00e5ff,
     price: DECK_PRICE
@@ -168,6 +183,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'faraona-portrait',
     energyBarBg: 'egypt-energy-bar-bg',
     energyBarFill: 'egypt-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#1d3eb1',
     glowBorder: 0xf4a22b,
     price: DECK_PRICE
@@ -182,6 +198,7 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     portrait: 'alien-portrait',
     energyBarBg: 'ovni-energy-bar-bg',
     energyBarFill: 'ovni-energy-bar-fill',
+    musicGameplay: 'clasic_gameplay',
     numberColor: '#e5771a',
     glowBorder: 0x00e5ff,
     price: DECK_PRICE

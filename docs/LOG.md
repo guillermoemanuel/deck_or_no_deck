@@ -7,6 +7,51 @@
 
 ---
 
+## 2026-10-06 · feat(audio): música de gameplay propia por mazo — campo `DeckSetups.musicGameplay`
+
+**Qué se tocó (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**
+
+1. **`domain/value-objects/DeckSetups.ts`:** campo nuevo **requerido**
+   `musicGameplay: string` en `IDeckConfig` (nombre de archivo **sin extensión** bajo
+   `public/assets/audio/music/`), con los **10 mazos** apuntando hoy a
+   `'clasic_gameplay'` (mientras no existan pistas propias). Reemplaza al placeholder
+   comentado `bgmKey` de "Extensibilidad futura" (quedan `sfxFlipKey` y `accentColor`).
+2. **`presentation/scenes/PreloadScene.ts`:** la carga de la música pasa de
+   **hardcodeada a dinámica** — `assets/audio/music/${activeSetup.musicGameplay}.mp3`
+   bajo la clave genérica **`music_gameplay`**, precedido del nuevo helper
+   **`removeAudioIfExists()`** (espejo del `removeTextureIfExists()` existente). Causa
+   raíz: el `LoaderPlugin` de Phaser saltea cualquier archivo cuya clave ya existe en la
+   caché (`File.hasCacheConflict` → `LoaderPlugin.keyExists`), mismo mecanismo del
+   BUGFIX de texturas de ese archivo — sin el remove, cambiar de mazo seguiría sonando
+   la pista vieja.
+3. **`presentation/scenes/GameScene.ts`:** **SIN cambios** — `playMusic('music_gameplay')`
+   sigue igual: la elección del archivo ocurre en `PreloadScene` (patrón de claves
+   genéricas `'card-back'` que el propio PreloadScene documenta).
+4. **`domain/value-objects/DeckSetups.spec.ts` (NUEVO, 2 tests):** (1) cada mazo declara
+   `musicGameplay` no vacío; (2) el `.mp3` correspondiente **existe realmente** en
+   `public/assets/audio/music/` (`fs.existsSync`).
+
+**Spec red→verde:** el spec se escribió PRIMERO y falló en rojo con
+`TS2339: Property 'musicGameplay' does not exist on type 'IDeckConfig'` → verde (2 tests).
+
+**Cómo se verificó (4 gates, todos verdes — corridos por la unidad):**
+
+1. `npx jest src/domain/value-objects/DeckSetups.spec.ts` → rojo (TS2339) → **verde (2 tests)** ✓
+2. `npx jest src/domain` → **17 suites / 234 tests** ✓
+3. `npm run typecheck` → **0 errores** ✓ · `npm run lint` → **0 problemas** ✓
+4. `npm test` → **49 suites / 548 tests** (base del sprint: 48/546) ✓
+
+**Qué queda pendiente / deuda conocida:**
+
+- **Pistas mp3 propias por mazo:** hoy los 10 campos apuntan a `clasic_gameplay`; el
+  smoke **audible** real llega cuando existan archivos por mazo — con el cambio actual el
+  comportamiento audible **no cambia**.
+- **Código muerto detectado:** `AudioService.preload()` (lector de `AUDIO_MANIFEST` en
+  `AudioData.ts`) no lo llama nadie; `PreloadScene` carga el audio por su cuenta.
+  Candidato a `docs/PLAYBOOK.md`; **no se tocó en este commit**.
+
+---
+
 ## 2026-10-05 · Sprint B — smoke manual APROBADO (modo `crazygames`, QA Tool de CrazyGames)
 
 **Qué se verificó (smoke guiado por el usuario; build de Vite servido en
