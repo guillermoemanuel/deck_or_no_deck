@@ -56,9 +56,9 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('card-back', `assets/cards/${activeSetup.cardBack}.png`);
     this.load.image('card-front', `assets/cards/${activeSetup.cardFront}.png`);
     this.load.image('backdrop', `assets/ui/background/${activeSetup.background}.webp`);
-    this.load.image('energy-bar-bg', `assets/ui/energy-bar/${activeSetup.energyBarBg}.png`);
-    this.load.image('energy-bar-fill', `assets/ui/energy-bar/${activeSetup.energyBarFill}.png`);
-    this.load.image('banker-portrait', `assets/ui/portrait/${activeSetup.portrait}.png`);
+    this.load.image('energy-bar-bg', `assets/ui/energy-bar/${activeSetup.energyBarBg}.webp`);
+    this.load.image('energy-bar-fill', `assets/ui/energy-bar/${activeSetup.energyBarFill}.webp`);
+    this.load.image('banker-portrait', `assets/ui/portrait/${activeSetup.portrait}.webp`);
 
     // Íconos del HUD (Tienda/Salir/Bono/Sonido/Pantalla Completa) — NO
     // dependen del mazo activo, así que se cargan una sola vez y no
@@ -67,18 +67,18 @@ export class PreloadScene extends Phaser.Scene {
     // recargas de PreloadScene (selección de mazo), por lo que dejar la
     // textura ya cacheada de una carga anterior es exactamente lo que
     // queremos (evita una descarga de red redundante en cada partida).
-    this.load.image('hud-shop', 'assets/ui/hud/shop.png');
-    this.load.image('hud-exit', 'assets/ui/hud/exit.png');
-    this.load.image('hud-bonus', 'assets/ui/hud/bonus.png');
-    this.load.image('hud-fullscreen', 'assets/ui/hud/fullscreen.png');
-    this.load.image('hud-windows', 'assets/ui/hud/window.png');
-    this.load.image('hud-soundon', 'assets/ui/hud/soundon.png');
-    this.load.image('hud-soundoff', 'assets/ui/hud/soundoff.png');
+    this.load.image('hud-shop', 'assets/ui/hud/shop.webp');
+    this.load.image('hud-exit', 'assets/ui/hud/exit.webp');
+    this.load.image('hud-bonus', 'assets/ui/hud/bonus.webp');
+    this.load.image('hud-fullscreen', 'assets/ui/hud/fullscreen.webp');
+    this.load.image('hud-windows', 'assets/ui/hud/window.webp');
+    this.load.image('hud-soundon', 'assets/ui/hud/soundon.webp');
+    this.load.image('hud-soundoff', 'assets/ui/hud/soundoff.webp');
 
     // Fondo fotográfico del Menú Principal (mesa/banquero, sin títulos ni
     // textos horneados en la imagen — MainMenuScene dibuja "DECK OR NO
     // DECK" y el subtítulo encima). Tampoco depende del mazo activo.
-    this.load.image('main-menu-bg', 'assets/ui/main-menu.jpg');
+    this.load.image('main-menu-bg', 'assets/ui/main-menu.webp');
 
     this.load.audio('music_gameplay','assets/audio/music/clasic_gameplay.mp3');
     this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');

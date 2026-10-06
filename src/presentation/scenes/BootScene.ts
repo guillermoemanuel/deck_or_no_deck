@@ -9,8 +9,8 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image('loading-bg', 'assets/ui/loading-bg.png');
-    this.load.image('loading-bar', 'assets/ui/loading-bar.png');
+    this.load.image('loading-bg', 'assets/ui/loading-bg.webp');
+    this.load.image('loading-bar', 'assets/ui/loading-bar.webp');
   }
 
   create(): void {

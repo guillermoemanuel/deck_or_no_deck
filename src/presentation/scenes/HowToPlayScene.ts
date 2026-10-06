@@ -515,9 +515,9 @@ export class HowToPlayScene extends Phaser.Scene {
    */
   preload(): void {
     this.load.image(TUTORIAL_BASIC_CARD_BACK_KEY, `assets/cards/${BASIC_DECK_ASSET_FILES.cardBack}.png`);
-    this.load.image(TUTORIAL_BASIC_PORTRAIT_KEY, `assets/ui/portrait/${BASIC_DECK_ASSET_FILES.bankerPortrait}.png`);
-    this.load.image(TUTORIAL_BASIC_ENERGY_BG_KEY, `assets/ui/energy-bar/${BASIC_DECK_ASSET_FILES.energyBarBg}.png`);
-    this.load.image(TUTORIAL_BASIC_ENERGY_FILL_KEY, `assets/ui/energy-bar/${BASIC_DECK_ASSET_FILES.energyBarFill}.png`);
+    this.load.image(TUTORIAL_BASIC_PORTRAIT_KEY, `assets/ui/portrait/${BASIC_DECK_ASSET_FILES.bankerPortrait}.webp`);
+    this.load.image(TUTORIAL_BASIC_ENERGY_BG_KEY, `assets/ui/energy-bar/${BASIC_DECK_ASSET_FILES.energyBarBg}.webp`);
+    this.load.image(TUTORIAL_BASIC_ENERGY_FILL_KEY, `assets/ui/energy-bar/${BASIC_DECK_ASSET_FILES.energyBarFill}.webp`);
 
     DECK_SHOWCASE_THEMES.forEach(themeId => {
       this.load.image(`${DECK_THUMB_KEY_PREFIX}${themeId}`, `assets/cards/card-front-${themeId}.png`);
