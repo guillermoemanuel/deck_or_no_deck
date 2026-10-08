@@ -1,5 +1,7 @@
 import { createGameSessionWithSelection, createGameSession } from './GameSessionFactory';
 import { DeterministicRandomProvider } from '../../infrastructure/services/testing/DeterministicRandomProvider';
+import { FirstRoundDealStreak } from '../../domain/value-objects/FirstRoundDealStreak';
+import { CAPPED_OFFER_VALUES } from '../../domain/value-objects/BankerPolicy';
 
 const FIXED_ORDER = [1, 5, 10, 25, 50, 100, 250, 500, 750, 1000, 5000, 10000, 25000];
 
@@ -53,6 +55,77 @@ describe('GameSessionFactory', () => {
 
       expect(lowAmount).toBeGreaterThan(0);
       expect(highAmount).toBeGreaterThan(lowAmount);
+    });
+
+    // ADR-014: con la regla anti-farmeo activa, la factory sortea el tope
+    // de la 1ª ronda UNA vez por partida con el MISMO generador inyectado
+    // y se lo pasa al OfferCalculator.
+    describe('regla anti-farmeo (ADR-014): sorteo del cap con el generador inyectado', () => {
+      const openThreeAndGetOffer = (session: ReturnType<typeof createGameSessionWithSelection>): number => {
+        session.openCard('card_1');
+        session.openCard('card_2');
+        return session.openCard('card_3').offer?.amount ?? 0;
+      };
+
+      it('caps the first-round offer when the streak is active (u=0 → cap 1)', () => {
+        // Muestra 1 (cap) = 0 → cap = 1; muestra 2 (ruido) = 0.5 → ruido 0.
+        const samples = [0, 0.5];
+        const generator = jest.fn(() => samples.shift() ?? 0.5);
+        const active = new FirstRoundDealStreak(0, 5);
+
+        const session = createGameSessionWithSelection(FIXED_ORDER, 0, generator, active);
+
+        expect(openThreeAndGetOffer(session)).toBe(1);
+        // Una muestra para el cap + una para el ruido de la oferta.
+        expect(generator).toHaveBeenCalledTimes(2);
+      });
+
+      it('draws the cap only from CAPPED_OFFER_VALUES', () => {
+        for (const u of [0, 0.2, 0.25, 0.49, 0.5, 0.7, 0.75, 0.99]) {
+          const samples = [u, 0.5];
+          const generator = () => samples.shift() ?? 0.5;
+          const session = createGameSessionWithSelection(FIXED_ORDER, 0, generator, new FirstRoundDealStreak(1, 3));
+          const offer = openThreeAndGetOffer(session);
+          // Con ruido 0, la oferta natural de ronda 1 es 0.75 × promedio
+          // (~11k): siempre mayor que cualquier cap del catálogo, así que
+          // lo que se ve es EXACTAMENTE el cap sorteado.
+          expect(CAPPED_OFFER_VALUES).toContain(offer);
+        }
+      });
+
+      it('leaves rounds 2 and 3 untouched even when the streak is active', () => {
+        const samples = [0, 0.5]; // cap 1, ruido 0
+        const generator = () => samples.shift() ?? 0.5;
+        const session = createGameSessionWithSelection(FIXED_ORDER, 0, generator, new FirstRoundDealStreak(0, 5));
+
+        session.openCard('card_1');
+        session.openCard('card_2');
+        session.openCard('card_3'); // ronda 1: capped a 1
+        session.rejectDeal();
+        session.openCard('card_4');
+        session.openCard('card_5');
+        const roundTwo = session.openCard('card_6').offer?.amount ?? 0; // ronda 2: sin cap
+
+        expect(roundTwo).toBeGreaterThan(10); // de vuelta en la fórmula normal
+      });
+
+      it('keeps the noise sequence intact when the streak is inactive (default)', () => {
+        const generator = jest.fn(() => 0.5);
+        const session = createGameSessionWithSelection(FIXED_ORDER, 0, generator);
+
+        openThreeAndGetOffer(session);
+
+        // Sin cap no se consume muestra extra: solo la del ruido.
+        expect(generator).toHaveBeenCalledTimes(1);
+      });
+
+      it('treats a zeroed streak (restore de un save viejo) as inactive', () => {
+        const generator = jest.fn(() => 0.5);
+        const session = createGameSessionWithSelection(FIXED_ORDER, 0, generator, FirstRoundDealStreak.restore(undefined, undefined));
+
+        expect(openThreeAndGetOffer(session)).toBeGreaterThan(10);
+        expect(generator).toHaveBeenCalledTimes(1);
+      });
     });
   });
 

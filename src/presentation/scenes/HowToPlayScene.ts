@@ -276,7 +276,21 @@ const TUTORIAL_SLIDES: readonly TutorialSlide[] = [
         })
         .setOrigin(0.5);
 
-      container.add([portrait, dealText, noDealText]);
+      // Línea corta de la regla anti-farmeo (ADR-014): va en la banda
+      // vacía entre los botones de ejemplo (terminan ~y=34) y el cuerpo
+      // del paso (STEP_BODY_Y=138), con el mismo estilo gris de los
+      // captions del paso 6.
+      const cappedCaption = scene.add
+        .text(cx, btnY + 56, languageManager.getText('TUTORIAL_BANKER_CAPPED_CAPTION'), {
+          fontSize: '16px',
+          fontFamily: 'Arial, sans-serif',
+          color: '#8b949e',
+          align: 'center',
+          wordWrap: { width: 620 }
+        })
+        .setOrigin(0.5);
+
+      container.add([portrait, dealText, noDealText, cappedCaption]);
     }
   },
   {

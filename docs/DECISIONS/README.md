@@ -23,3 +23,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [011](ADR-011-muteaudio-de-plataforma.md) | `muteAudio` de la plataforma con prioridad sobre el toggle in-game (capa `platformMuted`) | Aceptada |
 | [012](ADR-012-aviso-inline-de-ads-en-la-tienda.md) | Aviso inline de ads ocultos en la tienda (política `adsNotice()` en aplicación) | Aceptada |
 | [013](ADR-013-politica-del-banquero-y-energia-inicial.md) | Política del Banquero (oferta por rondas con ruido inyectado) y energía inicial 60 % — rebalance Fase A + B | Aceptada |
+| [014](ADR-014-regla-anti-farmeo-primera-ronda.md) | Regla anti-farmeo de la 1ª ronda: cap de oferta (1/2/5/10) + cuenta regresiva de 5 partidas | Aceptada |

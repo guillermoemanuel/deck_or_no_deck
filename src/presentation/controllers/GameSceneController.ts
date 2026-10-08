@@ -17,6 +17,8 @@ import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { LocalizedText } from '../components/LocalizedText';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { deactivateGameAbandonGuard, activateGameAbandonGuard } from '../GameAbandonGuard';
+import { getServices } from '../GameServices';
+import { CAPPED_OFFER_VALUES } from '../../domain/value-objects/BankerPolicy';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / BankerOfferPanel.ts /
  * ResultScene.ts / SwapEventModal.ts — mismos valores hex, para que los
@@ -319,7 +321,19 @@ export class GameSceneController {
         this.energyBar.setBankerOfferReady();
 
         this.scene.time.delayedCall(1800, () => {
-          this.activeOfferPanel = new BankerOfferPanel(this.scene, event.offer, this.audioService);
+          // Regla anti-farmeo (ADR-014): el aviso del popup solo aplica si
+          // la oferta de la 1ª ronda ES realmente la topada — se chequea el
+          // MONTO contra CAPPED_OFFER_VALUES y no el estado persistido: el
+          // promedio natural de 9 cartas cerradas nunca baja de ~149, así
+          // que un monto de 1-10 solo puede venir del cap. Esto además
+          // excluye el Desafío Diario de forma natural: ahí la sesión se
+          // creó INACTIVE aunque el jugador esté topado, así que la oferta
+          // no lleva cap y el aviso no aparece.
+          const cappedRemainingGames =
+            event.offer.roundNumber === 1 && CAPPED_OFFER_VALUES.includes(event.offer.amount)
+              ? getServices(this.scene).progressionManager.getFirstRoundDealStreak().cappedGamesRemaining
+              : null;
+          this.activeOfferPanel = new BankerOfferPanel(this.scene, event.offer, this.audioService, cappedRemainingGames);
           this.activeOfferPanel.once('deal-accepted', () => {
             this.resolveDealUseCase.acceptDeal();
           });

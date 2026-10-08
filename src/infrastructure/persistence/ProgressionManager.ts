@@ -6,6 +6,7 @@ import { DeckSetupId, getDeckSetup } from '../../domain/value-objects/DeckSetups
 import { DeckCollection } from '../../domain/entities/DeckCollection';
 import { IRandomProvider } from '../../domain/ports/IRandomProvider';
 import { computePeriodicBonusStatus, PeriodicBonusStatus, PERIODIC_BONUS_VALUES } from '../../domain/value-objects/PeriodicBonus';
+import { FirstRoundDealStreak } from '../../domain/value-objects/FirstRoundDealStreak';
 
 /**
  * Fachada de meta-progresion: implementa IProgressionService.
@@ -54,6 +55,17 @@ export class ProgressionManager implements IProgressionService {
     // acumulado queda en negativo — a propósito, no se usa spendCoins().
     this.repository.applyPenalty(amount);
     this.eventBus.emit({ type: 'CoinsChanged', newTotal: this.getCoins(), delta: -amount });
+  }
+
+  getFirstRoundDealStreak(): FirstRoundDealStreak {
+    return this.repository.getFirstRoundDealStreak();
+  }
+
+  setFirstRoundDealStreak(streak: FirstRoundDealStreak): void {
+    // Sin evento: la regla anti-farmeo no mueve monedas ni mazos — el único
+    // consumidor que necesita reaccionar (GameSceneController) lo consulta
+    // al abrir el popup de oferta, no al recibir un ProgressionEvent.
+    this.repository.setFirstRoundDealStreak(streak);
   }
 
   getPeriodicBonusStatus(now: number = Date.now()): PeriodicBonusStatus {

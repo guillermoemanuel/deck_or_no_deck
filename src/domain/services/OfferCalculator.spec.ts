@@ -114,4 +114,38 @@ describe('OfferCalculator', () => {
       expect(a).toBe(170);
     });
   });
+
+  describe('tope de la 1ª ronda (regla anti-farmeo, ADR-014)', () => {
+    const noiseless = () => 0.5;
+
+    it('caps a first-round offer at min(oferta final, cap)', () => {
+      // 200 × 0.75 = 150 normalmente; con cap 5 → 5.
+      const calculator = new OfferCalculator(noiseless, 5);
+      expect(calculator.calculate(closedCards, 1)).toBe(5);
+    });
+
+    it('applies the cap AFTER the negotiator bonus', () => {
+      // Sin cap el bono sube la oferta (173); con cap de 10 queda 10 —
+      // el tope se aplica sobre la oferta final, tras el +15 %.
+      const calculator = new OfferCalculator(noiseless, 10);
+      expect(calculator.calculate(closedCards, 1, 0.15)).toBe(10);
+    });
+
+    it('leaves rounds 2 and 3 untouched even with a cap in place', () => {
+      const calculator = new OfferCalculator(noiseless, 5);
+      expect(calculator.calculate(closedCards, 2)).toBe(170);
+      expect(calculator.calculate(closedCards, 3)).toBe(190);
+    });
+
+    it('keeps the normal formula when no cap is provided (default)', () => {
+      const calculator = new OfferCalculator(noiseless);
+      expect(calculator.calculate(closedCards, 1)).toBe(150);
+    });
+
+    it('never raises an offer that is already below the cap', () => {
+      // Cap mayor que la oferta natural: el mínimo no la recorta.
+      const calculator = new OfferCalculator(noiseless, 1000);
+      expect(calculator.calculate(closedCards, 1)).toBe(150);
+    });
+  });
 });

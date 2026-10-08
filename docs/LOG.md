@@ -7,6 +7,38 @@
 
 ---
 
+## 2026-10-08 · feat(balance): regla anti-farmeo de la 1ª ronda (ADR-014) — cap de oferta + cuenta regresiva de 5 partidas
+
+**Qué se tocó en `src/` (hecho por la unidad, rojo→verde):**
+
+1. **Fuente única `domain/value-objects/BankerPolicy.ts` (24 → 35 L):** +`FIRST_ROUND_STREAK_TRIGGER` 4, `CAPPED_GAMES_DURATION` 5, `CAPPED_OFFER_VALUES` `[1, 2, 5, 10]`.
+2. **VO nuevo `domain/value-objects/FirstRoundDealStreak.ts` (109 L):** `consecutiveFirstRoundDeals ∈ [0,3]` + `cappedGamesRemaining ∈ [0,5]`; ctor valida (lanza), `restore()` sanea (storage podrido → `0/0`), `withGameEnd(outcome)` con las 5 reglas (activa a los **4** tratos consecutivos → `(0,5)`; cuenta regresiva **solo** al rechazar la oferta topada; aceptarla / perder en cartas 1-3 / abandono no decrementan), `drawCappedOfferValue(u)` → `[1,2,5,10]`, singleton `INACTIVE`.
+3. **Cap en `domain/services/OfferCalculator.ts` (65 → 77 L):** 3.er param opcional `firstRoundCap` — solo ronda 1, `min(oferta final, cap)` aplicado **después** del bono Negociador y de los clamps de ADR-013.
+4. **`application/factories/GameSessionFactory.ts` (42 → 51 L):** 4.º param opcional `streak?` (default `INACTIVE`) — si está activo consume **UNA muestra extra** del `offerRandom` para sortear el cap y después arma el calculator; si no, no consume nada (la secuencia de ruido de ADR-013 queda intacta).
+5. **Tracker puro nuevo `application/records/FirstRoundDealStreakTracker.ts` (81 L)** (patrón `GameResultTracker`): `DealAccepted` dispara el reporte (cubre el `GameWon` posterior), `GameLost` queda pendiente hasta `flush()`, abandono no reporta; reporta `rejectedRound1Offer = vio la 1ª y no la aceptó`.
+6. **Use case nuevo `application/use-cases/RecordFirstRoundDealOutcomeUseCase.ts` (28 L):** `execute(outcome, isDaily)` — no-op en el Desafío Diario; `withGameEnd` + escritura vía `IProgressionService` solo si cambió; sin eventos nuevos.
+7. **Persistencia esquema v4 → v5:** puertos `IProgressionRepository`/`IProgressionService` con `get/setFirstRoundDealStreak`; `ProgressionManager` delega (sin evento); `LocalStorageProgressionRepository` (165 → 206 L) con migración v4→v5 backfill `(0,0)` y v3→v5 directo, validación al cargar (enteros, `[0,3]`/`[0,5]`, si no → `0/0`) y `clearAll`/`createDefault` con el campo; `FakeProgressionRepository` + `seedFirstRoundDealStreak()`.
+8. **Presentación:** `GameScene` lee el streak (diario → `INACTIVE`) y lo pasa a la factory, y `setupOutcomeRecording` suscribe los 2 trackers con un solo `flush()` en SHUTDOWN; `GameSceneController` calcula `cappedRemainingGames` (ronda 1 **y** monto ∈ `CAPPED_OFFER_VALUES` — chequear el monto excluye el diario sin preguntar `dailyDateKey`) y se lo pasa a `BankerOfferPanel` (4.º param opcional, aviso en y≈204 con singular/plural); `HowToPlayScene` caption en el paso 3; `OnboardingCoach` bubble 104 → 110 px (`BUBBLE_Y` 662 → 666) para el cuerpo de 3 líneas.
+9. **i18n `LanguageData.ts` (150 → 153 claves):** `BANKER_CAPPED_NOTICE_SINGULAR`/`_PLURAL`, `TUTORIAL_BANKER_CAPPED_CAPTION` (en+es, paridad de placeholders) y frase anti-farmeo añadida a `ONBOARDING_BANKER_BODY`.
+10. **Specs nuevos/ampliados (rojo primero):** `FirstRoundDealStreak.spec` (20), `FirstRoundDealStreak.farming.spec` (3), `OfferCalculator` cap (+34 L → 151), `GameSessionFactory.spec` (+73 → 161), `FirstRoundDealStreakTracker.spec` (13, con 2 de integración: sesión real + `ResolveDealUseCase` + progresión fake), `RecordFirstRoundDealOutcomeUseCase.spec` (7), **`LocalStorageProgressionRepository.spec` nuevo (125 L — cerró el hueco que `testing.md:78` declaraba)**, `ProgressionManager.spec` (+39).
+
+**Docs (esta sesión):** ADR-014 nuevo (`docs/DECISIONS/ADR-014-regla-anti-farmeo-primera-ronda.md`) + fila en `docs/DECISIONS/README.md`; `AGENTS.md` §4 (invariante anti-farmeo); `docs/ARCHITECTURE.md` (composition root de GameScene con los 2 trackers, fila de invariante anti-farmeo, persistencia v5); `docs/MAP.md` (**censo COMPLETO con `wc -l` que cierra el pendiente del recount**: 178 archivos · 123 fuente + 55 specs · 26.821 L, totales por capa reales, +8 filas/deltas de este cierre); `docs/testing.md` (specs por capa 20/14/11/5/5, `LocalStorageProgressionRepository` ya no figura como hueco, helper `seedFirstRoundDealStreak`).
+
+**Cómo se verificó (4 gates, verdes):**
+
+1. `npx jest <specs afectados>` selectivo → verde a lo largo del cambio (streak 20, cap 27, factory 11, tracker 13, use case 7, persistencia 39, farming 3, i18n) ✓
+2. `npm run typecheck` → **0 errores** ✓ · `npm run lint` → **0 problemas** ✓
+3. `npm test` → **55 suites / 618 tests** (base: 50/555) ✓
+4. **Simulación de granjero** (`FirstRoundDealStreak.farming.spec`, 20.000 partidas sembradas, `GameSession` real): monedas/carta con regla = **557.0** (banda 480-620) vs sin regla = **797.0** (≈798); jugador p=0.7 → **30.2 %** de partidas topadas (banda 27-37 %); granjero determinista → 53.5 % topadas; toda oferta de 1ª con regla activa ∈ `CAPPED_OFFER_VALUES`.
+
+**PENDIENTES:**
+
+- **Escudo + tanque ≈ 0 % de derrota:** con ambas compras la probabilidad de perder es nula (riesgo nulo) — futuro rebalance, sin tocar (heredado de ADR-013).
+- **Precios de mejoras de la tienda** parecen altos — sin tocar.
+- **Ajustar la economía de mazos por tiempo** (10 mazos temáticos sin curva propia de recompensa) — sin tocar.
+
+---
+
 ## 2026-10-08 · feat(balance): rebalance del Banquero (ADR-013) — fórmula de oferta por rondas + energía inicial 60 %
 
 **Qué se tocó en `src/` (hecho por la unidad, ya commiteado; esta sesión solo documenta):**

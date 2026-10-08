@@ -73,9 +73,9 @@ npm run lint                  # eslint src
 
 | Capa | Specs | Cobertura real | Estado |
 |---|---|---|---|
-| `domain/` | 16 | alta (umbral 88/80/90/88) | 🟢 |
-| `application/` | 12 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 |
-| `infrastructure/` | 10 | parcial | 🟡 sin spec: `LocalStorageProgressionRepository`, `jsonStorage`, `CryptoRandomProvider` (+6 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (5 tests, primer spec de `audio/`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**) |
+| `domain/` | 20 | alta (umbral 88/80/90/88) | 🟢 incluye `FirstRoundDealStreak.spec` (20 tests) y `FirstRoundDealStreak.farming.spec` (3 tests de simulación con semilla fija, ADR-014) |
+| `application/` | 14 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014 |
+| `infrastructure/` | 11 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (5 tests, primer spec de `audio/`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
 | `shared/` | 5 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) |
 | `presentation/` | 5 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
 
@@ -85,7 +85,7 @@ npm run lint                  # eslint src
 
 | Doble | Ubicación | Sirve para |
 |---|---|---|
-| `FakeProgressionRepository` | `infrastructure/persistence/testing/` | monedas/mazos/bono en memoria; helpers `seedCoins()`, `seedPeriodicBonusCycleStart()` |
+| `FakeProgressionRepository` | `infrastructure/persistence/testing/` | monedas/mazos/bono en memoria; helpers `seedCoins()`, `seedPeriodicBonusCycleStart()`, **`seedFirstRoundDealStreak()`** (ADR-014; `clearAll()` también limpia el streak) |
 | `FakeRecordsRepository` · `FakeDailyChallengeRepository` | ídem | estado inicial sembrado por constructor |
 | `FakeOnboardingRepository` | ídem | hints vistos/saltados |
 | `FakeCrazyGamesService` | `infrastructure/services/testing/` | `setNextAdResult()`, `setAvailable()`, `setRewardedStatus()`, **`setRewardedStatusAfterNextAd()`** (ADR-009: el próximo rewarded falla y el estado queda permanente **en vuelo**, como el SDK real), contadores de llamadas, `emitAdLifecycle()`, **`emitMuteAudioChange()`** (ADR-011: dispara `onMuteAudioChange` a sus suscriptores) |

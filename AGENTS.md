@@ -62,6 +62,14 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
   — factores `[0.75, 0.85, 0.95]` (rondas > 3 usan el último), ruido ±20 % con **UNA muestra
   por oferta** de generador inyectado por ctor (nunca `Math.random` en dominio), bono
   Negociador +15 % **antes** del techo; **fuente única `BankerPolicy.ts` (ADR-013)**.
+- Anti-farmeo de la 1ª ronda (ADR-014): 4 tratos de 1ª ronda **consecutivos** activan la
+  regla; dura **5 partidas** (cuenta regresiva **solo** si se rechaza la oferta topada —
+  aceptarla, perder en cartas 1-3 o abandono no decrementan); cap de ronda 1 =
+  `min(oferta final, cap)` aplicado **después** del bono Negociador; cap sorteado de
+  `CAPPED_OFFER_VALUES` `[1, 2, 5, 10]` con UNA muestra extra del `offerRandom` **solo
+  si está activo** (si no, la secuencia de ruido no cambia); Desafío Diario excluido
+  (recibe `INACTIVE`); fuente única `FIRST_ROUND_STREAK_TRIGGER`/`CAPPED_GAMES_DURATION`/
+  `CAPPED_OFFER_VALUES` en `BankerPolicy.ts`. Persistencia esquema v5 (ausentes → `0/0`).
 - Penalidad de derrota/abandono: −1000, **puede dejar saldo negativo** — fuente única
   `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (no re-hardcodear 1000).
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.

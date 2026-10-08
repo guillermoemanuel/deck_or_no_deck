@@ -24,6 +24,9 @@ import { consumeGameMode } from '../GameMode';
 import { setPenaltyFreeSession } from '../GameAbandonGuard';
 import { createPenaltyFreeProgression } from '../PenaltyFreeProgression';
 import { GameResultTracker } from '../../application/records/GameResultTracker';
+import { FirstRoundDealStreakTracker } from '../../application/records/FirstRoundDealStreakTracker';
+import { RecordFirstRoundDealOutcomeUseCase } from '../../application/use-cases/RecordFirstRoundDealOutcomeUseCase';
+import { FirstRoundDealStreak } from '../../domain/value-objects/FirstRoundDealStreak';
 import { LocalizedText } from '../components/LocalizedText';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { getDeckSetup } from '../../domain/value-objects/DeckSetups';
@@ -324,7 +327,14 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       this.dailyDateKey !== null
         ? createDailyBankerRandom(this.dailyDateKey)
         : () => services.randomProvider.nextFloat();
-    const session = createGameSessionWithSelection(values, chosenIndex, offerRandom);
+    // Regla anti-farmeo (ADR-014): en partida normal se lee el estado
+    // persistido para que la factory sorteé el cap de la 1ª ronda si está
+    // activo (y consuma UNA muestra extra solo en ese caso). El Desafío
+    // Diario queda EXCLUIDO: recibe INACTIVE aunque el jugador esté
+    // topado, así la secuencia de ruido sigue siendo idéntica entre todos.
+    const firstRoundDealStreak =
+      this.dailyDateKey !== null ? FirstRoundDealStreak.INACTIVE : services.progressionManager.getFirstRoundDealStreak();
+    const session = createGameSessionWithSelection(values, chosenIndex, offerRandom, firstRoundDealStreak);
 
     // En el Desafío Diario, TODOS los use-cases que tocan monedas/penalidades
     // reciben esta versión "sin castigo" en vez del servicio real (ver
@@ -524,9 +534,23 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       this.registry.set('lastGameSummary', summary);
     });
 
-    const unsubscribe = eventBus.subscribe(event => tracker.onGameEvent(event));
+    // Regla anti-farmeo (ADR-014): segundo tracker puro sobre los MISMOS
+    // eventos que GameResultTracker (una sola suscripción, un solo flush).
+    // El use case decide la exclusión del Desafío Diario (pasa `isDaily`)
+    // y delega la transición de estado en FirstRoundDealStreak; si no hay
+    // nada que guardar, no escribe storage.
+    const recordFirstRoundDeal = new RecordFirstRoundDealOutcomeUseCase(services.progressionManager);
+    const streakTracker = new FirstRoundDealStreakTracker(outcome =>
+      recordFirstRoundDeal.execute(outcome, dailyDateKey !== null)
+    );
+
+    const unsubscribe = eventBus.subscribe(event => {
+      tracker.onGameEvent(event);
+      streakTracker.onGameEvent(event);
+    });
     return () => {
       tracker.flush();
+      streakTracker.flush();
       unsubscribe();
     };
   }

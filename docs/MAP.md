@@ -4,17 +4,26 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-08 (cierre **ADR-013 — rebalance del banquero**: fórmula de la
-> oferta por rondas + energía inicial 60 %, Fase A + B) · **170 archivos TS · 120 fuente +
-> 50 specs** · **recount parcial de líneas**: en este cierre se recontaron solo los archivos
-> tocados (valores en sus filas y en la entrada de cierre más abajo); el total general y los
-> totales por capa siguen medidos en el **último censo completo B4 2026-10-04: 24.881 L**
-> (desde entonces crecieron los archivos de audio 2026-10-06 y los de ADR-013, ambos con sus
-> deltas registrados abajo) hasta el próximo `wc -l` completo. Los conteos de specs por capa
-> SÍ están actualizados.
-> Último censo completo previo — 2026-10-04 (cierre de la **unidad B4 — ADR-012**, aviso inline de ads
-> en la tienda, CG-MON-006; el mismo día cerraron la unidad B3 — CG-MON-005,
-> la unidad **B2 — ADR-011**, `muteAudio`
+> Fecha del censo: 2026-10-08 (cierre **ADR-014 — regla anti-farmeo de la 1ª ronda**,
+> Commit 2 del rebalance) · **178 archivos TS · 123 fuente + 55 specs · 26.821 L —
+> censo COMPLETO medido con `wc -l`** (cierra el pendiente del recount): por capa
+> `domain/` **5.126** (20 specs) · `application/` **4.111** (14) · `infrastructure/`
+> **4.073** (11) · `presentation/` **11.782** (5) · `shared/` **1.307** (5) · raíz
+> (`main.ts` 385 + `vite-env.d.ts` 37) **422**. Detalle del cierre ADR-014:
+> **+8 archivos** (3 fuente + 5 specs — ver abajo) → de 170 a 178; recontados
+> `BankerPolicy.ts` 24 → **35**, `OfferCalculator.ts` 65 → **77** y su spec 117 → **151**,
+> `GameSessionFactory.ts` 42 → **51** y su spec 88 → **161**,
+> `LocalStorageProgressionRepository.ts` 165 → **206**, `ProgressionManager.ts` 152 → **164**
+> y su spec 246 → **285**, `GameSceneController.ts` 624 → **638**, `GameScene.ts` 618 →
+> **642**, `BankerOfferPanel.ts` 305 → **329**, `OnboardingCoach.ts` 200 → **208**,
+> `HowToPlayScene.ts` 868 → **882**, `LanguageData.ts` 478 → **489**, `ports/*.ts` 351 →
+> **376**, `testing/*` 301 → **317**.
+> Últimos cierres previos — 2026-10-08 (cierre **ADR-013 — rebalance del banquero**:
+> fórmula de la oferta por rondas + energía inicial 60 %, Fase A + B) · **170 archivos TS
+> · 120 fuente + 50 specs** (recount parcial, ver su entrada más abajo); 2026-10-06
+> (música de gameplay por mazo) · 168 / 49; 2026-10-04 (cierre de la **unidad B4 —
+> ADR-012**, aviso inline de ads en la tienda, CG-MON-006; el mismo día cerraron la
+> unidad B3 — CG-MON-005, la unidad **B2 — ADR-011**, `muteAudio`
 > de la plataforma, CG-MON-002, la unidad B1/ADR-010, la unidad
 > A1/ADR-008, la unidad A3/ADR-009, la enmienda ADR-007 y la unidad ADR-007 del 2026-10-02) ·
 > **167 archivos TS · 24.881 líneas · 119 fuente + 48 specs**
@@ -121,7 +130,7 @@
 
 ---
 
-## `src/domain/` — 4.164 líneas (B4, recount pendiente) · 18 specs · la capa más protegida 🟢
+## `src/domain/` — 5.126 líneas · 20 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -145,21 +154,22 @@
 | `DailyBoard.ts` | 77 | ✅ | Calendario determinista (seed por fecha UTC) + `createDailyBankerRandom(dateKey)`: PRNG con sal `${DAILY_SEED_SALT}:banker:` para el ruido de la oferta (ADR-013). |
 | `CaseValues.ts` | 35 | ✅ 23 L | Valores posibles de carta + umbral de carta alta (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`) — consumido por `CardView`. |
 | `SessionUpgradeCatalog.ts` | 125 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la *disponibilidad* la deciden `ListAvailableUpgradesUseCase` y `PurchaseSessionUpgradeUseCase`) + **`costOf(id)`**: helper único del monto (lo consumen los 3 use-cases de ads y los specs; ADR-006). 🟡 fuente única de precios. |
-| `BankerPolicy.ts` | 24 | ✅ 234 L | **Fuente única de la política del Banquero y la energía inicial (ADR-013)**: `OFFER_ROUND_FACTORS` [0.75, 0.85, 0.95], `OFFER_NOISE` 0.20, `OFFER_MIN_RATIO` 0.5, `OFFER_MAX_RATIO` 1.2, `STARTING_ENERGY_RATIO` 0.6 — ningún otro archivo puede hardcodear estos números. Su spec `BankerPolicy.balance.spec.ts` (234 L) valida la política con **50.000 partidas sembradas** (EVs, orden de ofertas, bandas de derrota). **Invariante.** |
+| `BankerPolicy.ts` | 35 | ✅ 234 L + farming 257 L | **Fuente única de la política del Banquero, la energía inicial y el anti-farmeo**: ADR-013 `OFFER_ROUND_FACTORS` [0.75, 0.85, 0.95], `OFFER_NOISE` 0.20, `OFFER_MIN_RATIO` 0.5, `OFFER_MAX_RATIO` 1.2, `STARTING_ENERGY_RATIO` 0.6 + **ADR-014** `FIRST_ROUND_STREAK_TRIGGER` 4, `CAPPED_GAMES_DURATION` 5, `CAPPED_OFFER_VALUES` [1, 2, 5, 10] — ningún otro archivo puede hardcodear estos números. Su spec `BankerPolicy.balance.spec.ts` (234 L) valida la política con **50.000 partidas sembradas** (EVs, orden de ofertas, bandas de derrota) y `FirstRoundDealStreak.farming.spec.ts` (257 L) la economía anti-farmeo. **Invariante.** |
+| `FirstRoundDealStreak.ts` | 109 | ✅ 165 L + farming 257 L | **VO de la regla anti-farmeo (ADR-014)**: `consecutiveFirstRoundDeals ∈ [0,3]` + `cappedGamesRemaining ∈ [0,5]`; ctor **valida** (lanza), `restore()` **sanea** (dato de storage podrido → `0/0`), `withGameEnd(outcome)` aplica las 5 reglas (activa a los 4 tratos; countdown solo con rechazo de la topada), `drawCappedOfferValue(u)` mapea a `[1,2,5,10]`, singleton `INACTIVE`. 🟢 |
 
 ### services/ · state/ · events/ · ports/
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `OfferCalculator.ts` | 65 | ✅ 117 L | Fórmula ADR-013: `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bono), 0.5×, 1.2×))` — solo cartas cerradas (la secreta ya no entra con peso 0.2, sin ×0.85); UNA muestra por oferta del generador inyectado por ctor. Invariante. |
+| `OfferCalculator.ts` | 77 | ✅ 151 L | Fórmula ADR-013: `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bono), 0.5×, 1.2×))` — solo cartas cerradas (la secreta ya no entra con peso 0.2, sin ×0.85); UNA muestra por oferta del generador inyectado por ctor. **Desde ADR-014:** 3.er param opcional `firstRoundCap` → `min(oferta final, cap)` en ronda 1, aplicado **después** del bono y los clamps. Invariante. |
 | `Banker.ts` | 52 | ✅ | Cadencia de 3; `makeOffer(closedCards, bonoNegociador?)` ya **NO** recibe la carta secreta (ADR-013); usa `Date.now()` (única impureza de tiempo en domain). |
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 351 | — | Interfaces; `IRandomProvider` gana **`nextFloat()`** (ruido de la oferta, ADR-013); contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
+| `ports/*.ts` (8 archivos) | 376 | — | Interfaces; `IRandomProvider` gana **`nextFloat()`** (ruido de la oferta, ADR-013); **`IProgressionRepository`/`IProgressionService` ganan `get/setFirstRoundDealStreak`** (ADR-014); contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
 
 ---
 
-## `src/application/` — 3.504 líneas · 12 specs · casi toda verde 🟢
+## `src/application/` — 4.111 líneas · 14 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -174,13 +184,15 @@
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
-| `factories/GameSessionFactory.ts` | 42 | ✅ | **Duplica** la construcción de `DeckManager.fromValuesWithSelection` (ver PLAYBOOK). `createGameSessionWithSelection(values, secretIndex, offerRandom)` toma el generador de ruido de la oferta como **3.er parámetro obligatorio**; `createGameSession(provider)` pasa `() => provider.nextFloat()` (ADR-013). |
+| `records/FirstRoundDealStreakTracker.ts` | 81 | ✅ 249 L | **Segundo tracker puro (ADR-014)**: eventos → un `FirstRoundDealGameOutcome` (reporta como máximo 1 vez; `DealAccepted` dispara el reporte y cubre el `GameWon` posterior; `GameLost` pendiente hasta `flush()`; abandono no reporta). 🟢 |
+| `use-cases/RecordFirstRoundDealOutcomeUseCase.ts` | 28 | ✅ 100 L | `execute(outcome, isDaily)`: no-op en el Desafío Diario; `withGameEnd` + escritura vía `IProgressionService` solo si cambió. Sin eventos nuevos. 🟢 |
+| `factories/GameSessionFactory.ts` | 51 | ✅ 161 L | **Duplica** la construcción de `DeckManager.fromValuesWithSelection` (ver PLAYBOOK). `createGameSessionWithSelection(values, secretIndex, offerRandom, streak?)` — generador de ruido como **3.er parámetro obligatorio** y streak anti-farmeo como **4.º opcional** (sortea el cap con UNA muestra extra **solo si activo** — ADR-014); `createGameSession(provider)` pasa `() => provider.nextFloat()` (ADR-013). |
 | `dto/GameStateDTO.ts` | 30 | ❌ | **Código muerto** (`GameStateMapper.toDTO` sin llamadas). |
 | `use-cases/testing/collectEvents.ts` | 11 | — | Helper: acumula eventos para asserts. |
 
 ---
 
-## `src/infrastructure/` — 3.822 líneas · 10 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 4.073 líneas · 11 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -190,8 +202,8 @@
 | `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
 | `config/resolveFullscreenEnabled.ts` | 70 | ✅ 71 L | `VITE_FULLSCREEN` + `adsMode` → booleano del botón fullscreen propio (**pareja invariante de `VITE_ADS`**, ADR-008): default seguro `false` sin env/basura; en `crazygames` **siempre** `false` aunque el env diga `'true'` (se ignora + `console.warn` — la plataforma prohíbe el botón, CG-PUB-002); en `portal`/`none` solo los literales exactos `'true'`/`'false'` (cualquier variante → `false` + warn con el crudo). El flag sale de `main.ts` en el bag `GameServices.fullscreenEnabled` — presentation no lee env directo. 🟢 |
 | `config/resolveMuteAudioOverride.ts` | 34 | ✅ 36 L | **Override local de `?muteAudio=`** (ADR-011, patrón de `resolveFullscreenEnabled`): `true`/`false` si el parámetro está presente y es válido, `null` si no está (**manda el SDK**) o si el valor es basura (`?muteAudio=si`, `TRUE`, vacío → `null` + `console.warn`). `false` sirve para **negar** el mute de plataforma en local y probar en modos sin SDK. 🟢 |
-| `persistence/LocalStorageProgressionRepository.ts` | 165 | ❌ | **Sin spec directo.** Migración v3→v4. Bloque de comentarios con merge artifact (L17-28). 🔴 |
-| `persistence/ProgressionManager.ts` | 152 | ✅ 246 L | Fachada de meta-progresión + eventos. |
+| `persistence/LocalStorageProgressionRepository.ts` | 206 | ✅ 125 L | **Esquema v5** (ADR-014): `migrateIfNeeded()` v3→v5 (todos los campos) y v4→v5 (backfill `firstRoundDealStreak` `(0,0)`); validación al cargar el streak (enteros, rangos → si no, `0/0`); `clearAll`/`createDefault` incluyen el campo. Bloque de comentarios con merge artifact (L17-28). 🟡 |
+| `persistence/ProgressionManager.ts` | 164 | ✅ 285 L | Fachada de meta-progresión + eventos. **Desde ADR-014:** delega `get/setFirstRoundDealStreak` en el repo (sin evento propio). |
 | `audio/AudioService.ts` | 262 | ✅ 100 L | **Desde ADR-011:** capa `platformMuted` (mute de la plataforma) separada del pref `muted`; fuente única `applyMute()` → `sound.mute = muted \|\| platformMuted`; `isMuted()` = **efectivo**; `setPlatformMuted()` es método **concreto** (no está en el puerto `IAudioService`, solo lo llama `main.ts`). Anclado a `Phaser.Game`. `preload()` muerto con path erróneo (PLAYBOOK §3). 🟡 |
 | `persistence/LocalStorageOnboardingRepository.ts` | 75 | ✅ | — |
 | `persistence/LocalStorageRecordsRepository.ts` | 46 | ✅ (compartido) | `gamesPlayed` se recalcula = wins+losses. |
@@ -199,19 +211,19 @@
 | `services/CryptoRandomProvider.ts` | 67 | ❌ | Muestreo por rechazo con `crypto.getRandomValues` + **`nextFloat()`** = `Uint32 / 2^32` (ruido de la oferta, ADR-013). |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
 | `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
-| `testing/*` (5 archivos · 6 fakes) | 301 | — | Fakes — `DeterministicRandomProvider.nextFloat()` = **0.5 → ruido de oferta 0** (ADR-013); ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
+| `testing/*` (5 archivos · 6 fakes) | 317 | — | Fakes — `DeterministicRandomProvider.nextFloat()` = **0.5 → ruido de oferta 0** (ADR-013); `FakeProgressionRepository.seedFirstRoundDealStreak()` siembra el streak anti-farmeo y `clearAll()` lo limpia (ADR-014); ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
 
 ---
 
-## `src/presentation/` — 11.673 líneas · 5 specs · **zona más frágil** 🔴
+## `src/presentation/` — 11.782 líneas · 5 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
-| `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
-| `scenes/GameScene.ts` | 618 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra y el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013). |
+| `controllers/GameSceneController.ts` | 638 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. **Desde ADR-014:** en `BankerOfferMade` calcula `cappedRemainingGames` (ronda 1 y monto ∈ `CAPPED_OFFER_VALUES`) y se lo pasa al panel. |
+| `scenes/GameScene.ts` | 642 | ❌ | Composition root de la partida (40 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra, el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013) y el **streak anti-farmeo** a la factory (diario → `INACTIVE`, ADR-014); `setupOutcomeRecording` suscribe los **2 trackers** con un solo `flush()` en SHUTDOWN. |
 | `scenes/ShopScene.ts` | 793 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. |
-| `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
+| `scenes/HowToPlayScene.ts` | 882 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). **Desde ADR-014:** caption de la regla anti-farmeo en el paso 3. |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
 | `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
@@ -250,11 +262,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.297 líneas · 5 specs 🟢
+## `src/shared/` — 1.307 líneas · 5 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `i18n/LanguageData.ts` | 479 | ✅ 75 L | **150 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). 2026-10-04 CG-MON-006 (ADR-012): +`SHOP_ADS_HIDDEN_ADBLOCK` y +`SHOP_ADS_HIDDEN_DISABLED` (EN+ES, aviso inline de la tienda; 148 → 150 claves, `wc -l` 466 → 478 = conteo 479). |
+| `i18n/LanguageData.ts` | 489 | ✅ 75 L | **153 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). 2026-10-04 CG-MON-006 (ADR-012): +`SHOP_ADS_HIDDEN_ADBLOCK` y +`SHOP_ADS_HIDDEN_DISABLED` (EN+ES, aviso inline de la tienda; 148 → 150 claves). 2026-10-08 ADR-014: +`BANKER_CAPPED_NOTICE_SINGULAR`/`_PLURAL`, +`TUTORIAL_BANKER_CAPPED_CAPTION` y frase anti-farmeo en `ONBOARDING_BANKER_BODY` (150 → 153 claves, `wc -l` 478 → 489). |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |

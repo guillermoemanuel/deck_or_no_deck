@@ -51,6 +51,10 @@ export const TRANSLATIONS = {
     BANKER_OFFER_COUNTDOWN_PLURAL: "Banker's offer in {count} cards",
     BANKER_OFFER_READY: 'Banker offer ready!',
     BANKER_OFFER_COUNTDOWN_ZERO: 'No more offers',
+    // Aviso anti-farmeo (ADR-014): visible SOLO mientras la regla esté
+    // activa y solo en la oferta de la 1ª ronda (GameSceneController).
+    BANKER_CAPPED_NOTICE_SINGULAR: 'The Banker got tired of your quick deals (1 more game).',
+    BANKER_CAPPED_NOTICE_PLURAL: 'The Banker got tired of your quick deals ({n} more games).',
 
     // --- Evento de Mitad de Juego ---
     MIDGAME_SWAP_PROMPT: 'Want to swap your Secret Card for one of the remaining ones?',
@@ -136,6 +140,8 @@ export const TRANSLATIONS = {
     TUTORIAL_STEP_6_BODY:
       'Every 12 hours you get a free bonus: tap the Bonus icon, pick a face-down card, and add coins instantly. Miss the window and you\u2019ll wait a full 12 hours again.',
     TUTORIAL_BONUS_CAPTION: 'Every 12 hours',
+    // Línea corta de la regla anti-farmeo (ADR-014) en el paso 3.
+    TUTORIAL_BANKER_CAPPED_CAPTION: 'Accepting first-round DEALs too often? The Banker reduces its next offers.',
     TUTORIAL_STEP_7_TITLE: '7. Shop: 10 Themed Decks',
     // QA de legibilidad: mismo motivo que TUTORIAL_STEP_6_BODY de arriba
     // — acortado sin perder los 3 datos clave (10 mazos coleccionables,
@@ -199,7 +205,7 @@ export const TRANSLATIONS = {
       'Low-value cards protect your energy; high-value cards drain it. If it reaches 0%, you lose.',
     ONBOARDING_BANKER_TITLE: '🤝 The Banker is calling',
     ONBOARDING_BANKER_BODY:
-      'DEAL to take the offer and win now, or NO DEAL to keep playing for your Secret Card.',
+      'DEAL to take the offer and win now, or NO DEAL to keep playing for your Secret Card. Spam quick first-round DEALs and the Banker will cap its next offers.',
     ONBOARDING_MORE_INFO: '📖 More rules in “How to Play” on the main menu.',
     ONBOARDING_SKIP: 'Skip tips ✕',
     MENU_PLAY_BUTTON: 'PLAY',
@@ -270,6 +276,9 @@ export const TRANSLATIONS = {
     BANKER_OFFER_COUNTDOWN_PLURAL: 'Oferta del banquero en {count} cartas',
     BANKER_OFFER_READY: '¡Oferta del banquero lista!',
     BANKER_OFFER_COUNTDOWN_ZERO: 'No hay más ofertas',
+    // Aviso anti-farmeo (ADR-014) — paridad de claves con el bloque `en`.
+    BANKER_CAPPED_NOTICE_SINGULAR: 'El Banquero se cansó de tus tratos rápidos (1 partida más).',
+    BANKER_CAPPED_NOTICE_PLURAL: 'El Banquero se cansó de tus tratos rápidos ({n} partidas más).',
 
     // --- Evento de Mitad de Juego ---
     MIDGAME_SWAP_PROMPT: '¿Querés cambiar tu Carta Secreta por una de las restantes?',
@@ -352,6 +361,8 @@ export const TRANSLATIONS = {
     TUTORIAL_STEP_6_BODY:
       'Cada 12 horas tenés un bono gratis: tocá el ícono de Bono, elegí una carta boca abajo y sumá monedas al instante. Si dejás pasar la ventana, esperás otras 12 horas completas.',
     TUTORIAL_BONUS_CAPTION: 'Cada 12 horas',
+    // Línea corta de la regla anti-farmeo (ADR-014) en el paso 3.
+    TUTORIAL_BANKER_CAPPED_CAPTION: '¿Aceptás muchos TRATOS de 1ª ronda? El Banquero reduce sus próximas ofertas.',
     TUTORIAL_STEP_7_TITLE: '7. Tienda: 10 Mazos Temáticos',
     // QA de legibilidad — mismo motivo, sin perder los 3 datos clave.
     TUTORIAL_STEP_7_BODY:
@@ -408,7 +419,7 @@ export const TRANSLATIONS = {
       'Las cartas de poco valor protegen tu energía; las de mucho valor la drenan. Si llega a 0%, perdés.',
     ONBOARDING_BANKER_TITLE: '🤝 Llama el Banquero',
     ONBOARDING_BANKER_BODY:
-      'DEAL para aceptar la oferta y ganar ya, o NO DEAL para seguir jugando por tu Carta Secreta.',
+      'DEAL para aceptar la oferta y ganar ya, o NO DEAL para seguir jugando por tu Carta Secreta. Si aceptás muchos DEAL seguidos, el Banquero topeará los próximos.',
     ONBOARDING_MORE_INFO: '📖 Más reglas en «Cómo Jugar», en el menú principal.',
     ONBOARDING_SKIP: 'Omitir consejos ✕',
     MENU_PLAY_BUTTON: 'JUGAR',

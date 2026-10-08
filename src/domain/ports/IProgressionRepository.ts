@@ -1,4 +1,5 @@
 import { DeckSetupId } from '../value-objects/DeckSetups';
+import { FirstRoundDealStreak } from '../value-objects/FirstRoundDealStreak';
 
 /**
  * Puerto de persistencia del acumulado global de monedas Y de la
@@ -18,10 +19,19 @@ export interface IProgressionRepository {
    */
   applyPenalty(amount: number): void;
 
-   /** Epoch ms en que arrancó el ciclo vigente del bono periódico (ver PeriodicBonus.ts). */
-   getPeriodicBonusCycleStart(): number;
-   /** Persiste el inicio de un nuevo ciclo del bono periódico (al reclamarlo o al expirar sin reclamar). */
-   setPeriodicBonusCycleStart(timestamp: number): void;
+  /** Epoch ms en que arrancó el ciclo vigente del bono periódico (ver PeriodicBonus.ts). */
+  getPeriodicBonusCycleStart(): number;
+  /** Persiste el inicio de un nuevo ciclo del bono periódico (al reclamarlo o al expirar sin reclamar). */
+  setPeriodicBonusCycleStart(timestamp: number): void;
+
+  /**
+   * Estado de la regla anti-farmeo de la 1ª ronda (ADR-014): racha de
+   * tratos rápidos y partidas que quedan con la oferta topada. Ausente en
+   * saves anteriores al esquema v5 => (0, 0) vía FirstRoundDealStreak.restore.
+   */
+  getFirstRoundDealStreak(): FirstRoundDealStreak;
+  /** Persiste el estado de la regla anti-farmeo tras el final de una partida. */
+  setFirstRoundDealStreak(streak: FirstRoundDealStreak): void;
 
   /** IDs de los mazos temáticos que el jugador ya posee (incluye siempre 'basic'). */
   getOwnedDeckIds(): DeckSetupId[];

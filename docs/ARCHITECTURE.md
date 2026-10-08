@@ -74,11 +74,16 @@ Hay **dos** lugares donde se instancian concretos:
    fullscreen propios, CG-PUB-002 — el modo manda, aunque el env diga `'true'`),
    `portal`/`none` → `true`; sin env o con basura → `false` (default seguro).
 2. **`src/presentation/scenes/GameScene.ts`** (por partida): elige la carta secreta,
-   crea la `GameSession` vía `GameSessionFactory`, instancia los 7 use-cases
+   lee el `FirstRoundDealStreak` persistido (el Desafío Diario recibe `INACTIVE` —
+   ADR-014) y crea la `GameSession` vía `GameSessionFactory` (4.º param: si la regla
+   anti-farmeo está activa, sortea ahí el cap de la 1ª ronda), instancia los 7
+   use-cases
    (`PurchaseSessionUpgradeUseCase` recibe además el puerto de ads, para rechazar
    `ads_unavailable` sin cobrar),
    crea el `GameEvent` bus, construye vistas y `GameSceneController`,
-   y publica `ActiveSessionBridge` en el registry.
+   suscribe en `setupOutcomeRecording` los **dos** trackers puros de resultado
+   (`GameResultTracker` + `FirstRoundDealStreakTracker`, un solo `flush()` en
+   `SHUTDOWN`), y publica `ActiveSessionBridge` en el registry.
 
 ---
 
@@ -206,6 +211,7 @@ suscripción.
 | Cadencia del banquero | cada 3 cartas abiertas | `Banker.shouldMakeOffer` |
 | Fórmula de la oferta | `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bonoNegociador), 0.5×promedio, 1.2×promedio))` — factores `[0.75, 0.85, 0.95]` (rondas > 3 usan el último), ruido ±20 % con **UNA muestra por oferta**; la carta secreta **no participa** (ADR-013) | `OfferCalculator.ts` + constantes en `domain/value-objects/BankerPolicy.ts` (fuente única) |
 | Generador del ruido | `() => number` en `[0,1)` inyectado por ctor (nunca `Math.random` en dominio); partida normal → `IRandomProvider.nextFloat()`; Desafío Diario → PRNG con sal `${DAILY_SEED_SALT}:banker:<fecha UTC>` (misma fecha → mismas muestras) | `GameSessionFactory` / `GameScene` lo cablean por sesión; `DailyBoard.createDailyBankerRandom` (ADR-013) |
+| Anti-farmeo 1ª ronda | **4** tratos de 1ª consecutivos → **5** partidas topadas; cuenta regresiva **solo** si se rechaza la oferta topada (aceptarla / perder en cartas 1-3 / abandono no decrementan); cap = `min(oferta final, cap)` con cap sorteado de `[1, 2, 5, 10]`, aplicado **después** del bono Negociador; Desafío Diario excluido (`INACTIVE`) | constantes en `BankerPolicy.ts` + `FirstRoundDealStreak.ts` (VO) + `OfferCalculator` (ADR-014) |
 | Bonus Negociador | +15% (0.15), aplicado **antes** del techo 1.2× | `GameSession.openCard` |
 | Penalidad por abandono/derrota | −1000 (puede dejar saldo negativo) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (fuente única) |
 | Bono periódico | 12 h cooldown + 24 h ventana, 6 cartas `[500…5000]` | `domain/value-objects/PeriodicBonus.ts` |
@@ -265,7 +271,7 @@ suscripción.
 
 | Key de localStorage | Repo | Forma | Versionado |
 |---|---|---|---|
-| `speculation_game_progression_v1` | `LocalStorageProgressionRepository` | JSON `schemaVersion: 4` | sí — `migrateIfNeeded()` (v3→v4 backfill; otro valor → default) |
+| `speculation_game_progression_v1` | `LocalStorageProgressionRepository` | JSON `schemaVersion: 5` | sí — `migrateIfNeeded()` (v3→v5 con todos los campos; v4→v5 backfill `firstRoundDealStreak` `(0,0)`; otro valor → default) |
 | `speculation_game_records_v1` | `LocalStorageRecordsRepository` | JSON sin versión | sanitiza campo a campo |
 | `speculation_game_daily_v1` | `LocalStorageDailyChallengeRepository` | JSON sin versión | sanitiza |
 | `speculation_game_onboarding_v1` | `LocalStorageOnboardingRepository` | JSON sin versión | sanitiza |

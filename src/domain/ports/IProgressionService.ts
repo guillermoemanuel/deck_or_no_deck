@@ -1,6 +1,7 @@
 import { ProgressionEvent } from '../events/ProgressionEvents';
 import { DeckSetupId } from '../value-objects/DeckSetups';
 import { PeriodicBonusStatus } from '../value-objects/PeriodicBonus';
+import { FirstRoundDealStreak } from '../value-objects/FirstRoundDealStreak';
 
 export type PurchaseDeckResult =
   | { success: true }
@@ -36,6 +37,16 @@ export interface IProgressionService {
    * localStorage limpio y colección de mazos reseteada al básico).
    */
   resetAllProgress(): void;
+
+  /**
+   * Estado de la regla anti-farmeo de la 1ª ronda (ADR-014). GameScene lo
+   * lee al armar la sesión (para sortear el cap) y GameSceneController lo
+   * consulta para el aviso del popup; RecordFirstRoundDealOutcomeUseCase lo
+   * actualiza al final de cada partida no diaria.
+   */
+  getFirstRoundDealStreak(): FirstRoundDealStreak;
+  /** Persiste el estado de la regla anti-farmeo tras el final de una partida. */
+  setFirstRoundDealStreak(streak: FirstRoundDealStreak): void;
 
   /** IDs de los mazos temáticos que el jugador ya posee (incluye siempre 'basic'). */
   getOwnedDeckIds(): DeckSetupId[];

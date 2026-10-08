@@ -11,9 +11,14 @@ const COLOR_HIGHLIGHT = 0x00e5ff;
 const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
 
 const BUBBLE_WIDTH = 620;
-const BUBBLE_HEIGHT = 104;
+// 110 (antes 104): el cuerpo del consejo del Banquero ahora lleva la frase
+// corta de la regla anti-farmeo (ADR-014) y necesita 3 líneas de 17px sin
+// pisar la línea "Más reglas" del pie. Con y=666 el borde superior queda
+// en 611 (limpia el tablero, que termina ~y=610) y el inferior en 721
+// (solo muerde 1px del borde inferior de la pantalla, texto del pie visible).
+const BUBBLE_HEIGHT = 110;
 /** Debajo del tablero (que termina ~y=610) y a la izquierda de los controles de sonido/pantalla completa. */
-const BUBBLE_Y = 662;
+const BUBBLE_Y = 666;
 const DEPTH = 900;
 
 interface Frame {
@@ -93,14 +98,17 @@ export class OnboardingCoach {
       .rectangle(0, 0, BUBBLE_WIDTH, BUBBLE_HEIGHT, COLOR_PANEL_BG, 0.96)
       .setStrokeStyle(2, COLOR_GOLD_DIM, 0.9);
 
-    const title = new LocalizedText(this.scene, 0, -32, layout.titleKey, {
+    // Título y cuerpo corridos hacia arriba (bubble de 110px): deja
+    // 3 líneas de cuerpo antes de la línea "Más reglas" del pie — ver
+    // BUBBLE_HEIGHT.
+    const title = new LocalizedText(this.scene, 0, -40, layout.titleKey, {
       fontFamily: FONT_FAMILY,
       fontSize: '18px',
       fontStyle: 'bold',
       color: COLOR_GOLD_HEX
     }).setOrigin(0.5);
 
-    const body = new LocalizedText(this.scene, 0, -14, layout.bodyKey, {
+    const body = new LocalizedText(this.scene, 0, -26, layout.bodyKey, {
       fontFamily: 'Arial, sans-serif',
       fontSize: '17px',
       color: '#ffffff',
@@ -123,7 +131,7 @@ export class OnboardingCoach {
 
     if (layout.showMoreInfo) {
       children.push(
-        new LocalizedText(this.scene, 0, BUBBLE_HEIGHT / 2 - 14, 'ONBOARDING_MORE_INFO', {
+        new LocalizedText(this.scene, 0, BUBBLE_HEIGHT / 2 - 11, 'ONBOARDING_MORE_INFO', {
           fontFamily: 'Arial, sans-serif',
           fontSize: '15px',
           color: '#00e5ff'

@@ -243,4 +243,43 @@ describe('ProgressionManager', () => {
       });
     });
   });
+
+  describe('firstRoundDealStreak (ADR-014)', () => {
+    it('delegates get/set to the repository (roundtrip a través de la fachada)', () => {
+      const manager = new ProgressionManager(new FakeProgressionRepository(), new DeterministicRandomProvider());
+
+      manager.setFirstRoundDealStreak(manager.getFirstRoundDealStreak().withGameEnd({
+        firstRoundDealAccepted: true,
+        rejectedRound1Offer: false
+      }));
+
+      expect(manager.getFirstRoundDealStreak().consecutiveFirstRoundDeals).toBe(1);
+    });
+
+    it('emits NO progression events (la regla no mueve monedas ni mazos)', () => {
+      const manager = new ProgressionManager(new FakeProgressionRepository(), new DeterministicRandomProvider());
+      const events: ProgressionEvent[] = [];
+      manager.onEvent(e => events.push(e));
+
+      manager.setFirstRoundDealStreak(manager.getFirstRoundDealStreak().withGameEnd({
+        firstRoundDealAccepted: true,
+        rejectedRound1Offer: false
+      }));
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('resetAllProgress also clears the streak (junto con monedas y mazos)', () => {
+      const manager = new ProgressionManager(new FakeProgressionRepository(), new DeterministicRandomProvider());
+      manager.setFirstRoundDealStreak(manager.getFirstRoundDealStreak().withGameEnd({
+        firstRoundDealAccepted: true,
+        rejectedRound1Offer: false
+      }));
+
+      manager.resetAllProgress();
+
+      expect(manager.getFirstRoundDealStreak().consecutiveFirstRoundDeals).toBe(0);
+      expect(manager.getFirstRoundDealStreak().isActive).toBe(false);
+    });
+  });
 });

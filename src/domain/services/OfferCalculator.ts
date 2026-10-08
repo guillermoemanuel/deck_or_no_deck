@@ -23,9 +23,14 @@ import {
  * `IRandomProvider.nextFloat()` (crypto) y el Desafío Diario una semilla
  * del día (ver `DailyBoard.createDailyBankerRandom`): misma fecha, mismas
  * muestras para todos los jugadores.
+ * - `firstRoundCap` (ADR-014): tope de la oferta de la 1ª ronda cuando la
+ *   regla anti-farmeo está activa. Se aplica DESPUÉS del bono del
+ *   Negociador y del clamp, y SOLO en la ronda 1 — las rondas 2 y 3 no se
+ *   tocan. Lo sortea una vez por partida quien arma la sesión
+ *   (GameSessionFactory), nunca acá.
  */
 export class OfferCalculator {
-  constructor(private readonly random: () => number) {}
+  constructor(private readonly random: () => number, private readonly firstRoundCap: number | null = null) {}
 
   calculate(closedCards: Card[], roundNumber: number, negotiatorBonusPercentage = 0): number {
     if (closedCards.length === 0) {
@@ -50,7 +55,14 @@ export class OfferCalculator {
       Math.max(rawOffer, OFFER_MIN_RATIO * boardAverage),
       OFFER_MAX_RATIO * boardAverage
     );
-    return Math.round(clamped);
+    const finalOffer = Math.round(clamped);
+
+    // ADR-014: el tope anti-farmeo se aplica SOLO a la ronda 1 y sobre la
+    // oferta FINAL (tras bono y clamp). Math.min nunca sube la oferta.
+    if (roundNumber === 1 && this.firstRoundCap !== null) {
+      return Math.min(finalOffer, this.firstRoundCap);
+    }
+    return finalOffer;
   }
 
   /** Rondas 1..3 → factores de la tabla; fuera de rango → primer/último factor. */

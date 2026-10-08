@@ -22,3 +22,14 @@ export const OFFER_MAX_RATIO = 1.2;
 
 /** Energía inicial (y al revivir) = 60 % del techo vigente (antes era 50 %). */
 export const STARTING_ENERGY_RATIO = 0.6;
+
+// --- Regla anti-farmeo de la 1ª ronda (ADR-014) ---
+
+/** Tratos de 1ª ronda seguidos que activan la regla (al 4º, se topa el juego siguiente). */
+export const FIRST_ROUND_STREAK_TRIGGER = 4;
+
+/** Partidas con la oferta de la 1ª ronda topada que siguen tras activarse la regla. */
+export const CAPPED_GAMES_DURATION = 5;
+
+/** Valores entre los que se sortea el tope de la oferta de la 1ª ronda (una vez por partida). */
+export const CAPPED_OFFER_VALUES: readonly number[] = [1, 2, 5, 10];

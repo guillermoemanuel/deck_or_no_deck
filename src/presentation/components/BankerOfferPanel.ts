@@ -35,7 +35,7 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
   // clase concreta de infraestructura.
   private readonly audioService?: IAudioService;
 
-  constructor(scene: Phaser.Scene, offer: BankerOffer, audioService?: IAudioService) {
+  constructor(scene: Phaser.Scene, offer: BankerOffer, audioService?: IAudioService, cappedRemainingGames: number | null = null) {
     const cx = scene.cameras.main.centerX;
     const cy = scene.cameras.main.centerY;
 
@@ -125,6 +125,29 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
       () => this.onDealRejected()
     );
 
+    // Aviso de la regla anti-farmeo (ADR-014): línea chica debajo de los
+    // botones (terminan en y=189; el marco interior llega a 218) que avisa
+    // que la oferta de la 1ª ronda está topeada y cuántas partidas más lo
+    // estará. Solo lo envía GameSceneController cuando el monto es
+    // realmente un valor del catálogo topado (ver ese archivo).
+    const cappedNotice =
+      cappedRemainingGames !== null && cappedRemainingGames > 0
+        ? new LocalizedText(
+            this.scene,
+            0,
+            204,
+            cappedRemainingGames === 1 ? 'BANKER_CAPPED_NOTICE_SINGULAR' : 'BANKER_CAPPED_NOTICE_PLURAL',
+            {
+              fontFamily: FONT_FAMILY,
+              fontSize: '13px',
+              color: COLOR_GOLD_HEX,
+              align: 'center',
+              wordWrap: { width: 430 }
+            },
+            { n: cappedRemainingGames }
+          ).setOrigin(0.5)
+        : null;
+
     this.add([
       this.backdrop,
       this.panelBg,
@@ -135,7 +158,8 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
       offerGlow,
       offerText,
       dealBtn,
-      noDealBtn
+      noDealBtn,
+      ...(cappedNotice ? [cappedNotice] : [])
     ]);
     scene.add.existing(this);
 

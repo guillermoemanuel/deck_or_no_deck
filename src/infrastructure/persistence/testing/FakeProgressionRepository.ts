@@ -1,6 +1,7 @@
 import { IProgressionRepository } from '../../../domain/ports/IProgressionRepository';
 import { DeckSetupId, DEFAULT_DECK_ID } from '../../../domain/value-objects/DeckSetups';
 import { freshPeriodicBonusCycleStart } from '../../../domain/value-objects/PeriodicBonus';
+import { FirstRoundDealStreak } from '../../../domain/value-objects/FirstRoundDealStreak';
 
 /**
  * Repositorio en memoria — mismo contrato que LocalStorageProgressionRepository,
@@ -13,6 +14,7 @@ export class FakeProgressionRepository implements IProgressionRepository {
   // Por defecto "disponible de inmediato" — mismo criterio que createDefault()
   // en LocalStorageProgressionRepository (ver freshPeriodicBonusCycleStart()).
   private periodicBonusCycleStart: number = freshPeriodicBonusCycleStart(Date.now());
+  private firstRoundDealStreak: FirstRoundDealStreak = FirstRoundDealStreak.INACTIVE;
 
   getCoins(): number {
     return this.coins;
@@ -41,6 +43,14 @@ export class FakeProgressionRepository implements IProgressionRepository {
     this.periodicBonusCycleStart = timestamp;
   }
 
+  getFirstRoundDealStreak(): FirstRoundDealStreak {
+    return this.firstRoundDealStreak;
+  }
+
+  setFirstRoundDealStreak(streak: FirstRoundDealStreak): void {
+    this.firstRoundDealStreak = streak;
+  }
+
   getOwnedDeckIds(): DeckSetupId[] {
     return [...this.ownedDeckIds];
   }
@@ -58,6 +68,7 @@ export class FakeProgressionRepository implements IProgressionRepository {
     this.coins = 0;
     this.ownedDeckIds = [DEFAULT_DECK_ID];
     this.selectedDeckId = DEFAULT_DECK_ID;
+    this.firstRoundDealStreak = FirstRoundDealStreak.INACTIVE;
   }
 
   /** Helper de test, no forma parte del puerto — para arrancar un escenario con saldo. */
@@ -68,5 +79,10 @@ export class FakeProgressionRepository implements IProgressionRepository {
   /** Helper de test, no forma parte del puerto — fuerza el ciclo del bono periódico a un instante dado. */
   seedPeriodicBonusCycleStart(timestamp: number): void {
     this.periodicBonusCycleStart = timestamp;
+  }
+
+  /** Helper de test, no forma parte del puerto — fuerza el estado de la regla anti-farmeo (ADR-014). */
+  seedFirstRoundDealStreak(consecutiveFirstRoundDeals: number, cappedGamesRemaining: number): void {
+    this.firstRoundDealStreak = FirstRoundDealStreak.restore(consecutiveFirstRoundDeals, cappedGamesRemaining);
   }
 }
