@@ -88,7 +88,7 @@ export class PreloadScene extends Phaser.Scene {
     // audio) y seguiría sonando la pista del mazo anterior — mismo
     // mecanismo del BUGFIX de texturas de más arriba.
     this.removeAudioIfExists('music_gameplay');
-    this.load.audio('music_gameplay', `assets/audio/music/${activeSetup.musicGameplay}.mp3`);
+    this.load.audio('music_gameplay', `assets/audio/music/${activeSetup.musicGameplay}.ogg`);
     this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');
     this.load.audio('sfx-offer', 'assets/audio/sfx/offer.mp3');
   }

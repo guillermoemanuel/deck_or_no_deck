@@ -20,7 +20,7 @@ describe('DeckSetups — música de gameplay por mazo', () => {
 
   it('el archivo de audio de cada mazo existe en public/assets/audio/music/', () => {
     for (const id of DECK_SETUP_IDS) {
-      const file = `${DECK_SETUPS[id].musicGameplay}.mp3`;
+      const file = `${DECK_SETUPS[id].musicGameplay}.ogg`;
       expect({
         deck: id,
         exists: fs.existsSync(path.join(musicDir, file))

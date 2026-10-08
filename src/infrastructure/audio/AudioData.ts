@@ -24,7 +24,7 @@ export interface AudioManifestStructure {
 export const AUDIO_MANIFEST: AudioManifestStructure = {
     music: [
         // Tema instrumental que suena en loop durante toda la partida
-        { key: 'music_gameplay', file: 'clasic_gameplay.mp3', volume: 0.45 }
+        { key: 'music_gameplay', file: 'clasic_gameplay.ogg', volume: 0.45 }
     ],
 
     sfx: [
