@@ -20,7 +20,7 @@ class FixedDrainRule implements EnergyDrainRule {
 
 function createSession(values: number[], drainRule: EnergyDrainRule = new FixedDrainRule(), startingEnergyBonus = 0): GameSession {
   const { boardCards, secretCard } = buildBoard(values);
-  const banker = new Banker(new OfferCalculator());
+  const banker = new Banker(new OfferCalculator(() => 0.5));
   return new GameSession(boardCards, secretCard, banker, drainRule, startingEnergyBonus);
 }
 
@@ -30,7 +30,7 @@ describe('GameSession', () => {
   describe('constructor', () => {
     it('throws if initialCards does not have exactly 12 cards', () => {
       const { boardCards, secretCard } = buildBoard(STANDARD_VALUES);
-      const banker = new Banker(new OfferCalculator());
+      const banker = new Banker(new OfferCalculator(() => 0.5));
       const drainRule = new FixedDrainRule();
 
       expect(() => new GameSession(boardCards.slice(0, 11), secretCard, banker, drainRule)).toThrow();
@@ -41,9 +41,9 @@ describe('GameSession', () => {
       expect(session.getStatus()).toBe('playing');
     });
 
-    it('starts at 50% energy with no bonus (nuevo baseline — ver bug de energía)', () => {
+    it('starts at 60% energy with no bonus (STARTING_ENERGY_RATIO — ADR-013)', () => {
       const session = createSession(STANDARD_VALUES);
-      expect(session.getEnergyPercentage()).toBe(50);
+      expect(session.getEnergyPercentage()).toBe(60);
     });
   });
 
@@ -52,7 +52,7 @@ describe('GameSession', () => {
       const session = createSession(STANDARD_VALUES, new FixedDrainRule());
       session.openCard('card_0');
 
-      expect(session.getEnergyRaw()).toBe(49); // 50 (nuevo baseline) - 1
+      expect(session.getEnergyRaw()).toBe(59); // 60 (STARTING_ENERGY_RATIO) - 1
     });
 
     it('throws when opening the same card twice', () => {
@@ -243,7 +243,7 @@ describe('GameSession', () => {
       expect(() => session.reviveWithFullEnergy()).toThrow();
     });
 
-    it('restores energy to the starting point (50%, nuevo baseline) after a loss', () => {
+    it('restores energy to the starting point (60%, STARTING_ENERGY_RATIO) after a loss', () => {
       const session = createSession([100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], new FixedDrainRule());
       session.openCard('card_0');
       expect(session.getStatus()).toBe('lost');
@@ -251,7 +251,7 @@ describe('GameSession', () => {
       session.reviveWithFullEnergy();
 
       expect(session.getStatus()).toBe('playing');
-      expect(session.getEnergyPercentage()).toBe(50);
+      expect(session.getEnergyPercentage()).toBe(60);
     });
 
     it('respects the starting energy bonus when reviving', () => {
@@ -264,7 +264,7 @@ describe('GameSession', () => {
       expect(session.getStatus()).toBe('lost');
 
       session.reviveWithFullEnergy();
-      expect(session.getEnergyRaw()).toBe(60); // 50 (nuevo baseline) + 10 de bonus
+      expect(session.getEnergyRaw()).toBe(70); // 60 (STARTING_ENERGY_RATIO) + 10 de bonus
     });
 
     it('allows opening cards again after reviving', () => {
@@ -337,9 +337,9 @@ describe('GameSession', () => {
   describe('starting energy bonus — comparative behavior', () => {
     it('lets a session with bonus survive a card that would deplete a session without bonus', () => {
       const drainRule = new FixedDrainRule();
-      // Con el nuevo baseline de 50, un drenaje de 60 agota a quien arranca
-      // en 50 (sin bonus) pero deja 10 de energía a quien arranca en 70
-      // (50 + 20 de "Tanque de Reserva").
+      // Con el baseline de 60 (STARTING_ENERGY_RATIO), un drenaje de 60
+      // agota a quien arranca en 60 (sin bonus) pero deja 20 de energía a
+      // quien arranca en 80 (60 + 20 de "Tanque de Reserva").
       const moderateValues = [60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60];
       const sessionA = createSession(moderateValues, drainRule, 0);
       const sessionB = createSession(moderateValues, drainRule, 20);
@@ -361,17 +361,17 @@ describe('GameSession', () => {
     it('a streak of high-value cards can deplete energy to 0 and end the game in "lost"', () => {
       const realDrainRule = new DefaultEnergyDrainRule();
       // 25000 drena 40 puntos cada vez (ver EnergyDeltaTable). Con el
-      // baseline de 50, dos cartas de 25000 seguidas alcanzan para agotarla.
+      // baseline de 60, dos cartas de 25000 seguidas alcanzan para agotarla.
       const session = createSession(
         [25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000, 25000],
         realDrainRule
       );
 
-      session.openCard('card_0'); // 50 - 40 = 10
+      session.openCard('card_0'); // 60 - 40 = 20
       expect(session.getStatus()).toBe('playing');
-      expect(session.getEnergyRaw()).toBe(10);
+      expect(session.getEnergyRaw()).toBe(20);
 
-      session.openCard('card_1'); // 10 - 40 -> acotado a 0
+      session.openCard('card_1'); // 20 - 40 -> acotado a 0
       expect(session.getStatus()).toBe('lost');
       expect(session.getEnergyRaw()).toBe(0);
     });
@@ -380,8 +380,8 @@ describe('GameSession', () => {
       const realDrainRule = new DefaultEnergyDrainRule();
       const session = createSession([1, 5, 10, 1, 5, 10, 1, 5, 10, 1, 5, 10, 1], realDrainRule);
 
-      session.openCard('card_0'); // 50 + 30 = 80
-      session.openCard('card_1'); // 80 + 25 -> acotado a 100
+      session.openCard('card_0'); // 60 + 30 = 90
+      session.openCard('card_1'); // 90 + 25 -> acotado a 100
       session.openCard('card_2'); // ya en el tope, se mantiene en 100 — luego el banquero interviene
 
       // Cada 3 cartas se activa la oferta del banquero: el estado pasa a
@@ -396,12 +396,12 @@ describe('GameSession', () => {
 
   describe('applyEnergyTankUpgrade ("Tanque de Energía")', () => {
     it('level 1 raises the ceiling by 25% and grants the delta as immediate energy', () => {
-      const session = createSession(STANDARD_VALUES); // 50/100 al inicio
+      const session = createSession(STANDARD_VALUES); // 60/100 al inicio
 
       session.applyEnergyTankUpgrade(1);
 
-      expect(session.getEnergyRaw()).toBe(75); // 50 + 25 de capacidad extra
-      expect(session.getEnergyPercentage()).toBe(60); // 75/125*100
+      expect(session.getEnergyRaw()).toBe(85); // 60 + 25 de capacidad extra
+      expect(session.getEnergyPercentage()).toBe(68); // 85/125*100
     });
 
     it('level 2 raises the ceiling by 50% from a fresh session', () => {
@@ -410,7 +410,7 @@ describe('GameSession', () => {
       session.applyEnergyTankUpgrade(1);
       session.applyEnergyTankUpgrade(2);
 
-      expect(session.getEnergyRaw()).toBe(100); // 50 + 25 (nivel1) + 25 (nivel1->nivel2)
+      expect(session.getEnergyRaw()).toBe(110); // 60 + 25 (nivel1) + 25 (nivel1->nivel2)
     });
 
     it('throws if level 2 is requested without owning level 1 first', () => {
@@ -426,15 +426,15 @@ describe('GameSession', () => {
 
     it('the higher ceiling persists through a later loss and revive (does not reset to 100)', () => {
       const session = createSession([100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], new FixedDrainRule());
-      session.applyEnergyTankUpgrade(1); // techo 125, energia 75
+      session.applyEnergyTankUpgrade(1); // techo 125, energia 85
 
-      session.openCard('card_0'); // drena 100 -> 75-100 acotado a 0
+      session.openCard('card_0'); // drena 100 -> 85-100 acotado a 0
       expect(session.getStatus()).toBe('lost');
 
       session.reviveWithFullEnergy();
       // BUGFIX detectado durante este mismo refactor: revivir NO debe
       // perder el Tanque de Energía ya comprado en esta partida.
-      expect(session.getEnergyRaw()).toBe(62.5); // mitad de 125, el techo vigente
+      expect(session.getEnergyRaw()).toBe(75); // 60 % de 125 (STARTING_ENERGY_RATIO), el techo vigente
     });
   });
 
@@ -446,8 +446,8 @@ describe('GameSession', () => {
 
       session.openCard('card_11'); // valor 10000 -> delta +30 (drena) sin escudo
 
-      // Con el escudo activo, el drenaje real debe ser la MITAD: 50 - 15 = 35
-      expect(session.getEnergyRaw()).toBe(35);
+      // Con el escudo activo, el drenaje real debe ser la MITAD: 60 - 15 = 45
+      expect(session.getEnergyRaw()).toBe(45);
     });
 
     it('does NOT affect the protection of a beneficial card (negative delta)', () => {
@@ -458,7 +458,7 @@ describe('GameSession', () => {
       session.openCard('card_0'); // valor 1 -> delta -30 (protege)
 
       // El escudo mitiga DAÑO, no debe alterar el beneficio de una carta protectora
-      expect(session.getEnergyRaw()).toBe(80); // 50 + 30, igual que sin escudo
+      expect(session.getEnergyRaw()).toBe(90); // 60 + 30, igual que sin escudo
     });
 
     it('produces exactly double the drain when NOT active, for the same dangerous card', () => {
@@ -470,8 +470,8 @@ describe('GameSession', () => {
       withShield.openCard('card_11'); // 10000 -> delta +30
       withoutShield.openCard('card_11');
 
-      const drainWithShield = 50 - withShield.getEnergyRaw();
-      const drainWithoutShield = 50 - withoutShield.getEnergyRaw();
+      const drainWithShield = 60 - withShield.getEnergyRaw();
+      const drainWithoutShield = 60 - withoutShield.getEnergyRaw();
       expect(drainWithShield).toBeCloseTo(drainWithoutShield / 2, 5);
     });
 
@@ -483,13 +483,13 @@ describe('GameSession', () => {
       );
       session.getSessionUpgrades().grantNegativeCardShield();
 
-      session.openCard('card_0'); // 25000 -> delta +40, mitigado a +20 -> 50-20=30
+      session.openCard('card_0'); // 25000 -> delta +40, mitigado a +20 -> 60-20=40
       expect(session.getStatus()).toBe('playing');
-      expect(session.getEnergyRaw()).toBe(30);
+      expect(session.getEnergyRaw()).toBe(40);
 
-      session.openCard('card_1'); // otro +20 mitigado -> 30-20=10
+      session.openCard('card_1'); // otro +20 mitigado -> 40-20=20
       expect(session.getStatus()).toBe('playing');
-      expect(session.getEnergyRaw()).toBe(10);
+      expect(session.getEnergyRaw()).toBe(20);
     });
   });
 

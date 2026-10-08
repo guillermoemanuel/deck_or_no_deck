@@ -32,7 +32,7 @@ function buildLostSession(grantRevive = true): GameSession {
   const values = [100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   const boardCards = values.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', values[12], true);
-  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new FixedDrainRule());
+  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator(() => 0.5)), new FixedDrainRule());
   if (grantRevive) {
     session.getSessionUpgrades().grantRevive();
   }
@@ -46,7 +46,7 @@ function buildPlayingSession(): GameSession {
   return new GameSession(
     boardCards,
     secretCard,
-    new Banker(new OfferCalculator()),
+    new Banker(new OfferCalculator(() => 0.5)),
     new DefaultEnergyDrainRule()
   );
 }

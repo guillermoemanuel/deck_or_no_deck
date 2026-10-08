@@ -21,7 +21,7 @@ const STANDARD_VALUES = [1, 5, 10, 25, 50, 100, 250, 500, 750, 1000, 5000, 10000
 function buildSession(): GameSession {
   const boardCards = STANDARD_VALUES.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', STANDARD_VALUES[12], true);
-  return new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new DefaultEnergyDrainRule());
+  return new GameSession(boardCards, secretCard, new Banker(new OfferCalculator(() => 0.5)), new DefaultEnergyDrainRule());
 }
 
 class NoDrainRule implements EnergyDrainRule {
@@ -34,7 +34,7 @@ class NoDrainRule implements EnergyDrainRule {
 function buildSessionWithOneCardLeft(): GameSession {
   const boardCards = STANDARD_VALUES.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', STANDARD_VALUES[12], true);
-  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new NoDrainRule());
+  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator(() => 0.5)), new NoDrainRule());
 
   for (let i = 0; i < 11; i++) {
     session.openCard(`card_${i}`);

@@ -4,7 +4,15 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-04 (cierre de la **unidad B4 — ADR-012**, aviso inline de ads
+> Fecha del censo: 2026-10-08 (cierre **ADR-013 — rebalance del banquero**: fórmula de la
+> oferta por rondas + energía inicial 60 %, Fase A + B) · **170 archivos TS · 120 fuente +
+> 50 specs** · **recount parcial de líneas**: en este cierre se recontaron solo los archivos
+> tocados (valores en sus filas y en la entrada de cierre más abajo); el total general y los
+> totales por capa siguen medidos en el **último censo completo B4 2026-10-04: 24.881 L**
+> (desde entonces crecieron los archivos de audio 2026-10-06 y los de ADR-013, ambos con sus
+> deltas registrados abajo) hasta el próximo `wc -l` completo. Los conteos de specs por capa
+> SÍ están actualizados.
+> Último censo completo previo — 2026-10-04 (cierre de la **unidad B4 — ADR-012**, aviso inline de ads
 > en la tienda, CG-MON-006; el mismo día cerraron la unidad B3 — CG-MON-005,
 > la unidad **B2 — ADR-011**, `muteAudio`
 > de la plataforma, CG-MON-002, la unidad B1/ADR-010, la unidad
@@ -94,11 +102,26 @@
 > `domain/` 4.164 e `infrastructure/` 3.822 sin cambios (suma de capas + `main.ts` 385 +
 > `vite-env.d.ts` 37 = 24.882 ≈ total `wc -l` 24.881; el ±1 sigue siendo `wc -l` vs
 > conteo por el newline final de `LanguageData.ts`).
+> **Cierre 2026-10-06 (música de gameplay por mazo — quedó fuera del MAP en su momento,
+> registrado ahora):** +1 spec `domain/value-objects/DeckSetups.spec.ts` (**30 L**) →
+> 168 archivos / 49 specs; `DeckSetups.ts` 217 → **234** (+17, campo `musicGameplay`).
+> **Cierre 2026-10-08 (ADR-013 — rebalance del banquero, Fase A + B):** **+2 archivos** —
+> `domain/value-objects/BankerPolicy.ts` (**24 L**) y
+> `domain/value-objects/BankerPolicy.balance.spec.ts` (**234 L**) → **170 archivos / 120
+> fuente + 50 specs**; recontados: `OfferCalculator.ts` 53 → **65** (+12) y su spec 145 →
+> **117** (−28), `Banker.ts` 46 → **52** (+6), `EnergyLevel.ts` 104 → **105** (+1),
+> `DailyBoard.ts` 63 → **77** (+14), `factories/GameSessionFactory.ts` 35 → **42** (+7),
+> `services/CryptoRandomProvider.ts` 57 → **67** (+10), `scenes/GameScene.ts` 610 → **618**
+> (+8), `ports/*.ts` 344 → **351** (`IRandomProvider.nextFloat()`), `testing/*` 291 →
+> **301** (`DeterministicRandomProvider.nextFloat()` = 0.5); `GameSession.ts` **282 sin
+> cambio**. El **total de líneas no se recontó** en este cierre de docs: además de los
+> archivos listados, pudieron cambiar specs tocados por la refactorización
+> (Banker/EnergyLevel/DailyBoard/GameSessionFactory) — el próximo censo con `wc -l` lo cierra.
 > Actualizar este archivo cuando se agreguen/eliminen archivos relevantes (entrada en `LOG.md`).
 
 ---
 
-## `src/domain/` — 4.164 líneas · 16 specs · la capa más protegida 🟢
+## `src/domain/` — 4.164 líneas (B4, recount pendiente) · 18 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -112,26 +135,27 @@
 ### value-objects/
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `DeckSetups.ts` | 217 | ❌ | **10 mazos** con texturas/temas. 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
+| `DeckSetups.ts` | 234 | ✅ 30 L | **10 mazos** con texturas/temas + campo **`musicGameplay`** (pista por mazo que carga `PreloadScene`; el spec valida que el `.ogg` exista en `public/assets/audio/music/`). 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
 | `EnergyDeltaTable.ts` | 64 | ✅ (vía `DefaultEnergyDrainRule.spec`) | Tabla de drenaje + chequeo de integridad al cargar. **Invariante.** |
 | `DailyChallenge.ts` | 119 | ✅ 169 L | Reglas del desafío diario. `previewDailyCompletion()` es la vista previa de la recompensa y `completeDaily` delega en ella (test de propiedad). |
-| `EnergyLevel.ts` | 104 | ✅ 183 L | VO con clamp `[0, ceiling]` + **zonas de la barra**: `EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` (20), `ENERGY_LOW_MAX_PERCENT` (50), `getEnergyZone()` — la vista solo traduce zona → color. |
+| `EnergyLevel.ts` | 105 | ✅ 183 L | VO con clamp `[0, ceiling]` + **`STARTING_RATIO` = 0.6** (energía inicial y revive, ADR-013) + **zonas de la barra**: `EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` (20), `ENERGY_LOW_MAX_PERCENT` (50), `getEnergyZone()` — la vista solo traduce zona → color. |
 | `GamePenalties.ts` | 14 | ✅ 20 L | **Fuente única de la penalidad** (`LOSS_PENALTY_AMOUNT` = −1000); la consumen `OpenCardUseCase`, `UIScene` y `main.ts`. |
 | `PeriodicBonus.ts` | 65 | ✅ | Bono 12 h; rango `[500…5000]` (el 0 salió en 1.3.1). |
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
-| `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |
+| `DailyBoard.ts` | 77 | ✅ | Calendario determinista (seed por fecha UTC) + `createDailyBankerRandom(dateKey)`: PRNG con sal `${DAILY_SEED_SALT}:banker:` para el ruido de la oferta (ADR-013). |
 | `CaseValues.ts` | 35 | ✅ 23 L | Valores posibles de carta + umbral de carta alta (`HIGH_CASE_VALUE_MIN` = 1000, `isHighCaseValue()`) — consumido por `CardView`. |
 | `SessionUpgradeCatalog.ts` | 125 | ✅ 55 L | **Costos y conflictos de la tienda** + `requiresRewardedAd` (set de ads con spec; la *disponibilidad* la deciden `ListAvailableUpgradesUseCase` y `PurchaseSessionUpgradeUseCase`) + **`costOf(id)`**: helper único del monto (lo consumen los 3 use-cases de ads y los specs; ADR-006). 🟡 fuente única de precios. |
+| `BankerPolicy.ts` | 24 | ✅ 234 L | **Fuente única de la política del Banquero y la energía inicial (ADR-013)**: `OFFER_ROUND_FACTORS` [0.75, 0.85, 0.95], `OFFER_NOISE` 0.20, `OFFER_MIN_RATIO` 0.5, `OFFER_MAX_RATIO` 1.2, `STARTING_ENERGY_RATIO` 0.6 — ningún otro archivo puede hardcodear estos números. Su spec `BankerPolicy.balance.spec.ts` (234 L) valida la política con **50.000 partidas sembradas** (EVs, orden de ofertas, bandas de derrota). **Invariante.** |
 
 ### services/ · state/ · events/ · ports/
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `OfferCalculator.ts` | 53 | ✅ 145 L | Fórmula de la oferta + **cap al promedio puro**. Invariante. |
-| `Banker.ts` | 46 | ✅ | Cadencia de 3; usa `Date.now()` (única impureza de tiempo en domain). |
+| `OfferCalculator.ts` | 65 | ✅ 117 L | Fórmula ADR-013: `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bono), 0.5×, 1.2×))` — solo cartas cerradas (la secreta ya no entra con peso 0.2, sin ×0.85); UNA muestra por oferta del generador inyectado por ctor. Invariante. |
+| `Banker.ts` | 52 | ✅ | Cadencia de 3; `makeOffer(closedCards, bonoNegociador?)` ya **NO** recibe la carta secreta (ADR-013); usa `Date.now()` (única impureza de tiempo en domain). |
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 344 | — | Interfaces; contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
+| `ports/*.ts` (8 archivos) | 351 | — | Interfaces; `IRandomProvider` gana **`nextFloat()`** (ruido de la oferta, ADR-013); contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
 
 ---
 
@@ -150,7 +174,7 @@
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
-| `factories/GameSessionFactory.ts` | 35 | ✅ | **Duplica** la construcción de `DeckManager.fromValuesWithSelection` (ver PLAYBOOK). |
+| `factories/GameSessionFactory.ts` | 42 | ✅ | **Duplica** la construcción de `DeckManager.fromValuesWithSelection` (ver PLAYBOOK). `createGameSessionWithSelection(values, secretIndex, offerRandom)` toma el generador de ruido de la oferta como **3.er parámetro obligatorio**; `createGameSession(provider)` pasa `() => provider.nextFloat()` (ADR-013). |
 | `dto/GameStateDTO.ts` | 30 | ❌ | **Código muerto** (`GameStateMapper.toDTO` sin llamadas). |
 | `use-cases/testing/collectEvents.ts` | 11 | — | Helper: acumula eventos para asserts. |
 
@@ -172,10 +196,10 @@
 | `persistence/LocalStorageOnboardingRepository.ts` | 75 | ✅ | — |
 | `persistence/LocalStorageRecordsRepository.ts` | 46 | ✅ (compartido) | `gamesPlayed` se recalcula = wins+losses. |
 | `persistence/LocalStorageDailyChallengeRepository.ts` | 43 | ✅ (compartido) | — |
-| `services/CryptoRandomProvider.ts` | 57 | ❌ | Muestreo por rechazo con `crypto.getRandomValues`. |
+| `services/CryptoRandomProvider.ts` | 67 | ❌ | Muestreo por rechazo con `crypto.getRandomValues` + **`nextFloat()`** = `Uint32 / 2^32` (ruido de la oferta, ADR-013). |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
 | `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
-| `testing/*` (5 archivos · 6 fakes) | 291 | — | Fakes — ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
+| `testing/*` (5 archivos · 6 fakes) | 301 | — | Fakes — `DeterministicRandomProvider.nextFloat()` = **0.5 → ruido de oferta 0** (ADR-013); ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
 
 ---
 
@@ -185,7 +209,7 @@
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 624 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. |
-| `scenes/GameScene.ts` | 610 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra. |
+| `scenes/GameScene.ts` | 618 | ❌ | Composition root de la partida (37 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra y el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013). |
 | `scenes/ShopScene.ts` | 793 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. |
 | `scenes/HowToPlayScene.ts` | 868 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). |
 | `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |

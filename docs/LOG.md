@@ -7,6 +7,62 @@
 
 ---
 
+## 2026-10-08 · feat(balance): rebalance del Banquero (ADR-013) — fórmula de oferta por rondas + energía inicial 60 %
+
+**Qué se tocó en `src/` (hecho por la unidad, ya commiteado; esta sesión solo documenta):**
+
+1. **Fase A — fuente única nueva `domain/value-objects/BankerPolicy.ts` (24 LOC):**
+   `OFFER_ROUND_FACTORS` `[0.75, 0.85, 0.95]` (rondas > 3 usan el último), `OFFER_NOISE` 0.20,
+   `OFFER_MIN_RATIO` 0.5, `OFFER_MAX_RATIO` 1.2, `STARTING_ENERGY_RATIO` 0.6.
+2. **`OfferCalculator.ts` (65 LOC):** fórmula nueva
+   `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bonoNegociador), 0.5×promedio, 1.2×promedio))`
+   — la carta secreta **salió** del cálculo (antes `0.2×secreta + 0.8×promedio`), sin ×0.85
+   de riesgo y sin el param muerto `bonusPercentage` del ctor; generador `() => number` en
+   `[0,1)` **inyectado por constructor** (UNA muestra por oferta; nunca `Math.random` en dominio).
+3. **`Banker.makeOffer(closedCards, bonoNegociador?)`** perdió el parámetro `secretCard`.
+4. **`EnergyLevel`:** `STARTING_RATIO` 0.5 → **0.6** — energía inicial y revive = 60 % del techo.
+5. **`DailyBoard.createDailyBankerRandom(dateKey)`:** PRNG con sal `${DAILY_SEED_SALT}:banker:${dateKey}`
+   (misma fecha UTC → mismas muestras para todos; sal separada del tablero).
+   **`IRandomProvider.nextFloat()`** implementado en `CryptoRandomProvider` (`Uint32/2^32`) y
+   `DeterministicRandomProvider` (0.5 → ruido exacto 0).
+6. **`GameSessionFactory.createGameSessionWithSelection(values, secretIndex, offerRandom)`** con
+   3.er parámetro obligatorio (`createGameSession(provider)` → `() => provider.nextFloat()`);
+   **`GameScene`** cablea un generador fresco por sesión (diario → sal del día; normal → crypto).
+7. **Spec nuevo `domain/value-objects/BankerPolicy.balance.spec.ts` (234 LOC).**
+8. **Fase B (commit previo `1ea9aa7`):** penalidad de derrota/abandono −5000 → −1000
+   (`LOSS_PENALTY_AMOUNT`). Fase A no tiene hash propio: su commit es el de este mismo cambio.
+
+**Docs (esta sesión):** ADR-013 nuevo (`docs/DECISIONS/ADR-013-politica-del-banquero-y-energia-inicial.md`)
++ fila en el índice `docs/DECISIONS/README.md`; `AGENTS.md` §4 (energía 60 % + fórmula actual);
+`docs/ARCHITECTURE.md` (fila de energía inicial, filas de oferta → fórmula/fuente única, puerto
+`IRandomProvider`); `docs/MAP.md` (cierre 2026-10-08: +2 archivos → 170/50, LOCs recontados de los
+archivos tocados, y registro del cierre de audio 2026-10-06 que había quedado fuera del MAP);
+`docs/PLAYBOOK.md` §3 (fila muerta `OfferCalculator.bonusPercentage` eliminada — resuelta el
+2026-10-08: el parámetro se sacó del ctor); `docs/testing.md` **sin cambios** (no describía ni el
+50 % inicial ni la fórmula vieja como invariante actual).
+
+**Cómo se verificó (4 gates, verdes — corridos por la unidad):**
+
+1. `npx jest <specs afectados>` selectivo → verde ✓
+2. `npm run typecheck` → **0 errores** ✓ · `npm run lint` → **0 problemas** ✓
+3. `npm test` → **50 suites / 555 tests** (base: 49/548) ✓
+4. Spec de balance **N = 50.000** partidas sembradas que drivean `GameSession` real:
+   EVs aceptar 1ª/2ª/3ª/nunca = **2365.9 / 2538.2 / 2756.4 / 2838.0** (refs de usuario
+   2370/2531/2749/2801, ±6 %); orden 1ª < 2ª < 3ª ≤ nunca; ratio ≥ 0.75; derrotas **5,6 %**
+   y **25,3 %** (bandas 3-9 % y 22-30 %); `thr90` con ruido ±10 % = 2823.8 ≤ nunca = 2838.
+
+**PENDIENTES:**
+
+- **Escudo + tanque ≈ 0 % de derrota:** con ambas compras la probabilidad de perder es nula
+  (riesgo nulo) — futuro rebalance, sin tocar.
+- **Precios de mejoras de la tienda** parecen altos — sin tocar.
+- **Consecuencia ADR-013:** la barra de energía arranca en zona sana/verde (60 %) en vez de
+  ámbar — deliberado; reconsiderar si el onboarding pierde urgencia.
+- **`docs/MAP.md`:** total de líneas sin recountar (recount parcial por archivo; el próximo
+  censo completo con `wc -l` lo cierra).
+
+---
+
 ## 2026-10-06 · feat(audio): música de gameplay propia por mazo — campo `DeckSetups.musicGameplay`
 
 **Qué se tocó (`src/`, red→verde — hecho por la unidad, no por esta sesión de docs):**

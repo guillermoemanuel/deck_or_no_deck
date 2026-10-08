@@ -1,5 +1,5 @@
 import { CASE_VALUES } from './CaseValues';
-import { generateDailyBoardValues, getUtcDateKey, msUntilNextUtcDay, shiftDateKey } from './DailyBoard';
+import { createDailyBankerRandom, generateDailyBoardValues, getUtcDateKey, msUntilNextUtcDay, shiftDateKey } from './DailyBoard';
 
 describe('generateDailyBoardValues', () => {
   it('es determinista: mismo día, mismo tablero', () => {
@@ -50,5 +50,41 @@ describe('utilidades de fecha UTC', () => {
   it('msUntilNextUtcDay cuenta hasta la medianoche UTC', () => {
     expect(msUntilNextUtcDay(Date.parse('2026-09-28T23:00:00.000Z'))).toBe(60 * 60 * 1000);
     expect(msUntilNextUtcDay(Date.parse('2026-09-28T00:00:00.000Z'))).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+// Ruido de las ofertas del Banquero en el Desafío Diario (ADR-013): misma
+// fecha → mismas muestras de ruido para todos los jugadores, con sal
+// PROPIA para que el ruido no dependa del orden del tablero ni viceversa.
+describe('createDailyBankerRandom', () => {
+  it('es determinista: mismo día, misma secuencia de muestras', () => {
+    const a = createDailyBankerRandom('2026-10-08');
+    const b = createDailyBankerRandom('2026-10-08');
+
+    expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+  });
+
+  it('cambia de un día a otro (ruido distinto entre días)', () => {
+    const today = createDailyBankerRandom('2026-10-08');
+    const tomorrow = createDailyBankerRandom('2026-10-09');
+
+    expect([today(), today(), today()]).not.toEqual([tomorrow(), tomorrow(), tomorrow()]);
+  });
+
+  it('devuelve muestras en [0, 1), como exige OfferCalculator', () => {
+    const random = createDailyBankerRandom('2026-10-08');
+    for (let i = 0; i < 100; i++) {
+      const sample = random();
+      expect(sample).toBeGreaterThanOrEqual(0);
+      expect(sample).toBeLessThan(1);
+    }
+  });
+
+  it('no altera el tablero del día (sal separada del tablero)', () => {
+    const boardBefore = generateDailyBoardValues('2026-10-08');
+    const random = createDailyBankerRandom('2026-10-08');
+    for (let i = 0; i < 10; i++) random();
+
+    expect(generateDailyBoardValues('2026-10-08')).toEqual(boardBefore);
   });
 });

@@ -140,7 +140,7 @@ export class GameSession {
       // la oferta — el Banquero/OfferCalculator no conocen SessionUpgrades,
       // solo reciben el numero ya resuelto (Dependency Inversion).
       const negotiatorBonus = this.sessionUpgrades.hasNegotiator() ? 0.15 : 0;
-      this.currentOffer = this.banker.makeOffer(closed, this.deckManager.getSecretCard(), negotiatorBonus);
+      this.currentOffer = this.banker.makeOffer(closed, negotiatorBonus);
       this.stateMachine.waitForOffer();
       return { card: opened, offer: this.currentOffer };
     }

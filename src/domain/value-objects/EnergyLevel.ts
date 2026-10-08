@@ -7,14 +7,15 @@
  * partida en curso (ver GameSession.applyEnergyTankUpgrade). Por defecto
  * sigue siendo 100, igual que antes de ese refactor.
  */
+import { STARTING_ENERGY_RATIO } from './BankerPolicy';
+
 export class EnergyLevel {
   private static readonly MIN = 0;
   private static readonly DEFAULT_CEILING = 100;
 
-  // El punto de partida de una partida nueva (o al revivir) es la MITAD
-  // del techo vigente — con el techo por defecto (100) sigue siendo 50,
-  // igual que antes.
-  private static readonly STARTING_RATIO = 0.5;
+  // El punto de partida de una partida nueva (o al revivir) es el
+  // STARTING_ENERGY_RATIO del techo vigente (60 % — ADR-013; antes 0.5).
+  private static readonly STARTING_RATIO = STARTING_ENERGY_RATIO;
 
   private constructor(private readonly value: number, private readonly ceiling: number) {}
 

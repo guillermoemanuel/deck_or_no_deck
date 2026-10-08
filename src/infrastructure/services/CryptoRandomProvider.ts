@@ -24,6 +24,16 @@ export class CryptoRandomProvider implements IRandomProvider {
   }
 
   /**
+   * Muestra uniforme en [0, 1) — ruido de la oferta del Banquero (ADR-013).
+   * 32 bits de crypto sobre 2^32: misma fuente íntegra que el barajado.
+   */
+  nextFloat(): number {
+    const buffer = new Uint32Array(1);
+    this.resolveCrypto().getRandomValues(buffer);
+    return buffer[0] / 2 ** 32;
+  }
+
+  /**
    * Genera un entero uniforme en [0, exclusiveMax) usando crypto.getRandomValues,
    * con RECHAZO de valores fuera de rango para eliminar el sesgo de modulo.
    */

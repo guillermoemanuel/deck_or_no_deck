@@ -16,4 +16,12 @@ export class DeterministicRandomProvider implements IRandomProvider {
   generateBoardValues(): number[] {
     return this.fixedOrder ? [...this.fixedOrder] : this.shuffle(CASE_VALUES);
   }
+
+  /**
+   * Siempre 0.5 → ruido de oferta EXACTO 0 (ver OfferCalculator).
+   * Determinista a propósito: los tests quieren montos predecibles.
+   */
+  nextFloat(): number {
+    return 0.5;
+  }
 }

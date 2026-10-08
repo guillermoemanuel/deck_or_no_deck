@@ -61,3 +61,17 @@ export function generateDailyBoardValues(dateKey: string): number[] {
   }
   return values;
 }
+
+/**
+ * Generador de ruido de las ofertas del Banquero para el Desafío Diario
+ * (ADR-013): todos los jugadores del mismo día (UTC) reciben las MISMAS
+ * muestras de ruido, así dos jugadores que abren las cartas en el mismo
+ * orden ven exactamente la misma oferta.
+ *
+ * Sal PROPIA (`:banker:`): separada del tablero del día, así usar este
+ * generador no altera el orden de las cartas ni viceversa — cambiar
+ * DAILY_SEED_SALT sí afecta a ambos.
+ */
+export function createDailyBankerRandom(dateKey: string): () => number {
+  return createSeededRandom(hashString(`${DAILY_SEED_SALT}:banker:${dateKey}`));
+}

@@ -16,4 +16,10 @@ export interface IRandomProvider {
    * listos para repartir (12 tablero + 1 secreta).
    */
   generateBoardValues(): number[];
+
+  /**
+   * Muestra uniforme en [0, 1) — la usa OfferCalculator para el ruido de
+   * la oferta del Banquero (ADR-013). Nunca Math.random() en dominio.
+   */
+  nextFloat(): number;
 }

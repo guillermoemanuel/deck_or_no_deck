@@ -21,7 +21,7 @@ class NoDrainRule implements EnergyDrainRule {
 function buildSessionWithOneCardLeft(): GameSession {
   const boardCards = STANDARD_VALUES.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', STANDARD_VALUES[12], true);
-  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator()), new NoDrainRule());
+  const session = new GameSession(boardCards, secretCard, new Banker(new OfferCalculator(() => 0.5)), new NoDrainRule());
 
   for (let i = 0; i < 11; i++) {
     session.openCard(`card_${i}`);

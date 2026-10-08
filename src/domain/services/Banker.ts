@@ -35,10 +35,16 @@ export class Banker {
     return remaining;
   }
 
-  makeOffer(closedCards: Card[], secretCard: Card, negotiatorBonusPercentage = 0): BankerOffer {
+  /**
+   * Genera la oferta de la PRÓXIMA ronda (contador interno). La carta
+   * secreta ya no se pasa: el cálculo es solo sobre las cartas cerradas
+   * del tablero (ADR-013); el ruido lo aporta el generador inyectado en
+   * el OfferCalculator.
+   */
+  makeOffer(closedCards: Card[], negotiatorBonusPercentage = 0): BankerOffer {
     this.offersGiven += 1;
     return {
-      amount: this.calculator.calculate(closedCards, secretCard, this.offersGiven, negotiatorBonusPercentage),
+      amount: this.calculator.calculate(closedCards, this.offersGiven, negotiatorBonusPercentage),
       roundNumber: this.offersGiven,
       timestamp: Date.now()
     };

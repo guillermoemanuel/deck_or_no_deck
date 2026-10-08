@@ -131,7 +131,7 @@ Reglas:
 | `IRecordsRepository` | `LocalStorageRecordsRepository` | `FakeRecordsRepository` |
 | `IDailyChallengeRepository` | `LocalStorageDailyChallengeRepository` | `FakeDailyChallengeRepository` |
 | `IOnboardingRepository` | `LocalStorageOnboardingRepository` | `FakeOnboardingRepository` |
-| `IRandomProvider` | `CryptoRandomProvider` | `DeterministicRandomProvider` |
+| `IRandomProvider` (`shuffle` / `generateBoardValues` / `nextFloat` — ADR-013) | `CryptoRandomProvider` (`nextFloat` = `Uint32/2^32`) | `DeterministicRandomProvider` (`nextFloat` = 0.5 → ruido de oferta 0) |
 | `IAudioService` | `infrastructure/audio/AudioService` | **no existe** |
 
 Nota: **`AudioService.setPlatformMuted()` NO está en el puerto `IAudioService`** — es
@@ -201,12 +201,12 @@ suscripción.
 
 | Invariante | Valor | Dónde |
 |---|---|---|
-| Energía inicial | 50% | `GameSession` + `GameSessionFactory` |
+| Energía inicial (y revive) | **60 %** del techo (`STARTING_ENERGY_RATIO`) | `domain/value-objects/BankerPolicy.ts` (fuente única, ADR-013); la aplica `EnergyLevel` |
 | Drenaje por valor | tabla fija `EnergyDeltaTable` (25000→−40% … 1→+30%) | `domain/value-objects/EnergyDeltaTable.ts` |
 | Cadencia del banquero | cada 3 cartas abiertas | `Banker.shouldMakeOffer` |
-| Tope de la oferta | **nunca** supera el promedio puro del tablero | `OfferCalculator.ts` (`Math.min`) |
-| Descuento de riesgo | ×0.85 | `OfferCalculator.ts` |
-| Bonus Negociador | +15% (0.15) sobre la oferta, tope incluido | `GameSession.openCard` |
+| Fórmula de la oferta | `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bonoNegociador), 0.5×promedio, 1.2×promedio))` — factores `[0.75, 0.85, 0.95]` (rondas > 3 usan el último), ruido ±20 % con **UNA muestra por oferta**; la carta secreta **no participa** (ADR-013) | `OfferCalculator.ts` + constantes en `domain/value-objects/BankerPolicy.ts` (fuente única) |
+| Generador del ruido | `() => number` en `[0,1)` inyectado por ctor (nunca `Math.random` en dominio); partida normal → `IRandomProvider.nextFloat()`; Desafío Diario → PRNG con sal `${DAILY_SEED_SALT}:banker:<fecha UTC>` (misma fecha → mismas muestras) | `GameSessionFactory` / `GameScene` lo cablean por sesión; `DailyBoard.createDailyBankerRandom` (ADR-013) |
+| Bonus Negociador | +15% (0.15), aplicado **antes** del techo 1.2× | `GameSession.openCard` |
 | Penalidad por abandono/derrota | −1000 (puede dejar saldo negativo) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (fuente única) |
 | Bono periódico | 12 h cooldown + 24 h ventana, 6 cartas `[500…5000]` | `domain/value-objects/PeriodicBonus.ts` |
 | Tank de energía | techo ×1.25 (nivel 1) / ×1.5 (nivel 2) | `GameSession.applyEnergyTankUpgrade` **y** `PurchaseSessionUpgradeUseCase` (dos lugares, deben sincronizarse) |

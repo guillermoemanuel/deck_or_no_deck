@@ -12,7 +12,11 @@ import { IRandomProvider } from '../../domain/ports/IRandomProvider';
  * (ver PurchaseSessionUpgradeUseCase), nunca antes de que exista.
  * Una partida siempre arranca "limpia", sin modificadores.
  */
-export function createGameSessionWithSelection(values: number[], secretIndex: number): GameSession {
+export function createGameSessionWithSelection(
+  values: number[],
+  secretIndex: number,
+  offerRandom: () => number
+): GameSession {
   const secretValue = values[secretIndex];
   const secretCard = Card.create(`card_${secretIndex}`, secretValue, true);
 
@@ -23,7 +27,10 @@ export function createGameSessionWithSelection(values: number[], secretIndex: nu
     }
   });
 
-  const banker = new Banker(new OfferCalculator());
+  // Generador de ruido de la oferta (ADR-013): lo inyecta el caller —
+  // partida normal con `randomProvider.nextFloat()` (crypto), Desafío
+  // Diario con la semilla del día. Nunca Math.random() en dominio.
+  const banker = new Banker(new OfferCalculator(offerRandom));
   const drainRule = new DefaultEnergyDrainRule();
 
   return new GameSession(boardCards, secretCard, banker, drainRule);
@@ -31,5 +38,5 @@ export function createGameSessionWithSelection(values: number[], secretIndex: nu
 
 export function createGameSession(randomProvider: IRandomProvider): GameSession {
   const values = randomProvider.generateBoardValues();
-  return createGameSessionWithSelection(values, 12);
+  return createGameSessionWithSelection(values, 12, () => randomProvider.nextFloat());
 }

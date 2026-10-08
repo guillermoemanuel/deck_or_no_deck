@@ -13,9 +13,10 @@ import { CASE_VALUES } from './CaseValues';
  *   - Cero     = neutro.
  *
  * Los puntos son absolutos sobre una escala de 0 a 100 (ver EnergyLevel),
- * que ahora arranca en 50 — así una racha de cartas altas puede agotarla
- * y una racha de cartas bajas puede llevarla al tope, dándole sentido real
- * a mejoras de tienda como "Blindaje de Energía" o "Tanque de Reserva".
+ * que arranca al 60 % (STARTING_ENERGY_RATIO, ADR-013) — así una racha de
+ * cartas altas puede agotarla y una racha de cartas bajas puede llevarla
+ * al tope, dándole sentido real a mejoras de tienda como "Blindaje de
+ * Energía" o "Tanque de Reserva".
  */
 export const ENERGY_DELTA_BY_VALUE: ReadonlyMap<number, number> = new Map([
   [25000, 40],

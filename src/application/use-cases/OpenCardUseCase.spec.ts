@@ -20,7 +20,7 @@ function buildSession(
 ): GameSession {
   const boardCards = values.slice(0, 12).map((v, i) => Card.create(`card_${i}`, v));
   const secretCard = Card.create('card_secret', values[12], true);
-  const banker = customBanker ?? new Banker(new OfferCalculator());
+  const banker = customBanker ?? new Banker(new OfferCalculator(() => 0.5));
   const drainRule = customDrainRule ?? (values[0] === 100000 ? { drainFor: () => 100 } : new DefaultEnergyDrainRule());
   return new GameSession(boardCards, secretCard, banker, drainRule);
 }
@@ -66,7 +66,7 @@ describe('OpenCardUseCase', () => {
   });
 
   it('emits MidgameSwapAvailable exactly after the 6th card, when no offer coincides', () => {
-    const silentBanker = new Banker(new OfferCalculator());
+    const silentBanker = new Banker(new OfferCalculator(() => 0.5));
     jest.spyOn(silentBanker, 'shouldMakeOffer').mockReturnValue(false);
     const session = buildSession(STANDARD_VALUES, undefined, silentBanker);
     const eventBus = new SimpleEventEmitter<GameEvent>();
@@ -180,7 +180,7 @@ describe('OpenCardUseCase', () => {
     }
 
     it('is emitted after opening down to exactly 1 closed card left, when the upgrade is owned', () => {
-      const silentBanker = new Banker(new OfferCalculator());
+      const silentBanker = new Banker(new OfferCalculator(() => 0.5));
       jest.spyOn(silentBanker, 'shouldMakeOffer').mockReturnValue(false);
       const session = buildSession(STANDARD_VALUES, new NoDrainRule(), silentBanker);
       session.getSessionUpgrades().grantSecretSwapFinal();
@@ -198,7 +198,7 @@ describe('OpenCardUseCase', () => {
     });
 
     it('is NOT emitted without the upgrade, even with exactly 1 card left', () => {
-      const silentBanker = new Banker(new OfferCalculator());
+      const silentBanker = new Banker(new OfferCalculator(() => 0.5));
       jest.spyOn(silentBanker, 'shouldMakeOffer').mockReturnValue(false);
       const session = buildSession(STANDARD_VALUES, new NoDrainRule(), silentBanker);
       const eventBus = new SimpleEventEmitter<GameEvent>();
@@ -252,7 +252,7 @@ describe('OpenCardUseCase', () => {
       // Acá la de 25000 es la carta SECRETA (índice 12) — nunca pasa por
       // CardOpened, así que este es el otro camino que necesita su propio
       // chequeo (ver el comentario en OpenCardUseCase.execute()).
-      const silentBanker = new Banker(new OfferCalculator());
+      const silentBanker = new Banker(new OfferCalculator(() => 0.5));
       jest.spyOn(silentBanker, 'shouldMakeOffer').mockReturnValue(false);
       const values = [1, 5, 10, 25, 50, 100, 250, 500, 750, 1000, 5000, 10000, 25000];
       const session = buildSession(values, new ZeroDrainRule(), silentBanker);

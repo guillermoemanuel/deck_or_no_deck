@@ -2,19 +2,19 @@ import { EnergyLevel, getEnergyZone } from './EnergyLevel';
 
 describe('EnergyLevel', () => {
   describe('full', () => {
-    // BUGFIX (nivel de energía): el punto de partida ahora es 50, no 100 —
-    // arrancar a mitad de la barra permite que una racha de cartas altas
-    // pueda agotarla de verdad y hacer perder al jugador.
-    it('starts at 50 with no bonus', () => {
-      expect(EnergyLevel.full().toNumber()).toBe(50);
+    // BUGFIX (nivel de energía): el punto de partida es el 60 % del techo
+    // (STARTING_ENERGY_RATIO, ADR-013), no 100 — arrancar a media barra
+    // permite que una racha de cartas altas pueda agotarla de verdad.
+    it('starts at 60 with no bonus (STARTING_ENERGY_RATIO)', () => {
+      expect(EnergyLevel.full().toNumber()).toBe(60);
     });
 
-    it('starts above 50 with a positive bonus (ej. "Tanque de Reserva")', () => {
-      expect(EnergyLevel.full(10).toNumber()).toBe(60);
+    it('starts above 60 with a positive bonus (ej. "Tanque de Reserva")', () => {
+      expect(EnergyLevel.full(10).toNumber()).toBe(70);
     });
 
     it('ignores a negative bonus (clamped to 0 extra)', () => {
-      expect(EnergyLevel.full(-20).toNumber()).toBe(50);
+      expect(EnergyLevel.full(-20).toNumber()).toBe(60);
     });
 
     it('never starts above 100, even with an unrealistically large bonus', () => {
@@ -23,8 +23,8 @@ describe('EnergyLevel', () => {
   });
 
   describe('toPercentageOfBase', () => {
-    it('reports 50% at the starting point, with no bonus', () => {
-      expect(EnergyLevel.full().toPercentageOfBase()).toBe(50);
+    it('reports 60% at the starting point, with no bonus', () => {
+      expect(EnergyLevel.full().toPercentageOfBase()).toBe(60);
     });
 
     it('reports 100% at the true maximum', () => {
@@ -44,7 +44,7 @@ describe('EnergyLevel', () => {
   describe('drain', () => {
     it('reduces the raw value by the given amount', () => {
       const drained = EnergyLevel.full().drain(20);
-      expect(drained.toNumber()).toBe(30);
+      expect(drained.toNumber()).toBe(40);
     });
 
     it('does not go below 0', () => {
@@ -53,8 +53,8 @@ describe('EnergyLevel', () => {
     });
 
     it('can reduce a bonus-inflated value below the starting point', () => {
-      const drained = EnergyLevel.full(10).drain(50); // 60 - 50
-      expect(drained.toNumber()).toBe(10);
+      const drained = EnergyLevel.full(10).drain(50); // 70 - 50
+      expect(drained.toNumber()).toBe(20);
     });
 
     // BUGFIX: drain() con un monto NEGATIVO (carta protectora) ahora
@@ -86,7 +86,7 @@ describe('EnergyLevel', () => {
     });
 
     it('does not restore a bonus-inflated session back above 100', () => {
-      const afterBonusDrained = EnergyLevel.full(10).drain(15); // 60 - 15 = 45
+      const afterBonusDrained = EnergyLevel.full(10).drain(15); // 70 - 15 = 55
       const restored = afterBonusDrained.restore(200);
       expect(restored.toNumber()).toBe(100);
     });
@@ -114,24 +114,24 @@ describe('EnergyLevel', () => {
     });
 
     it('grants the capacity delta as immediate energy, keeping the percentage from dropping', () => {
-      const before = EnergyLevel.full(); // 50/100 = 50%
-      const upgraded = before.withNewCeiling(125); // +25 de capacidad -> 75/125
+      const before = EnergyLevel.full(); // 60/100 = 60%
+      const upgraded = before.withNewCeiling(125); // +25 de capacidad -> 85/125
 
-      expect(upgraded.toNumber()).toBe(75);
-      expect(upgraded.toPercentageOfBase()).toBe(60); // 75/125*100 — nunca baja del 50% original
+      expect(upgraded.toNumber()).toBe(85);
+      expect(upgraded.toPercentageOfBase()).toBe(68); // 85/125*100 — nunca baja del 60% original
       expect(upgraded.toPercentageOfBase()).toBeGreaterThanOrEqual(before.toPercentageOfBase());
     });
 
     it('applies the level-2 multiplier (+50%) correctly from a fresh 100-ceiling energy', () => {
-      const before = EnergyLevel.full(); // 50/100
-      const upgraded = before.withNewCeiling(150); // +50 de capacidad -> 100/150
+      const before = EnergyLevel.full(); // 60/100
+      const upgraded = before.withNewCeiling(150); // +50 de capacidad -> 110/150
 
-      expect(upgraded.toNumber()).toBe(100);
+      expect(upgraded.toNumber()).toBe(110);
       expect(upgraded.getCeiling()).toBe(150);
     });
 
     it('still respects the new ceiling as the upper clamp for future drains/restores', () => {
-      const upgraded = EnergyLevel.full().withNewCeiling(125); // 75/125
+      const upgraded = EnergyLevel.full().withNewCeiling(125); // 85/125
       const restored = upgraded.restore(1000);
       expect(restored.toNumber()).toBe(125);
     });

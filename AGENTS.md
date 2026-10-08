@@ -55,8 +55,13 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 
 ## 4. Invariantes numéricos (no cambiar sin un test que falle primero)
 
-- Energía inicial 50 %; drenaje según tabla fija `EnergyDeltaTable` (nunca fórmula relativa).
-- Oferta del banquero: cada 3 cartas; **nunca supera el promedio puro** del tablero; ×0.85 de riesgo; bonus Negociador +15 % con ese tope.
+- Energía inicial 60 % (`STARTING_ENERGY_RATIO` en `BankerPolicy.ts`); drenaje según tabla
+  fija `EnergyDeltaTable` (nunca fórmula relativa).
+- Oferta del banquero: cada 3 cartas;
+  `round(clamp(promedio × factor[ronda] × (1+ruido) × (1+bonoNegociador), 0.5×promedio, 1.2×promedio))`
+  — factores `[0.75, 0.85, 0.95]` (rondas > 3 usan el último), ruido ±20 % con **UNA muestra
+  por oferta** de generador inyectado por ctor (nunca `Math.random` en dominio), bono
+  Negociador +15 % **antes** del techo; **fuente única `BankerPolicy.ts` (ADR-013)**.
 - Penalidad de derrota/abandono: −1000, **puede dejar saldo negativo** — fuente única
   `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (no re-hardcodear 1000).
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.

@@ -19,7 +19,7 @@ import { activateGameAbandonGuard, deactivateGameAbandonGuard } from '../GameAba
 import { ParticleManager } from '../components/ParticleManager';
 import { PayoutBoardView } from '../components/PayoutBoardView';
 import { CASE_VALUES } from '../../domain/value-objects/CaseValues';
-import { generateDailyBoardValues, getUtcDateKey } from '../../domain/value-objects/DailyBoard';
+import { createDailyBankerRandom, generateDailyBoardValues, getUtcDateKey } from '../../domain/value-objects/DailyBoard';
 import { consumeGameMode } from '../GameMode';
 import { setPenaltyFreeSession } from '../GameAbandonGuard';
 import { createPenaltyFreeProgression } from '../PenaltyFreeProgression';
@@ -315,8 +315,16 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       }
     });
 
-    // Crear la sesión de juego en el Dominio con la elección del jugador
-    const session = createGameSessionWithSelection(values, chosenIndex);
+    // Crear la sesión de juego en el Dominio con la elección del jugador.
+    // Ruido de la oferta del Banquero (ADR-013): generador FRESCO por
+    // sesión — en el Desafío Diario todos reciben las mismas muestras
+    // (misma fecha → misma secuencia), en partida normal muestras nuevas
+    // del crypto provider. Nunca Math.random() en el dominio.
+    const offerRandom =
+      this.dailyDateKey !== null
+        ? createDailyBankerRandom(this.dailyDateKey)
+        : () => services.randomProvider.nextFloat();
+    const session = createGameSessionWithSelection(values, chosenIndex, offerRandom);
 
     // En el Desafío Diario, TODOS los use-cases que tocan monedas/penalidades
     // reciben esta versión "sin castigo" en vez del servicio real (ver

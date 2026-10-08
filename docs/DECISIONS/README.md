@@ -22,3 +22,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [010](ADR-010-bloqueador-de-ui-durante-ads.md) | Bloqueador de UI durante todo el ciclo del ad (fase `'requesting'` + `AdBlockerScene`) | Aceptada |
 | [011](ADR-011-muteaudio-de-plataforma.md) | `muteAudio` de la plataforma con prioridad sobre el toggle in-game (capa `platformMuted`) | Aceptada |
 | [012](ADR-012-aviso-inline-de-ads-en-la-tienda.md) | Aviso inline de ads ocultos en la tienda (política `adsNotice()` en aplicación) | Aceptada |
+| [013](ADR-013-politica-del-banquero-y-energia-inicial.md) | Política del Banquero (oferta por rondas con ruido inyectado) y energía inicial 60 % — rebalance Fase A + B | Aceptada |

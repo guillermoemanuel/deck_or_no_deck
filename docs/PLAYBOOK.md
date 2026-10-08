@@ -127,7 +127,6 @@ unidad — si se hace, es una tarea propia con sus 4 gates.
 | `AudioService.preload()` | `infrastructure/audio/` | sin llamadas y con path que no existe |
 | `GameSceneData` | `presentation/scenes/GameScene.types.ts` | referencia a `CaseSelectionScene`, escena inexistente |
 | `GameSession.startingEnergyBonus` | `domain/entities/GameSession.ts` | solo lo pasa su spec (resto del "Tanque de Reserva" viejo) |
-| `OfferCalculator.bonusPercentage` (ctor) | `domain/services/` | producción siempre hace `new OfferCalculator()` |
 | `DeckManager.fromValues*` | `domain/entities/DeckManager.ts` | solo lo usan specs; producción va por la factory |
 | Comentario de penalidad tachado | `UIScene.ts` | legado de la migración a i18n |
 | Rama `wantsDouble && wantsTriple` | `ResultScene.buildWonActions` (~L263) | **Potencialmente muerta** (2026-10-01): inalcanzable con el catálogo actual — `SessionUpgradeCatalog.conflictsWith` prohíbe double+triple y `SessionUpgrades` no persiste entre partidas; los flags se calculan en vivo. **No borrada**: es la red de seguridad ante cualquier bug de lógica que otorgue ambos a la vez (si se borrara, un doble flag mostraría un solo botón). Evaluación pendiente del usuario (ADR-006 la documenta). |

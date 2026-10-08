@@ -2,144 +2,116 @@ import { OfferCalculator } from './OfferCalculator';
 import { Card } from '../entities/Card';
 
 describe('OfferCalculator', () => {
+  // promedio de estas 3 cartas cerradas = 200 (la carta secreta ya no
+  // participa del cálculo — ver ADR-013).
   const closedCards = [
     Card.create('a', 100),
     Card.create('b', 200),
     Card.create('c', 300)
   ];
-  const secretCard = Card.create('secret', 250, true);
+  const AVERAGE = 200;
 
-  describe('constructor validation', () => {
-    it('accepts zero bonus by default', () => {
-      expect(() => new OfferCalculator()).not.toThrow();
+  describe('constructor — generador inyectado (sin Math.random en dominio)', () => {
+    it('throws when there are no closed cards remaining', () => {
+      const calculator = new OfferCalculator(() => 0.5);
+      expect(() => calculator.calculate([], 1)).toThrow();
     });
 
-    it('accepts a positive bonusPercentage', () => {
-      expect(() => new OfferCalculator(0.15)).not.toThrow();
-    });
-
-    it('throws on negative bonusPercentage', () => {
-      expect(() => new OfferCalculator(-0.01)).toThrow();
+    it('throws when the generator returns a value outside [0,1)', () => {
+      // Un generador fuera de rango rompe el ruido de ±OFFER_NOISE y con él
+      // los topes de la política: se trata como error de programación.
+      expect(() => new OfferCalculator(() => 1).calculate(closedCards, 1)).toThrow();
+      expect(() => new OfferCalculator(() => 1.5).calculate(closedCards, 1)).toThrow();
+      expect(() => new OfferCalculator(() => -0.01).calculate(closedCards, 1)).toThrow();
     });
   });
 
-  describe('calculate — base behavior (no upgrade bonus)', () => {
-    const calculator = new OfferCalculator();
-
-    it('throws when there are no closed cards remaining', () => {
-      expect(() => calculator.calculate([], secretCard, 1)).toThrow();
-    });
+  describe('calculate — fórmula de la política (BankerPolicy.ts)', () => {
+    // u = 0.5 → ruido exacto 0 → oferta = promedio × factor
+    const noiseless = () => 0.5;
 
     it('returns an integer amount', () => {
-      const offer = calculator.calculate(closedCards, secretCard, 1);
-      expect(Number.isInteger(offer)).toBe(true);
+      const calculator = new OfferCalculator(noiseless);
+      expect(Number.isInteger(calculator.calculate(closedCards, 1))).toBe(true);
     });
 
-    it('never exceeds the pure board average', () => {
-      const offer = calculator.calculate(closedCards, secretCard, 1);
-      const pureAverage = (100 + 200 + 300) / 3;
-      expect(offer).toBeLessThanOrEqual(pureAverage);
+    it('throws on a negative negotiator bonus', () => {
+      const calculator = new OfferCalculator(noiseless);
+      expect(() => calculator.calculate(closedCards, 1, -0.01)).toThrow();
     });
 
-    it('increases (progression bonus) as roundNumber grows, all else equal', () => {
-      const earlyOffer = calculator.calculate(closedCards, secretCard, 1);
-      const lateOffer = calculator.calculate(closedCards, secretCard, 5);
-      expect(lateOffer).toBeGreaterThan(earlyOffer);
+    it('applies the per-round factor: ronda 1 ×0.75, ronda 2 ×0.85, ronda 3 ×0.95', () => {
+      const calculator = new OfferCalculator(noiseless);
+      expect(calculator.calculate(closedCards, 1)).toBe(150); // 200 × 0.75
+      expect(calculator.calculate(closedCards, 2)).toBe(170); // 200 × 0.85
+      expect(calculator.calculate(closedCards, 3)).toBe(190); // 200 × 0.95
     });
 
-    it('is deterministic for identical inputs', () => {
-      const first = calculator.calculate(closedCards, secretCard, 2);
-      const second = calculator.calculate(closedCards, secretCard, 2);
-      expect(first).toBe(second);
+    it('uses the LAST factor for rounds beyond the table (rondas > 3)', () => {
+      const calculator = new OfferCalculator(noiseless);
+      expect(calculator.calculate(closedCards, 4)).toBe(190); // ×0.95
+      expect(calculator.calculate(closedCards, 99)).toBe(190);
     });
 
-    it('produces a higher offer when the secret card value is higher, all else equal', () => {
-      const lowSecret = Card.create('secret-low', 50, true);
-      const highSecret = Card.create('secret-high', 900, true);
+    it('consumes EXACTLY one generator sample per offer', () => {
+      const generator = jest.fn(() => 0.5);
+      const calculator = new OfferCalculator(generator);
 
-      const offerWithLowSecret = calculator.calculate(closedCards, lowSecret, 1);
-      const offerWithHighSecret = calculator.calculate(closedCards, highSecret, 1);
+      calculator.calculate(closedCards, 1);
+      calculator.calculate(closedCards, 2);
 
-      expect(offerWithHighSecret).toBeGreaterThan(offerWithLowSecret);
+      expect(generator).toHaveBeenCalledTimes(2); // uno por oferta, ni más ni menos
     });
 
-    it('handles a single remaining closed card without dividing by zero', () => {
-      const singleCard = [Card.create('only', 500)];
-      expect(() => calculator.calculate(singleCard, secretCard, 1)).not.toThrow();
-    });
-  });
-
-  describe('calculate — with "Negociador Maestro" bonus', () => {
-    it('produces a higher offer than the base calculator, for identical inputs', () => {
-      const baseCalculator = new OfferCalculator(0);
-      const boostedCalculator = new OfferCalculator(0.15);
-
-      const baseOffer = baseCalculator.calculate(closedCards, secretCard, 1);
-      const boostedOffer = boostedCalculator.calculate(closedCards, secretCard, 1);
-
-      expect(boostedOffer).toBeGreaterThanOrEqual(baseOffer);
+    it('maps u=0 to −20 % of noise (borde inferior del ruido)', () => {
+      const calculator = new OfferCalculator(() => 0);
+      // 200 × 0.75 × 0.8 = 120
+      expect(calculator.calculate(closedCards, 1)).toBe(120);
     });
 
-    it('never offers more than the pure board average, even at max upgrade level', () => {
-      const calculator = new OfferCalculator(0.15);
-      const pureAverage = (100 + 200 + 300) / 3;
+    it('maps u→1 to +20 % of noise (borde superior del ruido)', () => {
+      const calculator = new OfferCalculator(() => 0.999999999);
+      // 200 × 0.75 × 1.2 = 180 (el redondeo llega al techo del ruido)
+      expect(calculator.calculate(closedCards, 1)).toBe(180);
+    });
 
-      for (let round = 1; round <= 10; round++) {
-        const offer = calculator.calculate(closedCards, secretCard, round);
-        expect(offer).toBeLessThanOrEqual(pureAverage);
+    it('applies the Negociador +15 % BEFORE the clamp', () => {
+      const calculator = new OfferCalculator(noiseless);
+      const base = calculator.calculate(closedCards, 1); // 150
+      const withBonus = calculator.calculate(closedCards, 1, 0.15); // 200 × 0.75 × 1.15 = 172.5 → 173
+
+      expect(withBonus).toBe(173);
+      expect(withBonus).toBeGreaterThan(base);
+    });
+
+    it('caps the offer at 1.2 × average when the bonus would exceed it', () => {
+      const calculator = new OfferCalculator(() => 0.999999999);
+      // 200 × 0.95 × 1.2 × 1.15 = 263.4 → tope 1.2 × 200 = 240
+      expect(calculator.calculate(closedCards, 3, 0.15)).toBe(240);
+    });
+
+    it('keeps every offer inside [0.5 × average, 1.2 × average] for any sample, round and bonus', () => {
+      for (const u of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.999999999]) {
+        for (const round of [1, 2, 3, 4]) {
+          for (const bonus of [0, 0.15]) {
+            const offer = new OfferCalculator(() => u).calculate(closedCards, round, bonus);
+            expect(offer).toBeGreaterThanOrEqual(0.5 * AVERAGE);
+            expect(offer).toBeLessThanOrEqual(1.2 * AVERAGE);
+          }
+        }
       }
     });
 
-    it('caps correctly even with an extreme (hypothetical) bonus far above catalog max', () => {
-      const calculator = new OfferCalculator(2.0);
-      const pureAverage = (100 + 200 + 300) / 3;
-
-      const offer = calculator.calculate(closedCards, secretCard, 1);
-      expect(offer).toBeLessThanOrEqual(pureAverage);
-    });
-  });
-
-  describe('calculate — extraBonusPercentage (upgrade de partida "Negociador")', () => {
-    it('increases the offer relative to no bonus, for identical inputs', () => {
-      const calculator = new OfferCalculator();
-
-      const withoutBonus = calculator.calculate(closedCards, secretCard, 1);
-      const withBonus = calculator.calculate(closedCards, secretCard, 1, 0.15);
-
-      expect(withBonus).toBeGreaterThanOrEqual(withoutBonus);
-    });
-
-    it('combines additively with the constructor bonusPercentage', () => {
-      const calculator = new OfferCalculator(0.05);
-      const pureAverage = (100 + 200 + 300) / 3;
-
-      const combined = calculator.calculate(closedCards, secretCard, 1, 0.15);
-      const constructorOnly = calculator.calculate(closedCards, secretCard, 1, 0);
-
-      expect(combined).toBeGreaterThanOrEqual(constructorOnly);
-      expect(combined).toBeLessThanOrEqual(pureAverage); // el cap sigue vigente
-    });
-
-    it('never offers more than the pure board average even with the Negociador bonus', () => {
-      const calculator = new OfferCalculator();
-      const pureAverage = (100 + 200 + 300) / 3;
-
-      for (let round = 1; round <= 10; round++) {
-        const offer = calculator.calculate(closedCards, secretCard, round, 0.15);
-        expect(offer).toBeLessThanOrEqual(pureAverage);
-      }
-    });
-
-    it('throws on a negative extraBonusPercentage', () => {
-      const calculator = new OfferCalculator();
-      expect(() => calculator.calculate(closedCards, secretCard, 1, -0.1)).toThrow();
-    });
-
-    it('defaults to 0 when omitted (no behavior change for existing callers)', () => {
-      const calculator = new OfferCalculator();
-      const explicit = calculator.calculate(closedCards, secretCard, 1, 0);
-      const omitted = calculator.calculate(closedCards, secretCard, 1);
-      expect(omitted).toBe(explicit);
+    it('is independent of any secret card (la secreta salió de la fórmula)', () => {
+      // Misma entrada → misma salida, sin ningún parámetro de carta secreta
+      // en la firma: el promedio es SOLO de las cartas cerradas del tablero.
+      const a = new OfferCalculator(noiseless).calculate(closedCards, 2);
+      const b = new OfferCalculator(noiseless).calculate(
+        [Card.create('a', 100), Card.create('b', 200), Card.create('c', 300)],
+        2
+      );
+      expect(a).toBe(b);
+      expect(a).toBe(170);
     });
   });
 });
