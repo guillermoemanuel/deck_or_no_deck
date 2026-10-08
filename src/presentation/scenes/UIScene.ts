@@ -44,7 +44,7 @@ const HUD_TOP_ROW_Y = HUD_EDGE_MARGIN + HUD_BUTTON_SIZE / 2; // Container = orig
  
  * Incluye el botón "Salir / Menú" con su modal de confirmación, y el
  * disparo VOLUNTARIO del sistema Anti-Cheat de penalización por abandono
- * (-5000, ver GameAbandonGuard.ts para el ciclo de vida completo del flag
+ * (-1000, ver GameAbandonGuard.ts para el ciclo de vida completo del flag
  * y su contraparte de abandono FORZADO en main.ts's `beforeunload`).
  */
 export class UIScene extends Phaser.Scene {

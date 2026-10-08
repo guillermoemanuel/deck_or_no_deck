@@ -57,8 +57,8 @@ Detalle por archivo (LOC, specs, peligrosidad): `docs/MAP.md`.
 
 - Energía inicial 50 %; drenaje según tabla fija `EnergyDeltaTable` (nunca fórmula relativa).
 - Oferta del banquero: cada 3 cartas; **nunca supera el promedio puro** del tablero; ×0.85 de riesgo; bonus Negociador +15 % con ese tope.
-- Penalidad de derrota/abandono: −5000, **puede dejar saldo negativo** — fuente única
-  `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (no re-hardcodear 5000).
+- Penalidad de derrota/abandono: −1000, **puede dejar saldo negativo** — fuente única
+  `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (no re-hardcodear 1000).
 - Tanque de energía: techo ×1.25 / ×1.5 — calculado en `GameSession.applyEnergyTankUpgrade` **y** en `PurchaseSessionUpgradeUseCase`: si cambia uno, cambia el otro.
 - Costos de tienda: los define `SessionUpgradeCatalog.ts`; los tests usan `costOf(id)`, **nunca precios hardcodeados**.
 - Bono periódico: 12 h cooldown + 24 h ventana; cartas `[500…5000]` (ADR-005).

@@ -172,7 +172,7 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       services.outcomeRecorder.startDaily(this.dailyDateKey);
     }
     // Decisión de diseño: el Desafío Diario NO castiga con la penalización de
-    // -5000 monedas por derrota ni por abandonar (cerrar la pestaña) — ver
+    // -1000 monedas por derrota ni por abandonar (cerrar la pestaña) — ver
     // PenaltyFreeProgression.ts y GameAbandonGuard.setPenaltyFreeSession.
     // Sí paga su recompensa igual si se pierde: es una invitación diaria a
     // volver, no un desafío punitivo. Las partidas NORMALES no cambian.

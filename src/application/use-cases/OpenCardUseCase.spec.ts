@@ -3,6 +3,7 @@ import { GameSession, DefaultEnergyDrainRule, EnergyDrainRule } from '../../doma
 import { Banker } from '../../domain/services/Banker';
 import { OfferCalculator } from '../../domain/services/OfferCalculator';
 import { Card } from '../../domain/entities/Card';
+import { LOSS_PENALTY_AMOUNT } from '../../domain/value-objects/GamePenalties';
 import { GameEvent } from '../../domain/events/GameEvents';
 import { SimpleEventEmitter } from '../../shared/utils/EventEmitter';
 import { ProgressionManager } from '../../infrastructure/persistence/ProgressionManager';
@@ -129,20 +130,23 @@ describe('OpenCardUseCase', () => {
     expect(receivedByB).toHaveLength(1);
   });
 
-  describe('loss penalty (REQ: -5000 al perder por energía, permite negativo)', () => {
-    it('applies exactly a 5000 penalty to the persistent balance on GameLost', () => {
+  describe('loss penalty (REQ: LOSS_PENALTY_AMOUNT al perder por energía, permite negativo)', () => {
+    it('applies exactly the fixed penalty to the persistent balance on GameLost', () => {
       const values = [100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
       const session = buildSession(values);
       const repository = new FakeProgressionRepository();
-      repository.seedCoins(2000);
+      // 500 es menor que la penalidad: el resultado queda en negativo y el
+      // test verifica de paso que el saldo NO se trunca en 0.
+      repository.seedCoins(500);
       const progressionManager = new ProgressionManager(repository, new DeterministicRandomProvider());
       const eventBus = new SimpleEventEmitter<GameEvent>();
       const useCase = new OpenCardUseCase(session, eventBus, progressionManager);
 
       useCase.execute('card_0'); // agota la energia -> GameLost
 
-      // 2000 - 5000 = -3000: se permite saldo negativo, a proposito.
-      expect(repository.getCoins()).toBe(-3000);
+      // 500 - LOSS_PENALTY_AMOUNT = -500: se permite saldo negativo, a proposito.
+      expect(repository.getCoins()).toBe(500 - LOSS_PENALTY_AMOUNT);
+      expect(repository.getCoins()).toBeLessThan(0);
     });
 
     it('does not apply any penalty when the game does not end in a loss', () => {

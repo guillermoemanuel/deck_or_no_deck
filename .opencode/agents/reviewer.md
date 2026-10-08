@@ -52,7 +52,7 @@ Leé `AGENTS.md` (checklist) y `docs/PLAYBOOK.md` (duplicaciones conocidas) ante
    (botón casino, paleta, tween contador, helper)?
 6. **Eventos:** si se agregó un evento, ¿tiene tipo + emisor + consumidor + spec?
    Si se tocó `DealAccepted`/`GameWon`, ¿se revisó `dealResultLaunched` (ADR-001)?
-7. **Invariantes** de `AGENTS.md` §4 (energía, oferta, −5000, tanque ×1.25/1.5, costos).
+7. **Invariantes** de `AGENTS.md` §4 (energía, oferta, −1000, tanque ×1.25/1.5, costos).
 8. **Estilo:** comentarios en español con causa raíz, sin TODO/FIXME/HACK, exports nombrados,
    strings i18n, sin `default` ocultando casos en switches exhaustivos.
 

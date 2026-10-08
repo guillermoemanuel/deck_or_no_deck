@@ -6,7 +6,7 @@ const REGISTRY_KEY = 'gameAbandonGuard:isActive';
  * GameAbandonGuard: flag booleano persistido en `registry` (el mismo
  * mecanismo que ya usan GameServices y ActiveSessionBridge) que responde
  * a una única pregunta: **¿hay una partida REALMENTE en curso tal que
- * abandonarla ahora mismo merece la penalización de -5000?**
+ * abandonarla ahora mismo merece la penalización de -1000?**
  *
  * Se opera sobre `Phaser.Data.DataManager` directamente — no sobre
  * `Phaser.Scene` — para poder invocarse tanto desde cualquier escena

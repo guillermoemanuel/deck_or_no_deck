@@ -116,7 +116,7 @@
 | `EnergyDeltaTable.ts` | 64 | ✅ (vía `DefaultEnergyDrainRule.spec`) | Tabla de drenaje + chequeo de integridad al cargar. **Invariante.** |
 | `DailyChallenge.ts` | 119 | ✅ 169 L | Reglas del desafío diario. `previewDailyCompletion()` es la vista previa de la recompensa y `completeDaily` delega en ella (test de propiedad). |
 | `EnergyLevel.ts` | 104 | ✅ 183 L | VO con clamp `[0, ceiling]` + **zonas de la barra**: `EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` (20), `ENERGY_LOW_MAX_PERCENT` (50), `getEnergyZone()` — la vista solo traduce zona → color. |
-| `GamePenalties.ts` | 14 | ✅ 20 L | **Fuente única de la penalidad** (`LOSS_PENALTY_AMOUNT` = −5000); la consumen `OpenCardUseCase`, `UIScene` y `main.ts`. |
+| `GamePenalties.ts` | 14 | ✅ 20 L | **Fuente única de la penalidad** (`LOSS_PENALTY_AMOUNT` = −1000); la consumen `OpenCardUseCase`, `UIScene` y `main.ts`. |
 | `PeriodicBonus.ts` | 65 | ✅ | Bono 12 h; rango `[500…5000]` (el 0 salió en 1.3.1). |
 | `PlayerRecords.ts` | 69 | ✅ | Récords personales. |
 | `DailyBoard.ts` | 63 | ✅ | Calendario determinista (seed por fecha UTC). |

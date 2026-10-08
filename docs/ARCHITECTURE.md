@@ -207,7 +207,7 @@ suscripción.
 | Tope de la oferta | **nunca** supera el promedio puro del tablero | `OfferCalculator.ts` (`Math.min`) |
 | Descuento de riesgo | ×0.85 | `OfferCalculator.ts` |
 | Bonus Negociador | +15% (0.15) sobre la oferta, tope incluido | `GameSession.openCard` |
-| Penalidad por abandono/derrota | −5000 (puede dejar saldo negativo) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (fuente única) |
+| Penalidad por abandono/derrota | −1000 (puede dejar saldo negativo) | `LOSS_PENALTY_AMOUNT` en `domain/value-objects/GamePenalties.ts` (fuente única) |
 | Bono periódico | 12 h cooldown + 24 h ventana, 6 cartas `[500…5000]` | `domain/value-objects/PeriodicBonus.ts` |
 | Tank de energía | techo ×1.25 (nivel 1) / ×1.5 (nivel 2) | `GameSession.applyEnergyTankUpgrade` **y** `PurchaseSessionUpgradeUseCase` (dos lugares, deben sincronizarse) |
 | Costos de tienda | los define `SessionUpgradeCatalog.ts` | tests usan `costOf(id)`, no hardcodean |

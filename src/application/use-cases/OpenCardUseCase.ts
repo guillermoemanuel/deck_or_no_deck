@@ -30,7 +30,7 @@ export class OpenCardUseCase {
 
     if (this.session.getStatus() === 'lost') {
       // REQ (penalización por pérdida): perder por agotamiento de energía
-      // descuenta la penalidad fija del dominio (LOSS_PENALTY_AMOUNT, −5000)
+      // descuenta la penalidad fija del dominio (LOSS_PENALTY_AMOUNT, −1000)
       // del acumulado global persistente — puede dejarlo en negativo
       // (ver IProgressionService.applyLossPenalty).
       this.progressionService?.applyLossPenalty(LOSS_PENALTY_AMOUNT);

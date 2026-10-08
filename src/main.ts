@@ -371,7 +371,7 @@ window.addEventListener('beforeunload', () => {
   // Sistema Anti-Cheat (abandono forzado): si el jugador cierra la
   // pestaña, recarga o navega fuera mientras `GameAbandonGuard` indica una
   // partida REALMENTE en curso (ver GameAbandonGuard.ts para el ciclo de
-  // vida completo del flag), se aplica la misma penalización de -5000 que
+  // vida completo del flag), se aplica la misma penalización de -1000 que
   // el botón "Salir al Menú" de UIScene aplicaría voluntariamente — así el
   // jugador no puede evitarla cerrando el navegador en vez de usar la UI.
   //
