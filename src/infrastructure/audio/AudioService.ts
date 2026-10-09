@@ -1,6 +1,20 @@
 import Phaser from 'phaser';
 import { IAudioService, MusicPlayOptions, SoundPlayOptions } from '../../domain/ports/IAudioService';
-import { AUDIO_MANIFEST } from './AudioData';
+import { AUDIO_MANIFEST, SFX } from '../../shared/audio/AudioData';
+
+/**
+ * BUGFIX (bug_sfx_apilado): ventana (en ms) mínima entre dos
+ * reproducciones de la MISMA clave. Dos clicks rápidos apilaban instancias
+ * encima (sonido duplicado/golpeado); un eco real del juego tarda más.
+ */
+const ANTI_STACK_WINDOW_MS = 40;
+
+/**
+ * BUGFIX (bug_sfx_apilado): efectos que SÍ deben poder apilarse dentro de
+ * la ventana — el contador de monedas dispara el mismo sample por moneda y
+ * cortarlo sonaría un conteo entrecortado.
+ */
+const ANTI_STACK_EXEMPT_KEYS: readonly string[] = [SFX.COINS_COUNT];
 
 /**
  * AudioService: implementación concreta de IAudioService.
@@ -57,23 +71,29 @@ export class AudioService implements IAudioService {
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private currentFadeCancel: (() => void) | null = null;
   private readonly warned = new Set<string>();
+  /** BUGFIX (bug_sfx_volumen_ignorado): volumen propio de cada SFX según AUDIO_MANIFEST.sfx. */
+  private readonly sfxVolumes: ReadonlyMap<string, number>;
+  /** BUGFIX (bug_sfx_apilado): último instante (ms) en que sonó cada clave. */
+  private readonly lastPlayAt = new Map<string, number>();
 
-  constructor(game: Phaser.Game) {
+  constructor(game: Phaser.Game, private readonly now: () => number = () => Date.now()) {
     // BUGFIX (audio overlap): tomamos el SoundManager del GAME, no el de
     // una escena. Es la misma instancia subyacente, pero anclar la
     // referencia acá (en un objeto que vive tanto como la app) es lo que
     // permite que exista un único punto de verdad para "qué está sonando".
     this.sound = game.sound;
+
+    // BUGFIX (bug_sfx_volumen_ignorado): el `volume` de cada efecto en
+    // AUDIO_MANIFEST.sfx se declaraba pero se IGNORABA al reproducir
+    // (mandaba solo el global del jugador), con lo que un click sonaba tan
+    // fuerte como una tirada de bombo. Se precalcula una vez por clave.
+    this.sfxVolumes = new Map(AUDIO_MANIFEST.sfx.map(item => [item.key, item.volume ?? 1]));
   }
 
-  /** Precarga todo lo declarado en AUDIO_MANIFEST (ver AudioData.ts). */
-  static preload(scene: Phaser.Scene): void {
-    scene.load.setPath('audio/music/');
-    AUDIO_MANIFEST.music.forEach(item => scene.load.audio(item.key, item.file));
-
-    scene.load.setPath('audio/sfx/');
-    AUDIO_MANIFEST.sfx.forEach(item => scene.load.audio(item.key, item.file));
-  }
+  // No existe `static preload()`: la carga es UNA sola y vive en
+  // PreloadScene, que recorre AUDIO_MANIFEST al arrancar la partida. La
+  // versión vieja apuntaba a paths inexistentes (`audio/music/` sin
+  // `assets/`) y no tenía ningún llamador — PLAYBOOK §3, código muerto.
 
   playMusic(key: string, options: MusicPlayOptions = {}): void {
     const fadeMs = options.fadeMs ?? 800;
@@ -139,8 +159,27 @@ export class AudioService implements IAudioService {
       return;
     }
 
+    // BUGFIX (bug_sfx_apilado): dos clicks rápidos apilaban instancias de
+    // la misma clave (sonido duplicado/golpeado). Dentro de la ventana se
+    // descarta el disparo, salvo para las claves exentas del listado.
+    const now = this.now();
+    const lastPlayAt = this.lastPlayAt.get(key);
+    if (
+      !ANTI_STACK_EXEMPT_KEYS.includes(key) &&
+      lastPlayAt !== undefined &&
+      now - lastPlayAt < ANTI_STACK_WINDOW_MS
+    ) {
+      return;
+    }
+    this.lastPlayAt.set(key, now);
+
+    // BUGFIX (bug_sfx_volumen_ignorado): el volumen del manifiesto
+    // (AUDIO_MANIFEST.sfx[key].volume) se ignoraba y mandaba solo el
+    // global del jugador. Ahora se multiplican: el del manifiesto es el
+    // balanceo de diseño, el global es lo que afina el jugador en la
+    // configuración (el override puntual del caller también multiplica).
     this.sound.play(key, {
-      volume: options.volume ?? this.sfxVolume,
+      volume: (options.volume ?? this.sfxVolume) * (this.sfxVolumes.get(key) ?? 1),
       loop: options.loop ?? false
     });
   }
@@ -201,9 +240,16 @@ export class AudioService implements IAudioService {
   private warnMissing(key: string): void {
     if (this.warned.has(key)) return;
     this.warned.add(key);
+    // BUGFIX (bug_warnmissing_path): el mensaje viejo apuntaba a
+    // /public/audio/README.md (inexistente) y a la ubicación anterior del
+    // manifiesto; señalaba un path con el que nadie podía depurar. La
+    // carpeta se elige según la familia: este método lo comparten play()
+    // y playMusic(), y apuntar solo a sfx/ desorientaba ante una música
+    // faltante.
+    const folder = key.startsWith('sfx-') ? 'public/assets/audio/sfx/' : 'public/assets/audio/music/';
     console.warn(
       `[AudioService] Falta el archivo de audio para "${key}". ` +
-        `Revisá /public/audio/README.md y src/infrastructure/audio/AudioData.ts.`
+        `Revisá ${folder} y src/shared/audio/AudioData.ts.`
     );
   }
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { getServices } from '../GameServices';
 import { getDeckSetup } from '../../domain/value-objects/DeckSetups';
+import { AUDIO_MANIFEST } from '../../shared/audio/AudioData';
 
 /** A dónde ir tras precargar — ver PreloadScene.init(). */
 export interface PreloadSceneData {
@@ -89,8 +90,17 @@ export class PreloadScene extends Phaser.Scene {
     // mecanismo del BUGFIX de texturas de más arriba.
     this.removeAudioIfExists('music_gameplay');
     this.load.audio('music_gameplay', `assets/audio/music/${activeSetup.musicGameplay}.ogg`);
-    this.load.audio('sfx-card-open', 'assets/audio/sfx/card-open.mp3');
-    this.load.audio('sfx-offer', 'assets/audio/sfx/offer.mp3');
+
+    // SFX: única fuente de verdad = AUDIO_MANIFEST (shared/audio/AudioData).
+    // Antes estaban cableados acá a mano solo sfx-card-open y sfx-offer con
+    // paths duplicados en dos archivos — bug (bug_sfx_fuente_dual): si el
+    // manifest agregaba una clave, PreloadScene no la cargaba y play() avisaba
+    // "archivo faltante" sin sonar. Las claves de SFX son estáticas (no
+    // dependen del mazo), así que NO pasan por removeAudioIfExists(): la caché
+    // de audio se conserva entre recargas de la escena.
+    AUDIO_MANIFEST.sfx.forEach(item => {
+      this.load.audio(item.key, `assets/audio/sfx/${item.file}`);
+    });
   }
 
   private removeTextureIfExists(key: string): void {
