@@ -25,7 +25,7 @@
    `public/assets/audio/sfx/` + `docs/SFX-MANIFEST.md`. Tests: `AudioService.spec` 5 → **9**
    (+4) y guardián nuevo `src/shared/audio/AudioData.spec.ts` (4 tests: paridad símbolo ↔
    manifest **23 = 23**, sin duplicados, mp3 físicos con `fs.existsSync`).
-2. **Commit 2 `aeca320` — sonidos de la partida:** nuevos `src/presentation/audio/`
+2. **Commit 2 `c83a308` — sonidos de la partida:** nuevos `src/presentation/audio/`
    `GameplaySfx.ts` (`cardSfxKeyForValue` por rangos ≤100 / ≤750 / ≤10000 / jackpot + fuente
    única de constantes del latido: 25 %/12 %, 900/650 ms, lose 900 ms),
    `HeartbeatLoop.ts` (scheduler inyectado `HeartbeatScheduler`, primer latido **inmediato**,
@@ -36,7 +36,7 @@
    juega la variante vía `cardSfxKeyForValue(value)`; `GameSceneController` instancia el
    soundtrack (adapter `scene.time.delayedCall` / `remove(false)`), llama `onEvent` al inicio
    de `handleEvent()` y su **primer handler `SHUTDOWN`** → `soundtrack.stop()`.
-3. **Commit 3 (SFX de interfaz, staged):** nuevo `src/presentation/audio/UiSfx.ts`
+3. **Commit 3 `d6b8693` (SFX de interfaz):** nuevo `src/presentation/audio/UiSfx.ts`
    (`bindUiClick(target, audio?)` — punto único del click genérico `SFX.CLICK`, interfaz
    estructural `ClickTarget` sin Phaser; sin `audio` no se registra nada) + `UiSfx.spec.ts`
    (4 tests); binds en: `HudIconButton` (5 call sites: UIScene ×3, SoundFullscreenControls

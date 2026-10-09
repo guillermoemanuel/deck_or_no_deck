@@ -5,7 +5,7 @@
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
 > Fecha del censo: 2026-10-09 (cierre **audio SFX — 21 efectos nuevos + base de audio**,
-> 3 commits: `52dd63e` base · `aeca320` partida · Commit 3 interfaz sin hash aún) ·
+> 3 commits: `52dd63e` base · `c83a308` partida · `d6b8693` interfaz + docs) ·
 > **188 archivos TS · 128 fuente + 60 specs · 27.924 L — censo COMPLETO medido con
 > `wc -l`**: por capa `domain/` **5.126** (20 specs) · `application/` **4.111** (14) ·
 > `infrastructure/` **4.167** (11) · `presentation/` **12.634** (9) · `shared/` **1.464**
@@ -17,7 +17,7 @@
 > `GameplaySoundtrack.ts` 126 + spec 159, `HeartbeatLoop.ts` 82 + spec 75, `UiSfx.ts` 32 +
 > spec 63, `testing/fakeScheduler.ts` 34; recontados `AudioService.ts` 262 → **308** y su
 > spec 100 → **184**, `PreloadScene.ts` → **146** (+10), `CardView.ts` 294 → **299**,
-> `GameSceneController.ts` 638 → **662** (+24, soundtrack); Commit 3 (staged) **+251/−25 en
+> `GameSceneController.ts` 638 → **662** (+24, soundtrack); Commit 3 `d6b8693` **+251/−25 en
 > 13 archivos**: `ShopScene` 793 → **816**, `HowToPlayScene` 882 → **920**, `MainMenuScene`
 > 582 → **588**, `UIScene` 507 → **514**, `ResultScene` 554 → **566**,
 > `DeckSelectionScene` 490 → **496**, `BankerOfferPanel` 329 → **341**, `ConfirmDialog`
