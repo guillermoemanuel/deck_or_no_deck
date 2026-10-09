@@ -7,6 +7,7 @@ import { SwapSecretCardUseCase } from '../../application/use-cases/SwapSecretCar
 import { ReviveWithAdUseCase } from '../../application/use-cases/ReviveWithAdUseCase';
 import { SwapFinalSecretCardUseCase } from '../../application/use-cases/SwapFinalSecretCardUseCase';
 import { CardView } from '../components/CardView';
+import { GameplaySoundtrack } from '../audio/GameplaySoundtrack';
 import { EnergyBarView } from '../components/EnergyBarView';
 import { BankerOfferPanel } from '../components/BankerOfferPanel';
 import { SwapEventModal } from '../components/SwapEventModal';
@@ -44,6 +45,9 @@ export class GameSceneController {
   private activeSwapModal: SwapEventModal | null = null;
   private isAwaitingSwapSelection = false;
   private swapPromptBanner: Phaser.GameObjects.Container | null = null;
+  // Sonidos de la partida: traduce cada GameEvent a sfx (latido, deal,
+  // derrota, etc.) — delegado puro, sin duplicar sonidos en el switch.
+  private readonly soundtrack: GameplaySoundtrack;
 
   // BUGFIX (bug_deal_modal_reveal): ResolveDealUseCase.acceptDeal() emite
   // tanto 'DealAccepted' como 'GameWon' para la MISMA aceptacion de oferta.
@@ -79,12 +83,27 @@ export class GameSceneController {
     // práctica siempre la provee GameScene.
     private readonly audioService?: IAudioService
   ) {
+    // Sonidos de la partida: el soundtrack vive detrás del mismo puente de
+    // eventos que la UI. El adapter sobre la escena traduce el scheduler puro
+    // a delayedCall de Phaser (patrón `remove(false)` del repo).
+    this.soundtrack = new GameplaySoundtrack(this.audioService, {
+      add: (delayMs, callback) => {
+        const timer = this.scene.time.delayedCall(delayMs, callback);
+        return () => timer.remove(false);
+      }
+    });
+
     if (this.eventBus) {
       this.eventBus.subscribe(event => this.handleEvent(event));
     } else {
       this.openCardUseCase.onEvent(event => this.handleEvent(event));
     }
     this.bindCardClicks();
+
+    // Al salir o cambiar de escena se cancela el latido y el lose pendiente
+    // del soundtrack — sin esto, un timer vivo seguiría sonando fuera de
+    // partida (el controller no tenía handler de SHUTDOWN hasta ahora).
+    this.scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.soundtrack.stop());
   }
 
   private bindCardClicks(): void {
@@ -287,6 +306,11 @@ export class GameSceneController {
   }
 
   private handleEvent(event: GameEvent): void {
+    // Fire-and-forget: el soundtrack traduce el evento a sfx ANTES del
+    // switch — no altera el orden de handlers ni los launches (contrato
+    // AGENTS §5). Acá no se reproducen sonidos: ya los hace el soundtrack.
+    this.soundtrack.onEvent(event);
+
     switch (event.type) {
       case 'CardOpened':
         this.cardViews.get(event.card.id)?.applyState({

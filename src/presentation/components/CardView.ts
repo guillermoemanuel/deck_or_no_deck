@@ -3,6 +3,7 @@ import { CardDTO } from '../../application/dto/GameStateDTO';
 import { ParticleManager } from './ParticleManager';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { isHighCaseValue } from '../../domain/value-objects/CaseValues';
+import { cardSfxKeyForValue } from '../audio/GameplaySfx';
 /**
  * CardView: Componente visual tonto en Phaser 3 para renderizar una carta del juego.
  *
@@ -260,7 +261,11 @@ export class CardView extends Phaser.GameObjects.Container {
     });
 
     try {
-      this.audioService?.play('sfx-card-open');
+      // El sfx depende del valor de la carta (low/mid/high/jackpot — ver
+      // GameplaySfx.cardSfxKeyForValue): aplica a TODOS los reveals, incluso
+      // los automáticos (intercambio/final) — el manifiesto manda el jackpot
+      // al revelar la carta gigante. `value` es el parámetro de reveal().
+      this.audioService?.play(cardSfxKeyForValue(value));
     } catch {
       // Audio fallback
     }
