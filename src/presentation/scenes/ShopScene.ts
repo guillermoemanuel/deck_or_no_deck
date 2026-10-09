@@ -8,6 +8,8 @@ import { DECK_SETUP_IDS, DeckSetupId, getDeckSetup } from '../../domain/value-ob
 import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
+import { SFX } from '../../shared/audio/AudioData';
+import { bindUiClick } from '../audio/UiSfx';
 
 /**
  * Paleta y "chrome" de botones — MISMA convención "Casino de Lujo" que el
@@ -286,6 +288,10 @@ export class ShopScene extends Phaser.Scene {
     hitZone.on('pointerup', () => {
       this.tweens.add({ targets: container, scale: PRESS_SCALE, duration: PRESS_TWEEN_MS, yoyo: true, ease: 'Quad.easeOut', onComplete: onClick });
     });
+    // Punto único del click genérico de UI de tienda para botones de
+    // acción (Comprar) y pestañas — el ✕ tiene su propia zona en
+    // createCloseButton y se bindea ahí.
+    bindUiClick(hitZone, getServices(this).audioService);
 
     return hitZone;
   }
@@ -326,6 +332,9 @@ export class ShopScene extends Phaser.Scene {
     bg.on('pointerover', () => bg.setFillStyle(0x6e2a2a, 0.95));
     bg.on('pointerout', () => bg.setFillStyle(PANEL_FILL, 0.95));
     bg.on('pointerup', () => this.scene.stop());
+    // El ✕ no pasa por attachButtonInteractions (tiene su propia zona
+    // circular) — se le registra el click genérico directamente acá.
+    bindUiClick(bg, getServices(this).audioService);
 
     this.add.container(x, y, [bg, label]);
   }
@@ -544,6 +553,13 @@ export class ShopScene extends Phaser.Scene {
     }
 
     this.refreshUpgradeRow(upgradeId);
+    // Éxito real de la compra de mejora (el use-case ya acreditó el
+    // efecto) — feedback sonoro de compra.
+    try {
+      getServices(this).audioService.play(SFX.PURCHASE);
+    } catch {
+      // Audio best-effort: nunca rompe la compra.
+    }
     // Comprar uno de los dos puede dejar al OTRO no-comprable (ver
     // isApplicable/findOwnedConflict) — se refresca también su fila para
     // que el botón del que queda bloqueado se dibuje ya deshabilitado,
@@ -761,6 +777,13 @@ export class ShopScene extends Phaser.Scene {
     }
 
     this.refreshDeckRow(deckId);
+    // Éxito real de la compra de mazo (purchaseDeck devolvió success) —
+    // "desbloqueo" de contenido nuevo, distinto del PURCHASE de mejoras.
+    try {
+      services.audioService.play(SFX.UNLOCK);
+    } catch {
+      // Audio best-effort: nunca rompe la compra.
+    }
   }
 
   private refreshDeckRow(deckId: DeckSetupId): void {

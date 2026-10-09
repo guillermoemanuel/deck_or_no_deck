@@ -6,6 +6,7 @@ import { getWinRatePercent } from '../../domain/value-objects/PlayerRecords';
 import { formatShortDuration } from '../../shared/utils/TimeFormat';
 import { requestDailyChallenge } from '../GameMode';
 import { LocalizedText } from './LocalizedText';
+import { SFX } from '../../shared/audio/AudioData';
 
 const COLOR_GOLD = 0xffd76a;
 const COLOR_GOLD_DIM = 0xd4af37;
@@ -80,6 +81,13 @@ export class DailyChallengeBanner {
       hit.on('pointerout', () => bg.setFillStyle(0x121218, 0.92));
       hit.on('pointerup', () => {
         requestDailyChallenge(scene.game.registry, todayKey);
+        // El sonido marca el click de reclamo — la acreditación real del
+        // premio ocurre al final de la partida (application), no acá.
+        try {
+          services.audioService.play(SFX.BONUS_CLAIM);
+        } catch {
+          // Audio best-effort: nunca rompe la interacción.
+        }
         onStart();
       });
     }

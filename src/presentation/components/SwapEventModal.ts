@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { LocalizedText } from './LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
+import { IAudioService } from '../../domain/ports/IAudioService';
+import { bindUiClick } from '../audio/UiSfx';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts / ResultScene.ts — mismos valores hex, para que este
@@ -28,7 +30,7 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
  * de forma simbólica en vez de sobre un sprite concreto.
  */
 export class SwapEventModal extends Phaser.GameObjects.Container {
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, private readonly audio?: IAudioService) {
     const cx = scene.cameras.main.centerX;
     const cy = scene.cameras.main.centerY;
 
@@ -216,6 +218,8 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     // Zona interactiva invisible del tamaño exacto del botón.
     const hitZone = scene.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(hitZone, this.audio);
 
     hitZone.on('pointerover', () => {
       scene.tweens.add({ targets: container, scale: 1.05, duration: 120, ease: 'Cubic.easeOut' });

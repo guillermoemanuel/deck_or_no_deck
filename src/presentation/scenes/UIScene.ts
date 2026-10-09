@@ -10,6 +10,7 @@ import { PeriodicBonusModal } from '../components/PeriodicBonusModal';
 import { PeriodicBonusStatus } from '../../domain/value-objects/PeriodicBonus';
 import { HudIconButton } from '../components/HudIconButton';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
+import { SFX } from '../../shared/audio/AudioData';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / BankerOfferPanel.ts /
  * ResultScene.ts / SwapEventModal.ts — mismos valores hex, para que el
@@ -100,7 +101,7 @@ export class UIScene extends Phaser.Scene {
     this.tiendaButton = new HudIconButton(this, 0, 0, 'hud-shop', () => this.scene.launch('ShopScene'), {
       size: HUD_BUTTON_SIZE,
       label: languageManager.getText('HUD_SHOP')
-    });
+    }, services.audioService);
 
     // Botón "Salir / Menú" — mismo renglón que "Tienda" (el modal de
     // confirmación, no este botón disparador, es quien lleva el
@@ -108,7 +109,7 @@ export class UIScene extends Phaser.Scene {
     this.salirButton = new HudIconButton(this, 0, 0, 'hud-exit', () => this.showExitConfirmationModal(), {
       size: HUD_BUTTON_SIZE,
       label: languageManager.getText('HUD_EXIT')
-    });
+    }, services.audioService);
 
     // Botón "Bono Periódico" — ícono fijo; su ESTADO (cuenta regresiva /
     // disponible) se comunica con el `label` (countdown ó "¡Bonus!") +
@@ -121,7 +122,7 @@ export class UIScene extends Phaser.Scene {
     this.bonusButton = new HudIconButton(this, 0, 0, 'hud-bonus', () => this.tryOpenBonusModal(services), {
       size: HUD_BUTTON_SIZE,
       label: ''
-    });
+    }, services.audioService);
 
     // Renglón inferior — Sonido / Pantalla Completa, esquina INFERIOR
     // derecha: componente compartido (ver SoundFullscreenControls.ts),
@@ -301,6 +302,12 @@ export class UIScene extends Phaser.Scene {
         // Se acredita YA (mismo instante de la elección) — ver el
         // comentario en PeriodicBonusModal.handleCardPicked().
         services.progressionManager.claimPeriodicBonus(value);
+        // Éxito real de la reclamación: el use-case ya corrió y acreditó.
+        try {
+          services.audioService.play(SFX.BONUS_CLAIM);
+        } catch {
+          // Audio best-effort: nunca rompe la interacción.
+        }
         this.refreshBonusButton(services);
       },
       onClose: () => {

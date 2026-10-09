@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { getTouchHitSize } from '../../shared/utils/CompactScreen';
+import { IAudioService } from '../../domain/ports/IAudioService';
+import { bindUiClick } from '../audio/UiSfx';
 
 /** Misma paleta "Casino de Lujo" que el resto del HUD (ver createCasinoButton
  * en MainMenuScene.ts) — panel carbón + borde dorado + halo en hover. */
@@ -78,7 +80,8 @@ export class HudIconButton extends Phaser.GameObjects.Container {
     y: number,
     textureKey: string,
     onClick: () => void,
-    config: HudIconButtonConfig = {}
+    config: HudIconButtonConfig = {},
+    audio?: IAudioService
   ) {
     super(scene, x, y);
     this.onClickCallback = onClick;
@@ -143,6 +146,8 @@ export class HudIconButton extends Phaser.GameObjects.Container {
     const hitSize = getTouchHitSize(Math.max(size, MIN_TOUCH_SIZE), scene.scale.displayScale.x);
     this.hitZone = scene.add.zone(0, 0, hitSize, hitSize).setOrigin(0.5).setInteractive({ useHandCursor: true });
     this.add(this.hitZone);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(this.hitZone, audio);
 
     this.hitZone.on('pointerover', this.handlePointerOver, this);
     this.hitZone.on('pointerout', this.handlePointerOut, this);

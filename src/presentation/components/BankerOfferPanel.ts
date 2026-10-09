@@ -3,6 +3,7 @@ import { BankerOffer } from '../../domain/services/Banker';
 import { LocalizedText } from './LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
+import { SFX } from '../../shared/audio/AudioData';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts —
  * mismos valores hex, para que el modal del banquero se sienta parte del
@@ -148,6 +149,17 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
           ).setOrigin(0.5)
         : null;
 
+    // Aviso topado visible (regla ADR-014 activa): el banquero "se molesta"
+    // — el sonido va acá y no en un lugar genérico porque este bloque solo
+    // se renderiza cuando la oferta es realmente la topada.
+    if (cappedNotice) {
+      try {
+        this.audioService?.play(SFX.BANKER_ANNOYED);
+      } catch {
+        // Audio best-effort: nunca rompe el modal.
+      }
+    }
+
     this.add([
       this.backdrop,
       this.panelBg,
@@ -175,7 +187,7 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
     });
 
     try {
-      this.audioService?.play('sfx-offer');
+      this.audioService?.play(SFX.OFFER);
     } catch {
       // Ignorar fallback de audio
     }

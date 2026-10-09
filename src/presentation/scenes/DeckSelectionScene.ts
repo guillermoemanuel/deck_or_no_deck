@@ -5,6 +5,8 @@ import { PreloadSceneData } from './PreloadScene';
 import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
+import { IAudioService } from '../../domain/ports/IAudioService';
+import { bindUiClick } from '../audio/UiSfx';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts — mismos valores hex,
  * para que ambas escenas se sientan parte del mismo producto. */
@@ -414,7 +416,7 @@ export class DeckSelectionScene extends Phaser.Scene {
       // ver el comentario en PreloadScene.preload() sobre por qué hace
       // falta repetir la precarga acá y no ir directo a GameScene.
       this.scene.start('PreloadScene', { nextScene: 'GameScene' } satisfies PreloadSceneData);
-    });
+    }, services.audioService);
   }
 
   /**
@@ -430,7 +432,8 @@ export class DeckSelectionScene extends Phaser.Scene {
     height: number,
     labelKey: TranslationKey,
     accentColor: number,
-    onClick: () => void
+    onClick: () => void,
+    audio?: IAudioService
   ): Phaser.GameObjects.Container {
     const container = this.add.container(x, y).setDepth(3);
 
@@ -463,6 +466,9 @@ export class DeckSelectionScene extends Phaser.Scene {
     // Zona interactiva invisible del tamaño exacto del botón.
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick) — solo el
+    // botón ACEPTAR; los selector de mazo tienen feedback visual propio.
+    bindUiClick(hitZone, audio);
 
     hitZone.on('pointerover', () => {
       this.tweens.add({ targets: container, scale: 1.05, duration: 150, ease: 'Cubic.easeOut' });

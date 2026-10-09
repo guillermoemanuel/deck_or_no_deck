@@ -101,7 +101,8 @@ export class SoundFullscreenControls {
         this.audioService.toggleMuted();
         this.refreshMuteButton();
       },
-      { size: BUTTON_SIZE, label: languageManager.getText(initialMuted ? 'HUD_SOUND_OFF' : 'HUD_SOUND_ON') }
+      { size: BUTTON_SIZE, label: languageManager.getText(initialMuted ? 'HUD_SOUND_OFF' : 'HUD_SOUND_ON') },
+      this.audioService
     );
 
     // iPhone/iOS Safari no ofrece Fullscreen API para páginas: el botón no
@@ -119,7 +120,8 @@ export class SoundFullscreenControls {
         0,
         scene.scale.isFullscreen ? 'hud-windows' : 'hud-fullscreen',
         () => scene.scale.toggleFullscreen(),
-        { size: BUTTON_SIZE, label: languageManager.getText(scene.scale.isFullscreen ? 'HUD_WINDOWED' : 'HUD_FULLSCREEN') }
+        { size: BUTTON_SIZE, label: languageManager.getText(scene.scale.isFullscreen ? 'HUD_WINDOWED' : 'HUD_FULLSCREEN') },
+        this.audioService
       );
       scene.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, this.handleFullscreenChange);
       scene.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, this.handleFullscreenChange);

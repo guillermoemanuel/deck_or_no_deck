@@ -4,7 +4,26 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-08 (cierre **ADR-014 — regla anti-farmeo de la 1ª ronda**,
+> Fecha del censo: 2026-10-09 (cierre **audio SFX — 21 efectos nuevos + base de audio**,
+> 3 commits: `52dd63e` base · `aeca320` partida · Commit 3 interfaz sin hash aún) ·
+> **188 archivos TS · 128 fuente + 60 specs · 27.924 L — censo COMPLETO medido con
+> `wc -l`**: por capa `domain/` **5.126** (20 specs) · `application/` **4.111** (14) ·
+> `infrastructure/` **4.167** (11) · `presentation/` **12.634** (9) · `shared/` **1.464**
+> (6) · raíz (`main.ts` 385 + `vite-env.d.ts` 37) **422**. Detalle del cierre de audio:
+> **+10 archivos** (5 fuente + 5 specs) → de 178 a 188 y **+1.103 L** —
+> `infrastructure/audio/AudioData.ts` (36 L) **movido** a `shared/audio/AudioData.ts`
+> (**101 L**, neto 0 archivos) + `shared/audio/AudioData.spec.ts` (**56 L**, nuevo) +
+> **9 archivos nuevos en `presentation/audio/` (682 L)**: `GameplaySfx.ts` 45 + spec 66,
+> `GameplaySoundtrack.ts` 126 + spec 159, `HeartbeatLoop.ts` 82 + spec 75, `UiSfx.ts` 32 +
+> spec 63, `testing/fakeScheduler.ts` 34; recontados `AudioService.ts` 262 → **308** y su
+> spec 100 → **184**, `PreloadScene.ts` → **146** (+10), `CardView.ts` 294 → **299**,
+> `GameSceneController.ts` 638 → **662** (+24, soundtrack); Commit 3 (staged) **+251/−25 en
+> 13 archivos**: `ShopScene` 793 → **816**, `HowToPlayScene` 882 → **920**, `MainMenuScene`
+> 582 → **588**, `UIScene` 507 → **514**, `ResultScene` 554 → **566**,
+> `DeckSelectionScene` 490 → **496**, `BankerOfferPanel` 329 → **341**, `ConfirmDialog`
+> 165 → **173**, `DailyChallengeBanner` 121 → **129**, `HudIconButton` 263 → **268**,
+> `SoundFullscreenControls` 212 → **214**, `SwapEventModal` 241 → **245**.
+> Cierre previo — 2026-10-08 (cierre **ADR-014 — regla anti-farmeo de la 1ª ronda**,
 > Commit 2 del rebalance) · **178 archivos TS · 123 fuente + 55 specs · 26.821 L —
 > censo COMPLETO medido con `wc -l`** (cierra el pendiente del recount): por capa
 > `domain/` **5.126** (20 specs) · `application/` **4.111** (14) · `infrastructure/`
@@ -192,7 +211,7 @@
 
 ---
 
-## `src/infrastructure/` — 4.073 líneas · 11 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 4.167 líneas · 11 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -204,42 +223,53 @@
 | `config/resolveMuteAudioOverride.ts` | 34 | ✅ 36 L | **Override local de `?muteAudio=`** (ADR-011, patrón de `resolveFullscreenEnabled`): `true`/`false` si el parámetro está presente y es válido, `null` si no está (**manda el SDK**) o si el valor es basura (`?muteAudio=si`, `TRUE`, vacío → `null` + `console.warn`). `false` sirve para **negar** el mute de plataforma en local y probar en modos sin SDK. 🟢 |
 | `persistence/LocalStorageProgressionRepository.ts` | 206 | ✅ 125 L | **Esquema v5** (ADR-014): `migrateIfNeeded()` v3→v5 (todos los campos) y v4→v5 (backfill `firstRoundDealStreak` `(0,0)`); validación al cargar el streak (enteros, rangos → si no, `0/0`); `clearAll`/`createDefault` incluyen el campo. Bloque de comentarios con merge artifact (L17-28). 🟡 |
 | `persistence/ProgressionManager.ts` | 164 | ✅ 285 L | Fachada de meta-progresión + eventos. **Desde ADR-014:** delega `get/setFirstRoundDealStreak` en el repo (sin evento propio). |
-| `audio/AudioService.ts` | 262 | ✅ 100 L | **Desde ADR-011:** capa `platformMuted` (mute de la plataforma) separada del pref `muted`; fuente única `applyMute()` → `sound.mute = muted \|\| platformMuted`; `isMuted()` = **efectivo**; `setPlatformMuted()` es método **concreto** (no está en el puerto `IAudioService`, solo lo llama `main.ts`). Anclado a `Phaser.Game`. `preload()` muerto con path erróneo (PLAYBOOK §3). 🟡 |
+| `audio/AudioService.ts` | 308 | ✅ 184 L | **Desde ADR-011:** capa `platformMuted` (mute de la plataforma) separada del pref `muted`; fuente única `applyMute()` → `sound.mute = muted \|\| platformMuted`; `isMuted()` = **efectivo**; `setPlatformMuted()` es método **concreto** (no está en el puerto `IAudioService`, solo lo llama `main.ts`). Anclado a `Phaser.Game`. **Desde ADR-015:** volumen por clave `(options.volume ?? sfxVolume) × volumenDelManifiesto` (el volumen del manifiesto ya no se ignora), anti-apilado de la misma clave <40 ms (reloj inyectable, exento `sfx-coins-count`), `warnMissing(key)` con la carpeta real según familia, `static preload()` **borrado** (era código muerto con path inexistente). 🟡 |
 | `persistence/LocalStorageOnboardingRepository.ts` | 75 | ✅ | — |
 | `persistence/LocalStorageRecordsRepository.ts` | 46 | ✅ (compartido) | `gamesPlayed` se recalcula = wins+losses. |
 | `persistence/LocalStorageDailyChallengeRepository.ts` | 43 | ✅ (compartido) | — |
 | `services/CryptoRandomProvider.ts` | 67 | ❌ | Muestreo por rechazo con `crypto.getRandomValues` + **`nextFloat()`** = `Uint32 / 2^32` (ruido de la oferta, ADR-013). |
 | `persistence/jsonStorage.ts` | 36 | ❌ | Helper tolerante a fallos; **solo lo usan Records y Daily** (Progression/Onboarding tienen try/catch propio). |
-| `audio/AudioData.ts` | 36 | ❌ | Manifiesto: 1 música + 2 sfx. |
 | `testing/*` (5 archivos · 6 fakes) | 317 | — | Fakes — `DeterministicRandomProvider.nextFloat()` = **0.5 → ruido de oferta 0** (ADR-013); `FakeProgressionRepository.seedFirstRoundDealStreak()` siembra el streak anti-farmeo y `clearAll()` lo limpia (ADR-014); ver `docs/testing.md` (`FakeCrazyGamesService.setRewardedStatus()` simula cada `RewardedAdStatus` y **`setRewardedStatusAfterNextAd()`** (ADR-009) simula un adError que vuelve el estado permanente **en vuelo**, durante el `await` del use-case; **`emitMuteAudioChange()`** (ADR-011) emite un cambio de `game.settings.muteAudio` a los suscriptores de `onMuteAudioChange`). |
 
 ---
 
-## `src/presentation/` — 11.782 líneas · 5 specs · **zona más frágil** 🔴
+## `src/presentation/` — 12.634 líneas · 9 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
-| `controllers/GameSceneController.ts` | 638 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. **Desde ADR-014:** en `BankerOfferMade` calcula `cappedRemainingGames` (ronda 1 y monto ∈ `CAPPED_OFFER_VALUES`) y se lo pasa al panel. |
+| `controllers/GameSceneController.ts` | 662 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. **Desde ADR-014:** en `BankerOfferMade` calcula `cappedRemainingGames` (ronda 1 y monto ∈ `CAPPED_OFFER_VALUES`) y se lo pasa al panel. **Desde ADR-015:** instancia `GameplaySoundtrack` (adapter `scene.time.delayedCall`/`remove(false)`), alimenta `onEvent` al inicio de `handleEvent()` y su **primer handler `SHUTDOWN`** llama `soundtrack.stop()`. |
 | `scenes/GameScene.ts` | 642 | ❌ | Composition root de la partida (40 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra, el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013) y el **streak anti-farmeo** a la factory (diario → `INACTIVE`, ADR-014); `setupOutcomeRecording` suscribe los **2 trackers** con un solo `flush()` en SHUTDOWN. |
-| `scenes/ShopScene.ts` | 793 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. |
-| `scenes/HowToPlayScene.ts` | 882 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). **Desde ADR-014:** caption de la regla anti-farmeo en el paso 3. |
-| `scenes/MainMenuScene.ts` | 582 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
-| `scenes/UIScene.ts` | 507 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
-| `scenes/ResultScene.ts` | 554 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
-| `scenes/DeckSelectionScene.ts` | 490 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
+| `scenes/ShopScene.ts` | 816 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. |
+| `scenes/HowToPlayScene.ts` | 920 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). **Desde ADR-014:** caption de la regla anti-farmeo en el paso 3. |
+| `scenes/MainMenuScene.ts` | 588 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
+| `scenes/UIScene.ts` | 514 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
+| `scenes/ResultScene.ts` | 566 | ❌ | Flujos de rewarded/midgame ad; guarda botones en el registry. Reembolso (ADR-006): `'refunded'` → `RESULT_AD_REFUNDED` + `disableActionButton` apaga Duplicar/Triplicar/Revivir; `'ads_cooldown'` → `RESULT_AD_COOLDOWN` y **NO** apaga (reintento a los 60 s). |
+| `scenes/DeckSelectionScene.ts` | 496 | ❌ | Grilla + preview + re-lanzamiento de `PreloadScene`. |
 | `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 301 + 70 | ✅ 123 + 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **Registrada en el `config.scene` de `main.ts` (última de la lista — se dibuja arriba de todo; ADR-007 enmienda 2026-10-04); `presentAdOverlay()` — la función **presenter** que `main.ts` inyecta al adapter, inversión de dependencia: infrastructure no importa presentation — solo pide el `start` y degrada en 0 s con `{ completed: false }` si la escena faltara** (BUGFIX: la pareja `scene.add()`+`scene.start()` en runtime era una carrera con la cola de Phaser — primer ad de la sesión → `Scene key not found` → watchdog 15 s). La resolución single-shot vive en `.resolution.ts` (lógica pura); la escena además tiene `.spec.ts` (3 tests, mock de `'phaser'` en node — incluye la degradación red→verde). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
 | `scenes/AdBlockerScene.ts` | 118 | ✅ 95 L | **Bloqueador de UI durante el ciclo del ad del SDK** (ADR-010, CG-MON-001): backdrop interactivo **sin handler** (absorbe los clicks de las escenas debajo) + spinner con tween (sin texto → sin i18n) + **pausa `GameScene` con flag local**, reanuda en `SHUTDOWN` — mismo mecanismo probado de `AdOverlayScene`. **En el `config.scene` de `main.ts` al FINAL** (boot, nunca `add()` en runtime — lección ADR-007). El cable `createAdBlockerListener(game)`: `'requesting'`/`'started'` → `game.scene.start` una sola vez por ciclo (flag `active`), `'ended'` → `stop` solo si estaba activo — **`main.ts` la conecta SOLO si `adsMode !== 'portal'`** (en portal manda `AdOverlayScene`; los dos apilarían fondo y spinner sobre el countdown). API correcta: `start`, no `launch` (`SceneManager` no tiene `launch`). 🟡 |
 
+### Audio (`src/presentation/audio/` — 9 archivos · 682 L, ADR-015)
+| Archivo | LOC | Spec | Nota |
+|---|---|---|---|
+| `GameplaySfx.ts` | 45 | ✅ 66 L | Fuente única de constantes: latido 25 %/12 %, 900/650 ms, `LOSE_AFTER_DEPLETED_DELAY_MS` 900 ms + `cardSfxKeyForValue(value)` (≤100 → LOW, ≤750 → MID, ≤10000 → HIGH, resto → JACKPOT). 🟢 |
+| `HeartbeatLoop.ts` | 82 | ✅ 75 L | Bucle con `HeartbeatScheduler` inyectado (producción: `scene.time.delayedCall`); primer latido **inmediato** al cruzar el umbral; token anti-tick-tardío. 🟢 |
+| `GameplaySoundtrack.ts` | 126 | ✅ 159 L | Traductor puro `GameEvent` → sfx: deal/no-deal/swap/revive, win **sin doble fanfarria** (flag `dealAccepted`, ADR-001), lose 900 ms tras `EnergyDepleted` cancelable, heartbeat. Sin Phaser; habla por `IAudioService`; `play()` best-effort. 🟢 |
+| `UiSfx.ts` | 32 | ✅ 63 L | `bindUiClick(target, audio?)`: punto único del click genérico `SFX.CLICK` de la UI; interfaz estructural `ClickTarget` (sin Phaser); sin `audio` → sin bind. 🟢 |
+| `testing/fakeScheduler.ts` | 34 | — | Doble compartido `createFakeScheduler()`: timers armados/cancelados/disparados a mano (`fake.timers`, `activeTimers()`). |
+
 ### Componentes (los "tontos" — ✅ cumplen la regla)
-`BankerOfferPanel` 305 · `CardView` 294 (color/valor derivan de `isHighCaseValue` del
-dominio) ·
-`PeriodicBonusModal` 272 · `HudIconButton` 263 · `SwapEventModal` 241 ·
+`BankerOfferPanel` 341 (ADR-015: `SFX.OFFER` al ofrecer y `SFX.BANKER_ANNOYED` con la
+oferta topada) · `CardView` 299 (color/valor derivan de `isHighCaseValue` del dominio;
+`reveal()` suena la variante por valor vía `cardSfxKeyForValue`) ·
+`PeriodicBonusModal` 272 · `HudIconButton` 268 · `SwapEventModal` 245 ·
 `EnergyBarView` 248 (relleno/label/pulso derivan de `EnergyLevel.getEnergyZone`; la vista
-solo traduce zona → color) · `SoundFullscreenControls` 212 (✅ **spec 107 L** con 4 tests desde ADR-008: default `false` del 3.er argumento, botón solo con `true` + fullscreen disponible, sin botón muerto en iOS/iframe) ·
-`OnboardingCoach` 200 · `ConfirmDialog` 165 · `DailyChallengeBanner` 121 (usa
+solo traduce zona → color) · `SoundFullscreenControls` 214 (✅ **spec 107 L** con 4 tests desde ADR-008: default `false` del 3.er argumento, botón solo con `true` + fullscreen disponible, sin botón muerto en iOS/iframe) ·
+`OnboardingCoach` 200 · `ConfirmDialog` 173 · `DailyChallengeBanner` 129 (usa
 `previewDailyCompletion` del dominio) ·
 `PayoutBoardView` 129 · `ParticleManager` 97 · `LocalizedText` 78 (auto-suscripción).
+El click genérico de todos va por `UiSfx.bindUiClick` (ADR-015) — ver PLAYBOOK §1: el chrome
+del botón sigue duplicado, el sonido no.
 
 ### Efectos de celebración de mazo (~2.760 líneas, 15 archivos)
 `DeckCelebrationEffect` (interfaz + spec) · `DeckCelebrationEffectRegistry` (`Record` exhaustivo:
@@ -262,10 +292,11 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.307 líneas · 5 specs 🟢
+## `src/shared/` — 1.464 líneas · 6 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
+| `audio/AudioData.ts` | 101 | ✅ 56 L | **Manifiesto único de audio (ADR-015)**: `AUDIO_MANIFEST` (1 música + **23 sfx**) + `SFX as const` (símbolos canónicos que usa presentation). Lo consumen `PreloadScene` (carga) y `AudioService` (volumen por clave). Guardián en el spec: paridad símbolo ↔ manifest ↔ mp3 físico. 🟢 |
 | `i18n/LanguageData.ts` | 489 | ✅ 75 L | **153 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). 2026-10-04 CG-MON-006 (ADR-012): +`SHOP_ADS_HIDDEN_ADBLOCK` y +`SHOP_ADS_HIDDEN_DISABLED` (EN+ES, aviso inline de la tienda; 148 → 150 claves). 2026-10-08 ADR-014: +`BANKER_CAPPED_NOTICE_SINGULAR`/`_PLURAL`, +`TUTORIAL_BANKER_CAPPED_CAPTION` y frase anti-farmeo en `ONBOARDING_BANKER_BODY` (150 → 153 claves, `wc -l` 478 → 489). |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |

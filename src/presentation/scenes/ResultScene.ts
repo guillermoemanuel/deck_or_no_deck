@@ -10,6 +10,8 @@ import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { CardPositionSource, getGameObjectGlobalPosition } from '../effects/deck-celebrations/DeckCelebrationEffect';
 import languageManager from '../../shared/i18n/LanguageManager';
+import { SFX } from '../../shared/audio/AudioData';
+import { bindUiClick } from '../audio/UiSfx';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts — mismos valores hex, para que la pantalla final se
@@ -227,6 +229,14 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
         fontStyle: 'bold',
         color: '#ffd76a'
       }).setOrigin(0.5);
+      // Fanfarria de récord — solo en la rama que realmente muestra el
+      // "Nuevo récord" (audioService ya está seteado: create() lo asigna
+      // antes de renderOutcomeSummary()).
+      try {
+        this.audioService.play(SFX.RECORD);
+      } catch {
+        // Audio best-effort: nunca rompe el modal de resultado.
+      }
     }
   }
 
@@ -539,6 +549,8 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
       this.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Cubic.easeOut' });
       this.tweens.add({ targets: glow, alpha: 0, duration: 120, ease: 'Cubic.easeOut' });
     });
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(hitZone, this.audioService);
 
     hitZone.on('pointerup', () => {
       this.tweens.add({

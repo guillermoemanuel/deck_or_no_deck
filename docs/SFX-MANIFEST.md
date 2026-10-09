@@ -17,19 +17,19 @@ Copiar la carpeta `sfx/` a `public/assets/audio/sfx/` (junto a `card-open.mp3` y
 | `sfx-lose` | `sfx-lose.mp3` | 0.75 | 2.00 s | GameLost |
 | `sfx-energy-depleted` | `sfx-energy-depleted.mp3` | 0.7 | 1.30 s | EnergyDepleted |
 | `sfx-heartbeat` | `sfx-heartbeat.mp3` | 0.5 | 0.90 s | Energía baja (reproducir en bucle ~cada 0,9 s) |
-| `sfx-drumroll` | `sfx-drumroll.mp3` | 0.7 | 1.90 s | Redoble antes de LastCardRevealed |
+| `sfx-drumroll` | `sfx-drumroll.mp3` | 0.7 | 1.90 s | Redoble antes de LastCardRevealed — **sin uso deliberado** (ver Notas) |
 | `sfx-swap` | `sfx-swap.mp3` | 0.5 | 0.70 s | SecretCardSwapped / FinalSecretCardSwapped |
 | `sfx-deal` | `sfx-deal.mp3` | 0.7 | 1.00 s | DealAccepted (ka-ching) |
 | `sfx-no-deal` | `sfx-no-deal.mp3` | 0.6 | 0.35 s | DealRejected |
 | `sfx-banker-annoyed` | `sfx-banker-annoyed.mp3` | 0.55 | 0.80 s | Aviso de la regla anti-farmeo (banquero 'cansado') |
 | `sfx-click` | `sfx-click.mp3` | 0.4 | 0.09 s | Clic de botones y menús |
-| `sfx-coins-count` | `sfx-coins-count.mp3` | 0.55 | 1.20 s | Conteo de monedas en ResultScene |
+| `sfx-coins-count` | `sfx-coins-count.mp3` | 0.55 | 1.20 s | Conteo de monedas en ResultScene — **sin uso deliberado** (ver Notas) |
 | `sfx-record` | `sfx-record.mp3` | 0.7 | 1.60 s | Récord superado |
 | `sfx-revive` | `sfx-revive.mp3` | 0.7 | 1.40 s | GameRevived |
 | `sfx-purchase` | `sfx-purchase.mp3` | 0.55 | 0.50 s | Compra de mejora o mazo (tienda) |
 | `sfx-bonus-claim` | `sfx-bonus-claim.mp3` | 0.6 | 1.00 s | Reclamar bono periódico / desafío diario |
 | `sfx-unlock` | `sfx-unlock.mp3` | 0.65 | 1.60 s | Desbloqueo de mazo |
-| `sfx-whoosh` | `sfx-whoosh.mp3` | 0.4 | 0.45 s | Transición de escena |
+| `sfx-whoosh` | `sfx-whoosh.mp3` | 0.4 | 0.45 s | Transición de escena (hoy: solo salir del tutorial) |
 
 ## Variación de `CardOpened` según el valor de la carta
 
@@ -40,15 +40,19 @@ Alineado con la tabla de energía (las cartas bajas restauran, las altas drenan)
 - 1000, 5000, 10000 → `sfx-card-high`
 - 25000 → `sfx-card-jackpot`
 
-Hoy `CardView.ts` reproduce siempre `sfx-card-open`; habría que elegir la clave según el valor.
+Hoy `CardView.ts` elige la clave con `cardSfxKeyForValue(value)`
+(`src/presentation/audio/GameplaySfx.ts`) para todos los reveals — la clave genérica
+`sfx-card-open` queda **sin uso deliberado** (`SFX.CARD_OPEN`, ver `PLAYBOOK.md` §3).
 
-## Entradas para `AudioData.ts`
+## Entradas de `AUDIO_MANIFEST.sfx` (`src/shared/audio/AudioData.ts`)
 
 ```ts
         { key: 'sfx-card-low', file: 'sfx-card-low.mp3', volume: 0.6 },
         { key: 'sfx-card-mid', file: 'sfx-card-mid.mp3', volume: 0.55 },
         { key: 'sfx-card-high', file: 'sfx-card-high.mp3', volume: 0.75 },
         { key: 'sfx-card-jackpot', file: 'sfx-card-jackpot.mp3', volume: 0.85 },
+        { key: 'sfx-card-open', file: 'card-open.mp3', volume: 0.6 },
+        { key: 'sfx-offer', file: 'offer.mp3', volume: 0.6 },
         { key: 'sfx-win', file: 'sfx-win.mp3', volume: 0.8 },
         { key: 'sfx-lose', file: 'sfx-lose.mp3', volume: 0.75 },
         { key: 'sfx-energy-depleted', file: 'sfx-energy-depleted.mp3', volume: 0.7 },
@@ -77,6 +81,9 @@ era justamente la fuente dual que hacía que una clave registrada no sonara.
 
 ## Notas
 
+- El manifest vigente tiene **23 claves**: las 21 de este catálogo + `sfx-card-open` y
+  `sfx-offer` (preexistentes). **Sin uso deliberado** (no "conectar" sin decisión, ver
+  `PLAYBOOK.md` §3 y ADR-015): `sfx-drumroll`, `sfx-coins-count` y `SFX.CARD_OPEN`.
 - `sfx-heartbeat` dura 0,9 s: dispararlo con un temporizador mientras la energía esté baja (el MP3 añade un pequeño relleno, así que un bucle nativo no queda perfecto).
 - Silenciar todo el audio mientras corre un anuncio, como exige CrazyGames.
 - Son sonidos sintéticos funcionales. Los parámetros están en `tools/synth.py` (frecuencias, duraciones, envolventes) y se regeneran con `python3 synth.py && python3 encode.py` (requiere numpy, scipy y ffmpeg).

@@ -3,6 +3,9 @@ import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { getServices } from '../GameServices';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
+import { IAudioService } from '../../domain/ports/IAudioService';
+import { SFX } from '../../shared/audio/AudioData';
+import { bindUiClick } from '../audio/UiSfx';
 
 /**
  * Configuración de un paso del tutorial. Se usa un array de datos en vez
@@ -540,6 +543,11 @@ export class HowToPlayScene extends Phaser.Scene {
 
   create(): void {
     const { width, height } = this.cameras.main;
+    // Arriba de todo (antes de crear cualquier botón): servicios en scope
+    // para pasarle `audioService` a createCloseButton/createStepDots/
+    // createNavButton/createBackToMenuButton — declararlo a mitad de
+    // create() (como estaba) dejaría los binds iniciales en TDZ.
+    const services = getServices(this);
 
     // Fondo atenuador de pantalla completa, detrás del modal
     this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.75);
@@ -565,7 +573,7 @@ export class HowToPlayScene extends Phaser.Scene {
     );
 
     // Botón de cierre "X" — esquina superior derecha del modal
-    this.modalContainer.add(this.createCloseButton());
+    this.modalContainer.add(this.createCloseButton(services.audioService));
 
     // Indicador de paso ("2 / 7")
     this.stepIndicatorText = this.add
@@ -580,7 +588,7 @@ export class HowToPlayScene extends Phaser.Scene {
     // Puntos de paginación tipo carrusel, debajo del indicador "X / Y" —
     // formato "tarjetas navegables" pedido: cada punto también permite
     // saltar directo a ese paso, no solo avanzar de a uno.
-    this.modalContainer.add(this.createStepDots());
+    this.modalContainer.add(this.createStepDots(services.audioService));
 
     // Contenedor de contenido: se vacía y repuebla en cada cambio de paso
     // (mismo patrón ya usado en ShopScene para alternar pestañas) — así
@@ -589,15 +597,23 @@ export class HowToPlayScene extends Phaser.Scene {
     this.modalContainer.add(this.contentContainer);
 
     // Navegación Prev / Next + "Volver al Menú"
-    this.prevButton = this.createNavButton(-MODAL_WIDTH / 2 + 90, MODAL_HEIGHT / 2 - 44, languageManager.getText('TUTORIAL_PREV_BUTTON'), () =>
-      this.goToStep(this.currentStep - 1)
+    this.prevButton = this.createNavButton(
+      -MODAL_WIDTH / 2 + 90,
+      MODAL_HEIGHT / 2 - 44,
+      languageManager.getText('TUTORIAL_PREV_BUTTON'),
+      () => this.goToStep(this.currentStep - 1),
+      services.audioService
     );
-    this.nextButton = this.createNavButton(MODAL_WIDTH / 2 - 90, MODAL_HEIGHT / 2 - 44, languageManager.getText('TUTORIAL_NEXT_BUTTON'), () =>
-      this.handleNextPressed()
+    this.nextButton = this.createNavButton(
+      MODAL_WIDTH / 2 - 90,
+      MODAL_HEIGHT / 2 - 44,
+      languageManager.getText('TUTORIAL_NEXT_BUTTON'),
+      () => this.handleNextPressed(),
+      services.audioService
     );
     this.nextButtonLabel = this.nextButton.getAt(1) as Phaser.GameObjects.Text;
     this.modalContainer.add([this.prevButton, this.nextButton]);
-    this.modalContainer.add(this.createBackToMenuButton());
+    this.modalContainer.add(this.createBackToMenuButton(services.audioService));
 
     // Entrada del modal: fade + pequeño scale-in
     this.modalContainer.setAlpha(0).setScale(0.9);
@@ -609,7 +625,6 @@ export class HowToPlayScene extends Phaser.Scene {
     // GameScene (ver UIScene.ts) y en MainMenuScene, para poder cambiar
     // el tamaño de pantalla o silenciar/activar el audio también desde
     // el tutorial.
-    const services = getServices(this);
     this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
 
     // Limpieza al apagar la escena: además de `hudControls` (sus propios
@@ -770,7 +785,13 @@ export class HowToPlayScene extends Phaser.Scene {
   // Construcción de botones (Graphics + Text, sin imágenes externas)
   // ------------------------------------------------------------------
 
-  private createNavButton(x: number, y: number, label: string, onClick: () => void): Phaser.GameObjects.Container {
+  private createNavButton(
+    x: number,
+    y: number,
+    label: string,
+    onClick: () => void,
+    audio: IAudioService
+  ): Phaser.GameObjects.Container {
     const bg = this.add
       .rectangle(0, 0, 150, 44, 0x21262d)
       .setStrokeStyle(2, ACCENT_COLOR, 0.8)
@@ -782,11 +803,13 @@ export class HowToPlayScene extends Phaser.Scene {
     bg.on('pointerover', () => bg.setFillStyle(0x2d333b));
     bg.on('pointerout', () => bg.setFillStyle(0x21262d));
     bg.on('pointerup', onClick);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(bg, audio);
 
     return this.add.container(x, y, [bg, text]);
   }
 
-  private createCloseButton(): Phaser.GameObjects.Container {
+  private createCloseButton(audio: IAudioService): Phaser.GameObjects.Container {
     const x = MODAL_WIDTH / 2 - 30;
     const y = -MODAL_HEIGHT / 2 + 30;
 
@@ -798,6 +821,8 @@ export class HowToPlayScene extends Phaser.Scene {
     bg.on('pointerover', () => bg.setFillStyle(0x6e2a2a));
     bg.on('pointerout', () => bg.setFillStyle(0x21262d));
     bg.on('pointerup', () => this.exitToMainMenu());
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(bg, audio);
 
     return this.add.container(x, y, [bg, label]);
   }
@@ -806,7 +831,7 @@ export class HowToPlayScene extends Phaser.Scene {
    * bajo el indicador "X / Y" — formato carrusel: cada punto es
    * cliqueable para saltar directo a ese paso, además de servir como
    * indicador visual pasivo de posición/progreso. */
-  private createStepDots(): Phaser.GameObjects.Container {
+  private createStepDots(audio: IAudioService): Phaser.GameObjects.Container {
     const spacing = 16;
     const totalWidth = (TUTORIAL_SLIDES.length - 1) * spacing;
     const startX = -totalWidth / 2;
@@ -814,6 +839,8 @@ export class HowToPlayScene extends Phaser.Scene {
     this.stepDots = TUTORIAL_SLIDES.map((_, index) => {
       const dot = this.add.circle(startX + index * spacing, 0, 4, 0x3d4450, 1).setInteractive({ useHandCursor: true });
       dot.on('pointerup', () => this.goToStep(index));
+      // Click genérico de UI de cada punto (punto único: UiSfx.bindUiClick).
+      bindUiClick(dot, audio);
       return dot;
     });
 
@@ -828,7 +855,7 @@ export class HowToPlayScene extends Phaser.Scene {
    * dispositivos móviles; ahora es un botón visible completo, coherente
    * con el resto de la UI "Casino de Lujo" del juego.
    */
-  private createBackToMenuButton(): Phaser.GameObjects.Container {
+  private createBackToMenuButton(audio: IAudioService): Phaser.GameObjects.Container {
     const width = 220;
     const height = 44;
     const y = MODAL_HEIGHT / 2 - 40;
@@ -858,6 +885,8 @@ export class HowToPlayScene extends Phaser.Scene {
       text.setColor('#c9d1d9');
     });
     bg.on('pointerup', () => this.exitToMainMenu());
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(bg, audio);
 
     return this.add.container(0, y, [bg, icon, text]);
   }
@@ -869,6 +898,15 @@ export class HowToPlayScene extends Phaser.Scene {
   private exitToMainMenu(): void {
     if (this.isTransitioning) return;
     this.isTransitioning = true;
+
+    // Única transición ANIMADA del juego (el resto son cortes secos):
+    // el whoosh acompaña el fade de salida. Va después del guard para no
+    // sonar en un click bloqueado, y antes del tween a propósito.
+    try {
+      getServices(this).audioService.play(SFX.WHOOSH);
+    } catch {
+      // Audio best-effort: nunca rompe la transición.
+    }
 
     // Transición de salida suave (fade + scale-down) antes de redirigir.
     this.tweens.add({

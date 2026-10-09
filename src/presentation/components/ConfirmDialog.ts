@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { TranslationParams } from '../../shared/i18n/LanguageManager';
 import { LocalizedText } from './LocalizedText';
+import { IAudioService } from '../../domain/ports/IAudioService';
+import { bindUiClick } from '../audio/UiSfx';
 
 const COLOR_GOLD = 0xffd76a;
 const COLOR_GOLD_DIM = 0xd4af37;
@@ -34,7 +36,11 @@ export class ConfirmDialog {
   private container: Phaser.GameObjects.Container | null = null;
   private readonly onEscape = (): void => this.cancel();
 
-  constructor(private readonly scene: Phaser.Scene, private readonly config: ConfirmDialogConfig) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly config: ConfirmDialogConfig,
+    private readonly audio?: IAudioService
+  ) {
     this.build();
   }
 
@@ -155,6 +161,8 @@ export class ConfirmDialog {
 
     const hit = this.scene.add.zone(0, 0, w, h).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add([glow, bg, text, hit]);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick).
+    bindUiClick(hit, this.audio);
 
     hit.on('pointerover', () => this.scene.tweens.add({ targets: glow, alpha: 1, duration: 150 }));
     hit.on('pointerout', () => this.scene.tweens.add({ targets: glow, alpha: 0, duration: 150 }));

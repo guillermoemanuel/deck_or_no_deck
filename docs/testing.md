@@ -1,6 +1,14 @@
 # Testing
 
-> Estado al 2026-10-04 (unidad **B4 / CG-MON-006 + ADR-012**: aviso inline de ads en la
+> Estado al **2026-10-09** (cierre **audio SFX — 21 efectos + base de audio**, ADR-015):
+> **60 suites · 670 tests** — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test` OK);
+> base ADR-014: **618 tests**; **+52** = `AudioService.spec` **+4** (5 → 9),
+> `shared/audio/AudioData.spec` **4 (nuevo)**, `presentation/audio`
+> `GameplaySfx` + `GameplaySoundtrack` + `HeartbeatLoop` **40 (nuevos)** y
+> `presentation/audio/UiSfx.spec` **4 (nuevo)** → de 55 a **60** archivos `*.spec.ts`
+> (5 specs nuevos, sin specs borrados). Pendiente de este cierre: **smoke manual de escucha
+> — §5, ítem 12**.
+> Conteo previo (B4, 2026-10-04, unidad **B4 / CG-MON-006 + ADR-012**: aviso inline de ads en la
 > tienda): **48 suites · 546 tests** —
 > verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK · `npm run build` ✓;
 > medido: 48 `*.spec.ts` en `src` — **sin archivos nuevos**; **541 del cierre B3 + 5 de
@@ -75,9 +83,9 @@ npm run lint                  # eslint src
 |---|---|---|---|
 | `domain/` | 20 | alta (umbral 88/80/90/88) | 🟢 incluye `FirstRoundDealStreak.spec` (20 tests) y `FirstRoundDealStreak.farming.spec` (3 tests de simulación con semilla fija, ADR-014) |
 | `application/` | 14 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014 |
-| `infrastructure/` | 11 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (5 tests, primer spec de `audio/`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
-| `shared/` | 5 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) |
-| `presentation/` | 5 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010) y `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado); el resto de escenas sin test |
+| `infrastructure/` | 11 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (9 tests — era 5, +4 de ADR-015: volumen por clave, anti-apilado <40 ms, `warnMissing`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
+| `shared/` | 6 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) y `shared/audio/AudioData.spec` **(4, nuevo desde ADR-015)**: guardián del manifiesto — paridad símbolo ↔ manifest 23 = 23, sin claves duplicadas, mp3 físicos con `fs.existsSync` |
+| `presentation/` | 9 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado) y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (4)**; el resto de escenas sin test |
 
 ---
 
@@ -90,6 +98,7 @@ npm run lint                  # eslint src
 | `FakeOnboardingRepository` | ídem | hints vistos/saltados |
 | `FakeCrazyGamesService` | `infrastructure/services/testing/` | `setNextAdResult()`, `setAvailable()`, `setRewardedStatus()`, **`setRewardedStatusAfterNextAd()`** (ADR-009: el próximo rewarded falla y el estado queda permanente **en vuelo**, como el SDK real), contadores de llamadas, `emitAdLifecycle()`, **`emitMuteAudioChange()`** (ADR-011: dispara `onMuteAudioChange` a sus suscriptores) |
 | `DeterministicRandomProvider` | ídem | shuffle invertido o `fixedOrder` → tableros deterministas |
+| `createFakeScheduler()` | `presentation/audio/testing/` | reloj falso para `HeartbeatLoop`/`GameplaySoundtrack`: timers armados a mano (`fake.timers`, `activeTimers()`, `callback()`), cancelaciones visibles — ADR-015 |
 | `collectEvents(bus)` | `application/use-cases/testing/` | acumula eventos para asserts de secuencia (usado en 6 de 8 specs de use-cases) |
 | `installStorage()` | helper en `LocalStorageRecordsRepositories.spec.ts` | `window.localStorage` con Map |
 | `installFakeSdk()` + `flushMicrotasks()` | helper en `CrazyGamesService.spec.ts` | SDK falso con callbacks disparados a mano + fake timers |
@@ -97,7 +106,8 @@ npm run lint                  # eslint src
 | `NoDrainRule` / `ZeroDrainRule` / `FixedDrainRule` / `InstantLossDrainRule` | inline en specs | estratégias de energía |
 
 **No existe** fake de `IAudioService` — si un test necesita audio, crearlo en
-`infrastructure/audio/testing/FakeAudioService.ts` (mismo patrón que los demás).
+`infrastructure/audio/testing/FakeAudioService.ts` (mismo patrón que los demás); hoy los
+specs de audio usan un stub inline `{ play: jest.fn() } as unknown as IAudioService`.
 
 ---
 
@@ -121,7 +131,9 @@ dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks. Lo 
 testea en `presentation/` es **lógica pura o componentes con `'phaser'` mockeado en node**
 (`DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
 `AdBlockerScene.spec` — solo el cable `createAdBlockerListener`, ADR-010 —,
-`SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002).
+`SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002 —, y desde ADR-015
+los módulos puros de `presentation/audio/`: `GameplaySfx.spec`, `GameplaySoundtrack.spec`,
+`HeartbeatLoop.spec` con `createFakeScheduler()` y `UiSfx.spec`).
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
 testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el
@@ -185,6 +197,27 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     el anuncio se muestra, el efecto se entrega y **no hay reembolso** (saldo sin
     devolución); recomendar dentro del cooldown → `RESULT_AD_COOLDOWN` con botones
     **vivos** y reintento efectivo a los 60 s.
+12. **Smoke de escucha (SFX de partida e interfaz, ADR-015)** (**PENDIENTE de ejecutar**,
+    checklist del cierre de audio 2026-10-09):
+    - clicks en menú / tutorial / HUD / tienda / tabs / ✕ → `sfx-click` (un solo sonido por
+      click, sin encimar con los propios de cada flujo);
+    - `sfx-whoosh` **solo** al salir del tutorial (`HowToPlayScene.exitToMainMenu`) — las
+      demás transiciones, sin whoosh;
+    - `sfx-purchase` / `sfx-unlock` **solo en éxito** de compra de mejora / de mazo (y sin
+      cargo → sin sonido);
+    - `sfx-record` **solo** cuando hay nueva mejor apuesta;
+    - `sfx-banker-annoyed` **solo** con oferta topada (regla anti-farmeo, ADR-014);
+    - `sfx-bonus-claim` al reclamar el bono periódico y al clic del banner del desafío
+      diario;
+    - Trato / No trato y las cartas **sin** click genérico (suenan `sfx-deal`,
+      `sfx-no-deal` y la variante de carta, nunca `sfx-click`);
+    - latido `sfx-heartbeat` con energía ≤25 % (900 ms) y ≤12 % (650 ms), primer latido
+      inmediato al cruzar el umbral; `sfx-lose` 900 ms **después** de
+      `sfx-energy-depleted`; al aceptar un trato, **una sola** fanfarria (`sfx-deal`, sin
+      `sfx-win` — ADR-001);
+    - **volumen de mezcla**: el volumen efectivo de `sfx-card-open`/`sfx-offer` bajó a
+      **0.42** (0.7 × 0.6 del manifiesto, bugfix ADR-015) — validar si está bien o subirlo
+      en `AUDIO_MANIFEST.sfx`.
 
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección

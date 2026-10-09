@@ -18,7 +18,7 @@ application/   (use-cases, factory, records, onboarding)
 domain/        (entidades, value-objects, servicios, puertos, eventos)
 
 infrastructure/  implementa los ports de domain/  (DIP)
-shared/          i18n + EventEmitter + utils — consumible por todas las capas
+shared/          i18n + EventEmitter + utils + manifiesto de audio (AudioData) — consumible por todas las capas
 ```
 
 **Regla dura:** las flechas de importación solo apuntan hacia adentro.
@@ -137,7 +137,7 @@ Reglas:
 | `IDailyChallengeRepository` | `LocalStorageDailyChallengeRepository` | `FakeDailyChallengeRepository` |
 | `IOnboardingRepository` | `LocalStorageOnboardingRepository` | `FakeOnboardingRepository` |
 | `IRandomProvider` (`shuffle` / `generateBoardValues` / `nextFloat` — ADR-013) | `CryptoRandomProvider` (`nextFloat` = `Uint32/2^32`) | `DeterministicRandomProvider` (`nextFloat` = 0.5 → ruido de oferta 0) |
-| `IAudioService` | `infrastructure/audio/AudioService` | **no existe** |
+| `IAudioService` | `infrastructure/audio/AudioService` | **no existe** (los specs de `presentation/audio/` usan stubs inline `{ play: … }`) |
 
 Nota: **`AudioService.setPlatformMuted()` NO está en el puerto `IAudioService`** — es
 método concreto de la implementación, consumido solo por `main.ts` (composition root);
@@ -254,16 +254,40 @@ suscripción.
   Texto dinámico → `languageManager.getText('CLAVE', {param})` en cada render.
   Singleton `languageManager` es el **único** `export default` del proyecto.
   El idioma activo es conocimiento de presentación: **el dominio jamás ramifica por idioma.**
-- **Audio**: `AudioService` se ancla a `Phaser.Game` (no a una Scene) para sobrevivir al
-  ciclo de vida de escenas; fades por `requestAnimationFrame` (no por tweens de escena).
-  **Estado audible (ADR-011):** dos capas — el pref del jugador (`muted`) y el silencio
-  de la plataforma (`platformMuted`, desde `main.ts` vía `onMuteAudioChange` o el
-  override `?muteAudio=`); la fuente única es `applyMute()` → `sound.mute = muted ||
-  platformMuted` y `isMuted()` devuelve el **efectivo**, así que el toggle del HUD no
-  puede re-encender lo que la plataforma silenció (su click queda como pref "que suene"
-  para cuando se libere). El guard de `play()` y el botón del HUD leen el efectivo.
-  Borde aceptado: el mute de anuncios de `main.ts` captura `isMuted()` (efectivo) y
-  restaura con `setMuted()` (pref) — ver ADR-011.
+- **Audio** — tres piezas y una regla (ADR-015):
+  - **Manifiesto único `shared/audio/AudioData.ts`** (dato puro, consumible por todas las
+    capas): `AUDIO_MANIFEST` (1 música + **23 sfx**) + `SFX as const` — la presentación usa
+    los símbolos `SFX.*`, nunca strings sueltos. `PreloadScene` recorre `AUDIO_MANIFEST.sfx`
+    al arrancar (**fuente única de carga**; la música no viene del manifest: se carga por mazo
+    desde `DeckSetups.musicGameplay`). El guardián `AudioData.spec.ts` valida la paridad
+    símbolo ↔ manifest ↔ mp3 físico (`fs.existsSync`).
+  - **`infrastructure/audio/AudioService`** (único archivo con Phaser en infrastructure;
+    anclado a `Phaser.Game` — no a una Scene — para sobrevivir al ciclo de vida de escenas;
+    fades por `requestAnimationFrame`, no por tweens de escena): volumen por clave
+    `(options.volume ?? sfxVolume) × volumenDelManifiesto`, anti-apilado de la misma clave en
+    <40 ms (reloj inyectable; exento `sfx-coins-count`), `warnMissing(key)` con la carpeta
+    real según familia (sfx/music) — y **sin `preload()`** (borrado: código muerto).
+  - **`presentation/audio/`** — módulos **puros, sin Phaser**, que hablan vía puerto
+    `IAudioService`: `GameplaySfx.ts` (fuente única de constantes del latido/derrota +
+    `cardSfxKeyForValue` por rangos de valor), `HeartbeatLoop.ts` (bucle con
+    `HeartbeatScheduler` inyectado; primer latido inmediato), `GameplaySoundtrack.ts`
+    (consumidor puro de `GameEvent` → sfx de partida: sin doble fanfarria ADR-001, lose
+    retardado 900 ms tras `EnergyDepleted` cancelable por `GameRevived`; `stop()` en el
+    **primer** handler `SHUTDOWN` de `GameSceneController`), `UiSfx.ts` (`bindUiClick` —
+    punto único del click genérico `SFX.CLICK`, interfaz estructural `ClickTarget`) y el
+    doble `audio/testing/fakeScheduler.ts`.
+  - **Regla:** Phaser solo en `AudioService`; la presentación reproduce exclusivamente por el
+    puerto `IAudioService`; todo fallo de audio es **silencioso** (best-effort — `play()`
+    envuelto en `try/catch` vacío en cada consumidor): un reproductor roto nunca rompe la
+    partida.
+  - **Estado audible (ADR-011):** dos capas — el pref del jugador (`muted`) y el silencio
+    de la plataforma (`platformMuted`, desde `main.ts` vía `onMuteAudioChange` o el
+    override `?muteAudio=`); la fuente única es `applyMute()` → `sound.mute = muted ||
+    platformMuted` y `isMuted()` devuelve el **efectivo**, así que el toggle del HUD no
+    puede re-encender lo que la plataforma silenció (su click queda como pref "que suene"
+    para cuando se libere). El guard de `play()` y el botón del HUD leen el efectivo.
+    Borde aceptado: el mute de anuncios de `main.ts` captura `isMuted()` (efectivo) y
+    restaura con `setMuted()` (pref) — ver ADR-011.
 
 ---
 
@@ -302,7 +326,7 @@ Bridge (`ActiveSessionBridge`) · Result types (uniones discriminadas para fallo
 ```bash
 npm run dev          # vite dev server
 npm run build        # tsc --noEmit && vite build
-npm run typecheck    # tsc --noEmit  (incluye los 48 *.spec.ts)
+npm run typecheck    # tsc --noEmit  (incluye los 60 *.spec.ts)
 npm run lint         # eslint src   (config mínima en eslint.config.mjs)
 npm test             # jest — suite completa (~30 s)
 npx jest <ruta>      # test selectivo — USAR SIEMPRE durante un cambio

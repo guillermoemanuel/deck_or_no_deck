@@ -17,6 +17,9 @@ en: `MainMenuScene.createCasinoButton` · `DeckSelectionScene.createCasinoButton
 `ConfirmDialog.createButton` · `ShopScene.paintButtonChrome`+`attachButtonInteractions`.
 Los comentarios de cada uno se referencian entre sí: la duplicación es **conocida**.
 → Si tocás el estilo de un botón, asumí que hay 7 copias más.
+**El sonido del click, en cambio, es único desde ADR-015:** todos van por
+`UiSfx.bindUiClick(target, audio)` — no copies `audio.play(SFX.CLICK)` a mano en un
+botón nuevo; lo que sigue duplicado es solo el chrome visual.
 
 ### 🔁 Paleta de colores repetida en ≥11 archivos
 `COLOR_GOLD = 0xffd76a`, `COLOR_GOLD_DIM = 0xd4af37`, `FONT_FAMILY = 'Georgia, …'`
@@ -121,10 +124,10 @@ unidad — si se hace, es una tarea propia con sus 4 gates.
 | Qué | Dónde | Señal |
 |---|---|---|
 | `GameStateDTO` / `GameStateMapper.toDTO` | `application/dto/GameStateDTO.ts` | sin llamadas en producción; arrastra `GameSession.getCardsOpenedCount()` |
+| **3 claves SFX cargadas sin uso deliberado**: `sfx-drumroll`, `sfx-coins-count`, `SFX.CARD_OPEN` | `shared/audio/AudioData.ts` (+ sus mp3 en `public/assets/audio/sfx/`) | **No "conectar" sin decisión** (ADR-015): `sfx-drumroll` — la secuencia final real dura ~1,11 s, menos que los 1,2 s del redoble, y el plan prohibía sumar esperas; `sfx-coins-count` — `ResultScene` no tiene animación de conteo (por eso está además exento del anti-apilado de 40 ms, por si algún día se usa); `SFX.CARD_OPEN` — las variantes por valor (`cardSfxKeyForValue` en `presentation/audio/GameplaySfx.ts`) la reemplazan; `card-open.mp3` sigue cargado como genérico. |
 | `GameEvent.SecretCardChosen` | `domain/events/GameEvents.ts` | declarado, ni emisor ni consumidor |
 | `ProgressionEvent.UpgradePurchased` | `domain/events/ProgressionEvents.ts` | idem; ningún doc lo da por vivo (corregido 2026-09-30) |
 | `GameStateMachine.start()` / estado `idle` | `domain/state/` | `GameSession` arranca en `'playing'` |
-| `AudioService.preload()` | `infrastructure/audio/` | sin llamadas y con path que no existe |
 | `GameSceneData` | `presentation/scenes/GameScene.types.ts` | referencia a `CaseSelectionScene`, escena inexistente |
 | `GameSession.startingEnergyBonus` | `domain/entities/GameSession.ts` | solo lo pasa su spec (resto del "Tanque de Reserva" viejo) |
 | `DeckManager.fromValues*` | `domain/entities/DeckManager.ts` | solo lo usan specs; producción va por la factory |

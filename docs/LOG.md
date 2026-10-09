@@ -7,6 +7,90 @@
 
 ---
 
+## 2026-10-09 · feat(audio): 21 SFX nuevos + base de audio (manifiesto único, volumen por clave, sfx de partida e interfaz)
+
+**Qué se tocó en `src/` (3 commits atómicos, rojo→verde):**
+
+1. **Commit 1 `52dd63e` — base de audio:** `src/infrastructure/audio/AudioData.ts` **movido**
+   a `src/shared/audio/AudioData.ts` (dato puro: presentation puede importarlo sin violar la
+   flecha §2); **23 claves** en `AUDIO_MANIFEST.sfx` (21 nuevas + `sfx-card-open`/`sfx-offer`)
+   + export `SFX as const` (símbolos canónicos). En `AudioService` (262 → **308 L**): mapa
+   clave→volumen con fórmula `(options.volume ?? sfxVolume) × volumenDelManifiesto`
+   (**bugfix** `bug_sfx_volumen_ignorado`: el volumen del manifiesto se declaraba y se
+   ignoraba), anti-apilado de la misma clave en <40 ms con reloj inyectable (exento
+   `sfx-coins-count`), `warnMissing(key)` con la carpeta real según familia (sfx/music — antes
+   apuntaba a `/public/audio/README.md`, inexistente) y **borrado `static preload()`**
+   (código muerto). `PreloadScene` recorre `AUDIO_MANIFEST.sfx` (fuente única; antes cableaba
+   a mano solo 2 claves — bug de fuente dual). 21 mp3 nuevos en
+   `public/assets/audio/sfx/` + `docs/SFX-MANIFEST.md`. Tests: `AudioService.spec` 5 → **9**
+   (+4) y guardián nuevo `src/shared/audio/AudioData.spec.ts` (4 tests: paridad símbolo ↔
+   manifest **23 = 23**, sin duplicados, mp3 físicos con `fs.existsSync`).
+2. **Commit 2 `aeca320` — sonidos de la partida:** nuevos `src/presentation/audio/`
+   `GameplaySfx.ts` (`cardSfxKeyForValue` por rangos ≤100 / ≤750 / ≤10000 / jackpot + fuente
+   única de constantes del latido: 25 %/12 %, 900/650 ms, lose 900 ms),
+   `HeartbeatLoop.ts` (scheduler inyectado `HeartbeatScheduler`, primer latido **inmediato**,
+   token anti-tick-tardío), `GameplaySoundtrack.ts` (consumidor puro de `GameEvent`:
+   DEAL/NO_DEAL/SWAP/WIN **sin doble fanfarria** ADR-001 / LOSE retardado 900 ms tras
+   `ENERGY_DEPLETED` y cancelable por `GameRevived` / heartbeat stop) + 3 specs (**40 tests**)
+   + doble compartido `presentation/audio/testing/fakeScheduler.ts`. `CardView.reveal()`
+   juega la variante vía `cardSfxKeyForValue(value)`; `GameSceneController` instancia el
+   soundtrack (adapter `scene.time.delayedCall` / `remove(false)`), llama `onEvent` al inicio
+   de `handleEvent()` y su **primer handler `SHUTDOWN`** → `soundtrack.stop()`.
+3. **Commit 3 (SFX de interfaz, staged):** nuevo `src/presentation/audio/UiSfx.ts`
+   (`bindUiClick(target, audio?)` — punto único del click genérico `SFX.CLICK`, interfaz
+   estructural `ClickTarget` sin Phaser; sin `audio` no se registra nada) + `UiSfx.spec.ts`
+   (4 tests); binds en: `HudIconButton` (5 call sites: UIScene ×3, SoundFullscreenControls
+   ×2), `ResultScene` (`createActionButton` + `SFX.RECORD` en `isNewBestPayout`), `ShopScene`
+   (`attachButtonInteractions` + ✕, `SFX.PURCHASE` en éxitos de mejora, `SFX.UNLOCK` en
+   éxitos de mazo), `SwapEventModal` y `ConfirmDialog` (call sites en el controller /
+   `MainMenuScene`), `MainMenuScene` (4 botones + selector de idioma), `DeckSelectionScene`
+   (ACEPTAR), `HowToPlayScene` (TDZ de `getServices` resuelto + 4 binds + `SFX.WHOOSH` en
+   `exitToMainMenu` — única transición animada), `UIScene` (`SFX.BONUS_CLAIM` en
+   `claimPeriodicBonus`), `DailyChallengeBanner` (`SFX.BONUS_CLAIM` en el clic),
+   `BankerOfferPanel` (`SFX.BANKER_ANNOYED` en el bloque de oferta topada ADR-014 +
+   `'sfx-offer'` → `SFX.OFFER`).
+4. **Sin uso deliberado** (documentado en `PLAYBOOK.md` §3 para que nadie los "conecte" sin
+   decisión): `sfx-drumroll` (la secuencia final real dura ~1,11 s < los 1,2 s del redoble y
+   el plan prohibía sumar esperas), `sfx-coins-count` (`ResultScene` no tiene animación de
+   conteo) y la clave `SFX.CARD_OPEN` (las variantes por valor la reemplazan; el mp3 sigue
+   cargado).
+
+**Docs (esta sesión):** ADR-015 nuevo (`docs/DECISIONS/ADR-015-manifiesto-de-audio-unico-y-politica-de-reproduccion.md`)
++ fila en `docs/DECISIONS/README.md`; `docs/ARCHITECTURE.md` (sección de audio: manifiesto
+único en `shared/audio/`, `AudioService` con volumen por clave/anti-apilado/sin `preload()`,
+`presentation/audio/` con la regla Phaser-puerto-silencio); `docs/MAP.md` (censo COMPLETO con
+`wc -l`: **188 archivos TS · 128 fuente + 60 specs · 27.924 L** — +10 archivos y +1.103 L
+sobre el censo ADR-014 —, filas de `shared/audio/AudioData.ts` y de los 9 archivos de
+`presentation/audio/`, LOCs recontados de los 13 archivos del Commit 3); `docs/PLAYBOOK.md`
+(§3: fila `AudioService.preload()` eliminada — resuelta; nota nueva con los 3 SFX sin uso;
+§1: el click de botones ya es único vía `UiSfx.bindUiClick`, la duplicación del chrome sigue
+viva); `docs/testing.md` (estado 2026-10-09, specs por capa 20/14/11/**9/6**,
+`createFakeScheduler` en la tabla de dobles, ítem 12 del smoke: checklist de escucha);
+`docs/SFX-MANIFEST.md` (la nota de `CardView` ya no describe el bug de la clave genérica y
+apunta a `src/shared/audio/`); `AGENTS.md` §1 (el conteo de specs del comando `typecheck`
+decía 48 — ya estaba desfasado desde ADR-014 y quedaba más lejos: → **60**, único cambio
+fuera de `docs/`).
+
+**Cómo se verificó (4 gates por commit, verdes; reviewer: VEREDICTO APROBADO en los 3):**
+
+1. `npx jest <specs afectados>` selectivo → **13** tests (commit 1) → **40** (commit 2) →
+   **44** (commit 3) ✓
+2. `npm run typecheck` → **0 errores** · `npm run lint` → **0 problemas** ✓
+3. `npm test` → **670 tests / 60 suites** (base: 618 / 55) ✓
+4. Sin cambios de `domain/`/`application/`, eventos, i18n, música ni ADR-011.
+
+**PENDIENTES:**
+
+- **Smoke manual de escucha** (NO ejecutado): checklist en `docs/testing.md` §5, **ítem 12** —
+  clicks en menú/tutorial/HUD/tienda/tabs/✕ → `sfx-click`; whoosh solo al salir del tutorial;
+  purchase/unlock solo en éxito de compra; record solo con nueva mejor apuesta;
+  banker-annoyed solo con oferta topada (ADR-014); bonus-claim al reclamar el bono periódico
+  y al clic del banner diario; Trato/No trato y cartas **sin** click genérico.
+- **Volumen efectivo de `sfx-card-open`/`sfx-offer` bajó a 0.42 (0.7 × 0.6)**: el bugfix del
+  volumen del manifiesto los atenúa — ajuste de mezcla a validar/corregir en ese smoke.
+
+---
+
 ## 2026-10-08 · feat(balance): regla anti-farmeo de la 1ª ronda (ADR-014) — cap de oferta + cuenta regresiva de 5 partidas
 
 **Qué se tocó en `src/` (hecho por la unidad, rojo→verde):**

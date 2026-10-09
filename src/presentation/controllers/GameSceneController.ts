@@ -402,7 +402,7 @@ export class GameSceneController {
         break;
 
       case 'MidgameSwapAvailable':
-        this.activeSwapModal = new SwapEventModal(this.scene);
+        this.activeSwapModal = new SwapEventModal(this.scene, this.audioService);
         this.activeSwapModal.once('swap-declined', () => this.closeSwapModal());
         this.activeSwapModal.once('swap-accepted-choose-card', () => {
           this.closeSwapModal();

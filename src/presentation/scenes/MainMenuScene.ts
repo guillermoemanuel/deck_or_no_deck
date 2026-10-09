@@ -8,6 +8,7 @@ import { DailyChallengeBanner } from '../components/DailyChallengeBanner';
 import { getNewGameWarning } from '../../shared/utils/NewGameConfirmation';
 import { clearPendingGameMode } from '../GameMode';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
+import { bindUiClick } from '../audio/UiSfx';
 
 /** Paleta "Casino de Lujo" — reutiliza tonos ya presentes en CardView/ResultScene
  * (oro, cian, rojo rubí, verde esmeralda) para mantener cohesión visual con
@@ -446,7 +447,7 @@ export class MainMenuScene extends Phaser.Scene {
       confirmKey: 'NEW_GAME_CONFIRM_ACCEPT',
       confirmColor: 0xff4d6d,
       onConfirm: () => this.startFreshGame()
-    });
+    }, getServices(this).audioService);
   }
 
   private startFreshGame(): void {
@@ -496,6 +497,9 @@ export class MainMenuScene extends Phaser.Scene {
     // y explícito que asignarle un hit-area custom a la Graphics.
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
+    // Click genérico de UI (punto único: UiSfx.bindUiClick) — cubre los 4
+    // botones principales del menú.
+    bindUiClick(hitZone, getServices(this).audioService);
 
     hitZone.on('pointerover', () => {
       this.tweens.add({ targets: container, scale: 1.05, duration: 150, ease: 'Cubic.easeOut' });
@@ -553,6 +557,8 @@ export class MainMenuScene extends Phaser.Scene {
         .setOrigin(0.5);
 
       bg.on('pointerup', () => languageManager.setLanguage(lang));
+      // Click genérico de UI de cada opción del selector de idioma.
+      bindUiClick(bg, getServices(this).audioService);
       bg.on('pointerover', () => {
         if (languageManager.getCurrentLanguage() !== lang) bg.setStrokeStyle(2, COLOR_GOLD, 0.7);
       });
