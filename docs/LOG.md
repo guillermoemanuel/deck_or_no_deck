@@ -7,6 +7,33 @@
 
 ---
 
+## 2026-10-09 · Ops: `.env` → portal (ads-adapter PASS) + servidores locales + subida de volumen de card-open/offer
+
+**Qué se tocó:**
+
+1. **`.env` → `VITE_ADS=portal` + `VITE_FULLSCREEN=true`** (decisión del usuario, ADR-007/008)
+   vía agente `ads-adapter`: `npm run build` PASS, bundle con **0 matches** de
+   `sdk.crazygames.com`. `.env.example` intacto; `.env` sigue ignorado por git.
+2. **Servidores locales:** detenido el `vite preview --port 4173 --strictPort` (leftover de la
+   sesión de QA) y **reiniciado el dev server de `:5173`** (arrancado ayer 18:58 con el `.env`
+   viejo en modo crazygames) — ya corre en modo portal. *Si tenés un `npm run dev` propio
+   abierto, reiniciálo para que coja el `.env`* (Vite lo lee solo al arrancar).
+3. **Volumen `sfx-card-open`/`sfx-offer` 0.6 → 0.8** en `AUDIO_MANIFEST.sfx`
+   (**cierra el pendiente de mezcla** de la entrada anterior): efectivo
+   0.7 × 0.8 = **0.56** (antes 0.42). Rojo primero: `AudioService.spec` (tests de volumen)
+   0.6 → 0.8 → 2 rojos → manifiesto actualizado → verdes.
+
+**Cómo se verificó:** `npx jest src/infrastructure/audio src/shared/audio` ·
+`npm run typecheck` 0 · `npm run lint` 0 · `npm test` **60 suites / 670 tests** ✓;
+del `ads-adapter`: build + grep de bundle PASS.
+
+**Pendientes:** el **smoke de escucha** (`docs/testing.md` §5, ítem 12) sigue **abierto** —
+el browser de escritorio no está conectado a la sesión para instrumentarlo. Vías: (a) oírlo
+vos con el dev server ya corriendo en `http://localhost:5173/`, o (b) conectar la app de
+desktop y pedir el smoke instrumentado (wrapper de `AudioService.play` + clicks en canvas).
+
+---
+
 ## 2026-10-09 · feat(audio): 21 SFX nuevos + base de audio (manifiesto único, volumen por clave, sfx de partida e interfaz)
 
 **Qué se tocó en `src/` (3 commits atómicos, rojo→verde):**

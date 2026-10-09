@@ -114,13 +114,15 @@ describe('AudioService — volumen de manifiesto y anti-apilado', () => {
   it('aplica el volumen del manifiesto por encima del volumen global', () => {
     const { audio, soundPlay } = fakeGame();
 
-    // sfxVolume global (0.7) × volumen declarado de sfx-card-open (0.6);
+    // sfxVolume global (0.7) × volumen declarado de sfx-card-open (0.8 —
+    // subido de 0.6 porque el efectivo 0.42 quedaba bajo tras el bugfix
+    // del manifiesto; ahora 0.56);
     // la expresión se escribe igual que en la implementación para que el
     // float coincida bit a bit.
     audio.play('sfx-card-open');
 
     expect(soundPlay).toHaveBeenCalledWith('sfx-card-open', {
-      volume: 0.7 * 0.6,
+      volume: 0.7 * 0.8,
       loop: false
     });
   });
@@ -131,7 +133,7 @@ describe('AudioService — volumen de manifiesto y anti-apilado', () => {
     audio.play('sfx-card-open', { volume: 1 });
 
     expect(soundPlay).toHaveBeenCalledWith('sfx-card-open', {
-      volume: 1 * 0.6,
+      volume: 1 * 0.8,
       loop: false
     });
   });

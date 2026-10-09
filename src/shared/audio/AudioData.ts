@@ -38,8 +38,11 @@ export const AUDIO_MANIFEST: AudioManifestStructure = {
         { key: 'sfx-card-mid', file: 'sfx-card-mid.mp3', volume: 0.55 },
         { key: 'sfx-card-high', file: 'sfx-card-high.mp3', volume: 0.75 },
         { key: 'sfx-card-jackpot', file: 'sfx-card-jackpot.mp3', volume: 0.85 },
-        { key: 'sfx-card-open', file: 'card-open.mp3', volume: 0.6 },
-        { key: 'sfx-offer', file: 'offer.mp3', volume: 0.6 },
+        // Subidos de 0.6 a 0.8 (BUGFIX (bug_volumen_card_offer_bajo): con 0.6
+        // el efectivo tras el bugfix del manifiesto era 0.7×0.6=0.42 y quedaba
+        // bajo respecto al sonido anterior de 0.7; ahora 0.7×0.8=0.56).
+        { key: 'sfx-card-open', file: 'card-open.mp3', volume: 0.8 },
+        { key: 'sfx-offer', file: 'offer.mp3', volume: 0.8 },
 
         // --- Resultado de la ronda ---
         { key: 'sfx-win', file: 'sfx-win.mp3', volume: 0.8 },
