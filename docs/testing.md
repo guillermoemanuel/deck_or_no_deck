@@ -1,13 +1,21 @@
 # Testing
 
-> Estado al **2026-10-09** (cierre **audio SFX — 21 efectos + base de audio**, ADR-015):
-> **60 suites · 670 tests** — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test` OK);
-> base ADR-014: **618 tests**; **+52** = `AudioService.spec` **+4** (5 → 9),
-> `shared/audio/AudioData.spec` **4 (nuevo)**, `presentation/audio`
-> `GameplaySfx` + `GameplaySoundtrack` + `HeartbeatLoop` **40 (nuevos)** y
-> `presentation/audio/UiSfx.spec` **4 (nuevo)** → de 55 a **60** archivos `*.spec.ts`
-> (5 specs nuevos, sin specs borrados). Smoke manual de escucha **ejecutado y aprobado
-> 2026-10-10** — §5, ítem 12.
+> Estado al **2026-10-10** (cierre **mazo chessmaster oculto + tab Mazos a 3 columnas**,
+> ADR-016): **63 suites · 689 tests** — verdes en los 4 gates (typecheck 0 · lint 0 ·
+> `npm test` OK) en los 3 commits (`2036949` usuario · `0a94c72` · `b782f56`), reviewer
+> APROBADO en los 2 del plan. Desglose desde el cierre de audio (**60 suites / 670
+> tests**): usuario **+1 suite / +8 tests** (`ChessCardScatterEffect.spec` **7** + el
+> guardián `requiresAllBaseDecks` en `DeckSetups.spec` **+1**) → 61/678; plan **+2 suites
+> / +11 tests** (`ListAvailableDecksUseCase.spec` **5** + `PurchaseDeckUseCase.spec`
+> **6**) → **63/689**. Recount estático de este cierre: **648** declaraciones
+> `it(`/`test(` + **41** casos `it.each` = **689**; 63 archivos `*.spec.ts` (`find`).
+> Smoke de escucha **aprobado 2026-10-10** — §5, ítem 12; **smoke visual del tab Mazos
+> PENDIENTE** — §5, ítem 13.
+> Cierre previo (2026-10-09, **audio SFX — 21 efectos + base de audio**, ADR-015): **60
+> suites · 670 tests** (+52 sobre la base ADR-014 de 618: `AudioService.spec` +4,
+> `shared/audio/AudioData.spec` 4, `presentation/audio` GameplaySfx/GameplaySoundtrack/
+> HeartbeatLoop 40 y UiSfx 4 → de 55 a **60** archivos `*.spec.ts`, 5 specs nuevos sin
+> borrados; smoke de escucha aprobado 2026-10-10, ítem 12).
 > Conteo previo (B4, 2026-10-04, unidad **B4 / CG-MON-006 + ADR-012**: aviso inline de ads en la
 > tienda): **48 suites · 546 tests** —
 > verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK · `npm run build` ✓;
@@ -82,10 +90,10 @@ npm run lint                  # eslint src
 | Capa | Specs | Cobertura real | Estado |
 |---|---|---|---|
 | `domain/` | 20 | alta (umbral 88/80/90/88) | 🟢 incluye `FirstRoundDealStreak.spec` (20 tests) y `FirstRoundDealStreak.farming.spec` (3 tests de simulación con semilla fija, ADR-014) |
-| `application/` | 14 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014 |
+| `application/` | 16 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014; **desde ADR-016** `ListAvailableDecksUseCase.spec` (5) y `PurchaseDeckUseCase.spec` (6) |
 | `infrastructure/` | 11 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (9 tests — era 5, +4 de ADR-015: volumen por clave, anti-apilado <40 ms, `warnMissing`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
 | `shared/` | 6 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) y `shared/audio/AudioData.spec` **(4, nuevo desde ADR-015)**: guardián del manifiesto — paridad símbolo ↔ manifest 23 = 23, sin claves duplicadas, mp3 físicos con `fs.existsSync` |
-| `presentation/` | 9 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado) y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (4)**; el resto de escenas sin test |
+| `presentation/` | 10 | casi nada (fuera del collector) | 🔴 ver §5 — specs: `DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7 — ADR-016)**, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado) y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (4)**; el resto de escenas sin test |
 
 ---
 
@@ -129,7 +137,7 @@ specs de audio usan un stub inline `{ play: jest.fn() } as unknown as IAudioServ
 **Las escenas de `presentation/` no se unit-testean con Phaser** (decisión mantenida):
 dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks. Lo que sí se
 testea en `presentation/` es **lógica pura o componentes con `'phaser'` mockeado en node**
-(`DeckCelebrationEffect.spec`, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
+(`DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7, ADR-016)**, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
 `AdBlockerScene.spec` — solo el cable `createAdBlockerListener`, ADR-010 —,
 `SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002 —, y desde ADR-015
 los módulos puros de `presentation/audio/`: `GameplaySfx.spec`, `GameplaySoundtrack.spec`,
@@ -217,13 +225,31 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
       `sfx-win` — ADR-001);
     - **volumen de mezcla**: efectivo de `sfx-card-open`/`sfx-offer` subido a **0.56**
       (0.7 × 0.8 del manifiesto, `b3cf444`) — **validado en el smoke 2026-10-10**.
+13. **Smoke visual del tab Mazos (mazo oculto "?", ADR-016)** — **PENDIENTE de ejecutar**
+    (nuevo el 2026-10-10; los specs cubren la lógica, la escena no tiene test):
+    - las **4 filas** de la grilla de 3 columnas no se pisan entre sí ni con el caption /
+      el badge "Obtenidos";
+    - la **carta "?"** dorada queda en la **columna central de la fila 4**, **inerte**: sin
+      hover, sin click y sin sonido (no tiene hitZone);
+    - el contador muestra **X/10** mientras chessmaster siga oculto (denominador = solo
+      entradas reveladas);
+    - compra de un mazo normal **con fondos** → descuenta, fila a COMPRADO y `sfx-unlock`;
+    - **fondos insuficientes** → `flashError` en el botón y **sin cargo** (saldo intacto);
+    - comprar el **décimo** mazo base → **re-render del tab**: fila chessmaster visible
+      con precio **30000** y contador **10/11**;
+    - comprar chessmaster → contador **11/11** y estado COMPRADO;
+    - cambiar idioma **EN↔ES** refresca nombre, precio y contador;
+    - el tab **Mejoras** queda **idéntico** al anterior (columnas `COLUMN_OFFSETS`,
+      botones y filas sin cambios).
 
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección
 *Smoke general del Sprint B* más abajo). Los **11 ítems verificados en vivo** — ítems
 **1-4 y 9-11**
 el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
-penalidad −5000 que puede dejar saldo negativo, bono periódico forzado). Notas de esa
+penalidad −5000 que puede dejar saldo negativo, bono periódico forzado); ítem **12**
+(smoke de escucha) verificado 2026-10-10; ítem **13** (tab Mazos, ADR-016) **pendiente
+de ejecutar**. Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
 Duplicar/Triplicar/Revivir porque en el modo default (`VITE_ADS=crazygames`) `main.ts`
 carga el SDK real de CrazyGames **dinámicamente** (`loadCrazyGamesSdk()` — el `<script>`

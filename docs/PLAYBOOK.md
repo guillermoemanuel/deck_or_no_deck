@@ -109,8 +109,18 @@ unidad — si se hace, es una tarea propia con sus 4 gates.
 5. **`DeckManager.swapSecretCard` preserva IDs e intercambia valores/roles.** Cualquier
    cambio acá afecta también al handler `SecretCardSwapped` de `GameSceneController`,
    que debe re-skinnear el slot correcto.
-6. **Añadir un mazo nuevo**: `DeckSetups.ts` + texturas en `public/assets/` +
-   `DeckCelebrationEffectRegistry` (no compila si falta el efecto) + `PreloadScene`.
+6. **Añadir un mazo nuevo** (contrato ampliado por **ADR-016**): `DeckSetups.ts` + texturas
+   en `public/assets/` + `DeckCelebrationEffectRegistry` (no compila si falta el efecto) +
+   `PreloadScene`.
+   - Mazo **base** (visible): solo lo anterior — la tienda lo lista sola:
+     `ListAvailableDecksUseCase` deriva `BASE_DECK_IDS` del catálogo (**sin hardcode del
+     10**), así que el prerrequisito del mazo oculto crece solo.
+   - Mazo **oculto** (tipo chessmaster): declarar `requiresAllBaseDecks: true` en su
+     entrada — visibilidad, prerrequisito y rechazo de compra (`locked_prerequisite`
+     **antes** de cobrar) se actualizan solos, **sin tocar use-cases, escena ni `main.ts`**;
+     el guardián `DeckSetups.spec` exige **exactamente 1** mazo con el flag.
+   - La compra **siempre** por `PurchaseDeckUseCase` (nunca `progressionManager.purchaseDeck`
+     directo desde la escena); el precio lo cobra el puerto desde `DECK_SETUPS`.
 7. **Orden de rechazos en `PurchaseSessionUpgradeUseCase.execute`** — cascada
    `unknown_upgrade → conflicting_upgrade → not_applicable → ads_unavailable →
    insufficient_coins → cobrar + applyEffect`. Cada precedencia tiene test
@@ -133,6 +143,7 @@ unidad — si se hace, es una tarea propia con sus 4 gates.
 | `DeckManager.fromValues*` | `domain/entities/DeckManager.ts` | solo lo usan specs; producción va por la factory |
 | Comentario de penalidad tachado | `UIScene.ts` | legado de la migración a i18n |
 | Rama `wantsDouble && wantsTriple` | `ResultScene.buildWonActions` (~L263) | **Potencialmente muerta** (2026-10-01): inalcanzable con el catálogo actual — `SessionUpgradeCatalog.conflictsWith` prohíbe double+triple y `SessionUpgrades` no persiste entre partidas; los flags se calculan en vivo. **No borrada**: es la red de seguridad ante cualquier bug de lógica que otorgue ambos a la vez (si se borrara, un doble flag mostraría un solo botón). Evaluación pendiente del usuario (ADR-006 la documenta). |
+| Camino defensivo `locked_prerequisite` / `SHOP_DECK_LOCKED` | `ShopScene.attemptPurchaseDeck()` + `showTemporaryDeckMessage()` (ADR-016, 2026-10-10) | **Inalcanzable desde la UI hoy**: la fila oculta es una carta "?" **sin botón**, y el predicado de `PurchaseDeckUseCase` es idéntico al de `ListAvailableDecksUseCase` (mismo flag + mismos `BASE_DECK_IDS`) — no hay botón que dispare el rechazo. **Es DEFENSA, no feature viva**: no quitarlo ni "arreglarlo" agregando interacción a la fila "?" sin decisión de producto; si se toca, primero cambiar el spec de los 2 use-cases. |
 
 ---
 

@@ -7,6 +7,74 @@
 
 ---
 
+## 2026-10-10 · Mazo chessmaster oculto ("?") + tab Mazos a 3 columnas
+
+**Qué se tocó (3 commits de código, en este orden):**
+
+1. **`2036949` (del usuario):** chessmaster como **11º mazo** — entrada en `DeckSetups.ts`
+   (id/nombre/`price: 30000`/assets, +27 L; su spec +16 con el guardián del flag),
+   `ChessCardScatterEffect.ts` (**378 L** + `ChessCardScatterEffect.spec.ts` **237 L**,
+   registrado en `DeckCelebrationEffectRegistry`), assets en `public/assets/`
+   (`chess_gameplay.ogg`, `card-back/front-chess`, `chessmaster-*`, barra de energía);
+   borrados `card-back.png`/`card-front.png`, `cover.jpeg` y `dond.ico.jpeg` fuera de
+   `public/`, `speculation-game.zip` eliminado del repo.
+2. **`0a94c72` (commit 1 del plan):** flag declarativo `requiresAllBaseDecks?: true` en
+   `IDeckConfig` (solo chessmaster) + **2 use-cases nuevos en `application/`**:
+   `ListAvailableDecksUseCase` (**47 L** — `execute()` → `DeckShopEntry[] { deckId,
+   revealed }`; `BASE_DECK_IDS` **derivado del flag**, sin hardcode del 10) y
+   `PurchaseDeckUseCase` (**50 L** — cascada dueño → prerequisito → delegar en
+   `IProgressionService.purchaseDeck`; `locked_prerequisite` **antes** de cobrar, criterio
+   PLAYBOOK §2.7 — **cierra la deuda "compra de mazos sin use-case"**). 11 tests nuevos
+   (`ListAvailableDecksUseCase.spec` 5 + `PurchaseDeckUseCase.spec` 6), rojo primero.
+3. **`b782f56` (commit 2):** `ShopScene.ts` **816 → 996 L** — tab Mazos a **3 columnas**
+   (`DECK_COLUMN_OFFSETS` propias de 300 px; el tab de mejoras/`COLUMN_OFFSETS` intacto;
+   botón 120×34 a 13 px, nombre 14 px con `wordWrap` 104 / `maxLines` 2) + **fila
+   misteriosa "?"** (`Graphics` 46×64 chrome `0x121218`+dorado, glifo Georgia 34 px,
+   **inerte por construcción**: sin hitZone, sin sonido) + **contador por entradas
+   reveladas** (denominador 10 oculto / 11 revelado) + re-render del tab tras comprar el
+   décimo + `locked_prerequisite` → `flashError` + mensaje temporal 2,6 s
+   (`SHOP_DECK_LOCKED`, clave nueva en `LanguageData`: **153 → 154 claves**, `wc` 489 →
+   497, en+es) + campo `width` en `ActionButtonRefs` + wiring en `main.ts` (bag
+   `+listAvailableDecks` / `+purchaseDeck`; `GameServices` 49 → 58 L).
+
+**Cómo se verificó:** gates de los 3 commits (corridos por sus sesiones) —
+`npm run typecheck` **0** · `npm run lint` **0** · `npm test` **63 suites / 689 tests**
+(desglose: base audio **60/670** → usuario **+1 suite / +8 tests**
+(`ChessCardScatterEffect.spec` 7 + guardián de `requiresAllBaseDecks` en
+`DeckSetups.spec`) → 61/678 → plan **+2 suites / +11 tests** → **63/689**; recount
+estático de este cierre: 648 declaraciones `it(`/`test(` + 41 casos `it.each` = **689**,
+63 archivos `*.spec.ts` con `find`). Reviewer **APROBADO** en `0a94c72` y `b782f56`
+(hallazgos BAJO ya aplicados: mensaje temporal a `h/2 − 183`, AGENTS.md). Este commit de
+docs: **sin cambios en `src/`** (el censo de `MAP.md` se rehizo con `wc -l`: **194
+archivos TS · 131 fuente + 63 specs · 29.060 L**); el sandbox de esta sesión no permite
+re-correr `npm`/`npx`, por eso los 4 gates citados son los de los commits de código.
+
+**Docs (esta sesión):** ADR-016 (`docs/DECISIONS/ADR-016-mazo-oculto-por-prerrequisito-declarativo.md`)
++ fila en `docs/DECISIONS/README.md`; `docs/PLAYBOOK.md` (§2.6: contrato del mazo nuevo
+ampliado con el flag y los 2 use-cases; §3: el camino defensivo `SHOP_DECK_LOCKED` es
+**defensa**, no feature viva); `docs/MAP.md` (censo completo nuevo + filas de los archivos
+tocado); `AGENTS.md` (§1 specs 60 → 63, §3 `ShopScene` 996 L y compra vía
+`PurchaseDeckUseCase`, claves 151 → **154**); `docs/testing.md` (63/689 + **ítem 13** del
+smoke visual) y `docs/ARCHITECTURE.md` (fila del mazo oculto en la tabla de invariantes).
+
+**Discrepancias doc↔código detectadas y corregidas (mandó el código):** `AGENTS.md` decía
+"151 claves i18n" → medido **154** (308 definiciones ÷ 2 idiomas; paridad en/es
+garantizada por `LanguageData.spec`; encaja con el delta de `wc` 489 → 497 = +8 L);
+`MAP.md` decía 153 (cuenta previa a `SHOP_DECK_LOCKED`) — y al recorrer el censo completo
+contra el código, 2 filas heredadas tampoco cerraban: `ports/*.ts` 376 → medido **371**,
+`shared/audio/AudioData.ts` 101 → medido **104** (la suma por capa las confirma).
+
+**Pendientes:**
+
+- **Smoke visual del tab de mazos** — `docs/testing.md` §5, **ítem 13**: PENDIENTE de
+  ejecutar (validación del usuario; 4 filas sin pisarse, "?" inerte, contador 10/11,
+  compra del décimo → re-render, EN↔ES, tab Mejoras intacto).
+- **Código defensivo inalcanzable**: el motivo `locked_prerequisite` no se puede alcanzar
+  desde la UI hoy (fila "?" sin botón + predicados idénticos entre lista y compra) —
+  documentado en `PLAYBOOK.md` §3 para que no se lo "arregle" ni se lo borre.
+
+---
+
 ## 2026-10-10 · Smoke de escucha APROBADO — cierra la tarea de audio
 
 **Qué:** ejecutado el **smoke manual de escucha** (`docs/testing.md` §5, **ítem 12**) con el

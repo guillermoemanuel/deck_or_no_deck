@@ -4,7 +4,26 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-09 (cierre **audio SFX — 21 efectos nuevos + base de audio**,
+> Fecha del censo: 2026-10-10 (cierre **mazo chessmaster oculto — 11º deck + tab Mazos a
+> 3 columnas**, ADR-016; 3 commits: `2036949` usuario · `0a94c72` flag + use-cases ·
+> `b782f56` UI) · **194 archivos TS · 131 fuente + 63 specs · 29.060 L — censo COMPLETO
+> medido con `wc -l`**: por capa `domain/` **5.168** (20 specs) · `application/` **4.382**
+> (16) · `infrastructure/` **4.169** (11) · `presentation/` **13.440** (10) · `shared/`
+> **1.475** (6) · raíz (`main.ts` 389 + `vite-env.d.ts` 37) **426**. Detalle del cierre:
+> **+6 archivos** (3 fuente + 3 specs) → de 188 a 194 y **+1.136 L** (27.924 → 29.060) —
+> `application/use-cases/ListAvailableDecksUseCase.ts` (**47 L**) + `.spec.ts` (**80 L**),
+> `PurchaseDeckUseCase.ts` (**50 L**) + `.spec.ts` (**94 L**) y
+> `presentation/effects/deck-celebrations/ChessCardScatterEffect.ts` (**378 L**) +
+> `.spec.ts` (**237 L**, del usuario, `2036949`); recontados `ShopScene.ts` 816 →
+> **996** (+180, tab Mazos a 3 columnas), `DeckSetups.ts` 234 → **260** (+26: 11º mazo +
+> flag `requiresAllBaseDecks`) y su spec 30 → **46** (+16, guardián del flag),
+> `LanguageData.ts` 489 → **497** (+8: clave `SHOP_DECK_LOCKED` → **154 claves**, ver
+> AGENTS §3), `GameServices.ts` 49 → **58** (+9: bag con los 2 use-cases nuevos),
+> `main.ts` 385 → **389** (+4) y `DeckCelebrationEffectRegistry.ts` → **51** (+3/−1:
+> registro de chessmaster). Recorridas contra el código actual, 2 filas heredadas del
+> censo anterior no cerraban: `ports/*.ts` 376 → **371** y `shared/audio/AudioData.ts`
+> 101 → **104**.
+> Cierre previo — 2026-10-09 (cierre **audio SFX — 21 efectos nuevos + base de audio**,
 > 3 commits: `52dd63e` base · `c83a308` partida · `d6b8693` interfaz + docs) ·
 > **188 archivos TS · 128 fuente + 60 specs · 27.924 L — censo COMPLETO medido con
 > `wc -l`**: por capa `domain/` **5.126** (20 specs) · `application/` **4.111** (14) ·
@@ -149,7 +168,7 @@
 
 ---
 
-## `src/domain/` — 5.126 líneas · 20 specs · la capa más protegida 🟢
+## `src/domain/` — 5.168 líneas · 20 specs · la capa más protegida 🟢
 
 ### entities/
 | Archivo | LOC | Spec | Nota |
@@ -163,7 +182,7 @@
 ### value-objects/
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `DeckSetups.ts` | 234 | ✅ 30 L | **10 mazos** con texturas/temas + campo **`musicGameplay`** (pista por mazo que carga `PreloadScene`; el spec valida que el `.ogg` exista en `public/assets/audio/music/`). 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
+| `DeckSetups.ts` | 260 | ✅ 46 L | **11 mazos** con texturas/temas + campo **`musicGameplay`** (pista por mazo que carga `PreloadScene`; el spec valida que el `.ogg` exista en `public/assets/audio/music/`) + **`requiresAllBaseDecks?: true`** (flag del mazo oculto, ADR-016 — solo chessmaster, `price: 30000`; el spec exige exactamente 1 mazo con el flag). 🟡 cambiarlo toca `PreloadScene` + registry de efectos. |
 | `EnergyDeltaTable.ts` | 64 | ✅ (vía `DefaultEnergyDrainRule.spec`) | Tabla de drenaje + chequeo de integridad al cargar. **Invariante.** |
 | `DailyChallenge.ts` | 119 | ✅ 169 L | Reglas del desafío diario. `previewDailyCompletion()` es la vista previa de la recompensa y `completeDaily` delega en ella (test de propiedad). |
 | `EnergyLevel.ts` | 105 | ✅ 183 L | VO con clamp `[0, ceiling]` + **`STARTING_RATIO` = 0.6** (energía inicial y revive, ADR-013) + **zonas de la barra**: `EnergyZone`, `ENERGY_CRITICAL_MAX_PERCENT` (20), `ENERGY_LOW_MAX_PERCENT` (50), `getEnergyZone()` — la vista solo traduce zona → color. |
@@ -184,11 +203,11 @@
 | `GameStateMachine.ts` | 81 | ✅ | Guards que lanzan. `start()`/`idle` muertos. |
 | `GameEvents.ts` | 38 | — | 17 variantes de `GameEvent`. `SecretCardChosen` muerta. |
 | `ProgressionEvents.ts` | 6 | — | 3 variantes. `UpgradePurchased` muerta. |
-| `ports/*.ts` (8 archivos) | 376 | — | Interfaces; `IRandomProvider` gana **`nextFloat()`** (ruido de la oferta, ADR-013); **`IProgressionRepository`/`IProgressionService` ganan `get/setFirstRoundDealStreak`** (ADR-014); contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
+| `ports/*.ts` (8 archivos) | 371 | — | Interfaces; `IRandomProvider` gana **`nextFloat()`** (ruido de la oferta, ADR-013); **`IProgressionRepository`/`IProgressionService` ganan `get/setFirstRoundDealStreak`** (ADR-014); contratos documentados con JSDoc (`IProgressionService.awardGameplayCoins` incluye reembolsos; `ICrazyGamesService.rewardedAdStatus()` define la **política de 2 grupos** del reembolso — ADR-006 + ADR-009, que agrega el motivo permanente `ads_disabled` y fija el orden "lo permanente manda sobre el cooldown"; `AdLifecyclePhase` = `'requesting' \| 'started' \| 'ended'` con la **garantía de par** `requesting→ended` — ADR-010; `onMuteAudioChange()` notifica el **valor inicial sin importar el orden** init↔suscripción y cada cambio de `game.settings.muteAudio`, los adapters sin plataforma nunca notifican — ADR-011). |
 
 ---
 
-## `src/application/` — 4.111 líneas · 14 specs · casi toda verde 🟢
+## `src/application/` — 4.382 líneas · 16 specs · casi toda verde 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -201,6 +220,8 @@
 | `use-cases/SwapSecretCardUseCase.ts` | 29 | ✅ | — |
 | `use-cases/ListAvailableUpgradesUseCase.ts` | 51 | ✅ 140 L | **Qué muestra la tienda**: filtra el catálogo por `requiresRewardedAd` según `ICrazyGamesService.isRewardedAdAvailable()`. Comportamiento idéntico al filtro que tenía `ShopScene`; cobertura 100 %. Con ADR-009 basta que `rewardedAdStatus()` sea `ads_disabled`: el predicado vuelve `false` solo y **ocultan/filtran las 3 filas de rewarded** (spec: 5 filas). **Desde ADR-012:** `adsNotice(): 'adblock' \| 'ads_disabled' \| null` decide el **aviso inline** de la tienda (CG-MON-006) — solo motivos permanentes; cooldowns y `sdk_unavailable` no avisan; relee `rewardedAdStatus()` como `execute()`. Su contraparte de compra es `PurchaseSessionUpgradeUseCase` (ver arriba). |
 | `onboarding/OnboardingFlow.ts` | 104 | ✅ | Acciones show/hide/none por hint. |
+| `use-cases/ListAvailableDecksUseCase.ts` | 47 | ✅ 80 L (5 tests) | **Qué muestra el tab Mazos (ADR-016)**: `execute()` → `DeckShopEntry[] { deckId, revealed }` con las 11 entradas en orden de `DECK_SETUP_IDS`; exporta **`BASE_DECK_IDS`** derivado del flag `requiresAllBaseDecks` (nunca un "10" hardcodeado — fuente única compartida con `PurchaseDeckUseCase`). chessmaster oculto hasta poseer los 10 base; ya poseído siempre se muestra (edge de save). 🟢 |
+| `use-cases/PurchaseDeckUseCase.ts` | 50 | ✅ 94 L (6 tests) | **Compra de mazos (ADR-016; cierra la deuda "sin use-case")**: cascada `already_owned → locked_prerequisite → delegar`; el rechazo del mazo oculto va **ANTES** de invocar `IProgressionService.purchaseDeck` (criterio §2.7, PLAYBOOK) con el **mismo predicado** que la lista (mismo flag + `BASE_DECK_IDS`) para que fila y compra nunca se contradigan. El precio lo cobra el puerto (`DECK_SETUPS`); `insufficient_coins`/`already_owned` pasan tal cual. 🟢 |
 | `records/GameResultTracker.ts` | 55 | ✅ | Eventos → un `GameResult` inmutable. |
 | `records/GameOutcomeRecorder.ts` | 54 | ✅ | Escribe récords + desafío diario. |
 | `records/FirstRoundDealStreakTracker.ts` | 81 | ✅ 249 L | **Segundo tracker puro (ADR-014)**: eventos → un `FirstRoundDealGameOutcome` (reporta como máximo 1 vez; `DealAccepted` dispara el reporte y cubre el `GameWon` posterior; `GameLost` pendiente hasta `flush()`; abandono no reporta). 🟢 |
@@ -211,7 +232,7 @@
 
 ---
 
-## `src/infrastructure/` — 4.167 líneas · 11 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 4.169 líneas · 11 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -233,14 +254,14 @@
 
 ---
 
-## `src/presentation/` — 12.634 líneas · 9 specs · **zona más frágil** 🔴
+## `src/presentation/` — 13.440 líneas · 10 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 662 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. **Desde ADR-014:** en `BankerOfferMade` calcula `cappedRemainingGames` (ronda 1 y monto ∈ `CAPPED_OFFER_VALUES`) y se lo pasa al panel. **Desde ADR-015:** instancia `GameplaySoundtrack` (adapter `scene.time.delayedCall`/`remove(false)`), alimenta `onEvent` al inicio de `handleEvent()` y su **primer handler `SHUTDOWN`** llama `soundtrack.stop()`. |
 | `scenes/GameScene.ts` | 642 | ❌ | Composition root de la partida (40 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra, el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013) y el **streak anti-farmeo** a la factory (diario → `INACTIVE`, ADR-014); `setupOutcomeRecording` suscribe los **2 trackers** con un solo `flush()` en SHUTDOWN. |
-| `scenes/ShopScene.ts` | 816 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); compra de mazos sin use-case. **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. |
+| `scenes/ShopScene.ts` | 996 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); **la compra de mazos pasa por `PurchaseDeckUseCase`** (ADR-016, antes era directo al puerto). **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. **Desde ADR-016:** el tab Mazos es una grilla de **3 columnas** (`DECK_COLUMNS`/`DECK_COLUMN_OFFSETS` propias — las de Mejoras/`COLUMN_OFFSETS` siguen intactas); las filas salen de `listAvailableDecks.execute()` (`{ deckId, revealed }`): las ocultas se dibujan como **carta "?" inerte** (`renderMysteryDeckRow`: sin nombre/estado/botón → sin hitZone ni sonido), el badge "Obtenidos X/Y" usa de denominador las entradas **reveladas** (10 → 11) y comprar el décimo base **re-renderiza el tab** (`renderActiveTab()`). Defensivo: `locked_prerequisite` → `flashError` + mensaje temporal 2,6 s en `h/2 − 183` (`SHOP_DECK_LOCKED`) — **inalcanzable hoy**, ver PLAYBOOK §3. |
 | `scenes/HowToPlayScene.ts` | 920 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). **Desde ADR-014:** caption de la regla anti-farmeo en el paso 3. |
 | `scenes/MainMenuScene.ts` | 588 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 514 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
@@ -271,19 +292,20 @@ solo traduce zona → color) · `SoundFullscreenControls` 214 (✅ **spec 107 L*
 El click genérico de todos va por `UiSfx.bindUiClick` (ADR-015) — ver PLAYBOOK §1: el chrome
 del botón sigue duplicado, el sonido no.
 
-### Efectos de celebración de mazo (~2.760 líneas, 15 archivos)
-`DeckCelebrationEffect` (interfaz + spec) · `DeckCelebrationEffectRegistry` (`Record` exhaustivo:
-agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
-(`VegasRoulette` 379, `GlacierShatter` 296, `WW2Combat` 283, `MedievalSiege` 236,
-`BatSwarm` 220, `TarotAura` 190, `EgyptSandstorm` 181, `CyberpunkMatrixRain` 180,
-`TheaterSpotlights` 177, `OvniAbduction` 146) · `SpotlightSweep` 103 · `NullCelebrationEffect`.
+### Efectos de celebración de mazo (~3.364 líneas, 17 archivos)
+`DeckCelebrationEffect` (interfaz + spec 154 L) · `DeckCelebrationEffectRegistry` (`Record` exhaustivo:
+agregar un mazo **sin** registrar su efecto no compila) · **11 efectos temáticos**
+(`VegasRoulette` 379, `ChessCardScatter` **378** + spec **237** (ADR-016, chessmaster),
+`GlacierShatter` 296, `WW2Combat` 283, `MedievalSiege` 236, `BatSwarm` 220, `TarotAura` 190,
+`EgyptSandstorm` 181, `CyberpunkMatrixRain` 180, `TheaterSpotlights` 177, `OvniAbduction`
+146) · `SpotlightSweep` 103 · `NullCelebrationEffect`.
 
 ### Bridges / utilidades de presentación
 | Archivo | LOC | Nota |
 |---|---|---|
 | `GameAbandonGuard.ts` | 58 | Flag anti-cheat compartido con `beforeunload`. **Ya no contiene la penalidad**: `LOSS_PENALTY_AMOUNT` vive en `domain/value-objects/GamePenalties.ts` (Fase 4). |
 | `mobile/CompactTextFloor.ts` | 50 | Piso de tamaño de fuente en móvil. |
-| `GameServices.ts` | 49 | Service locator (bag con `listAvailableUpgrades` y **`fullscreenEnabled`**, ADR-008). **Única importación de infrastructure desde presentation.** |
+| `GameServices.ts` | 58 | Service locator (bag con `listAvailableUpgrades`, **`listAvailableDecks`** y **`purchaseDeck`** (ADR-016), y **`fullscreenEnabled`**, ADR-008). **Única importación de infrastructure desde presentation.** |
 | `GameMode.ts` | 35 | Payload consume-una-vez en registry (por `restart()` de Phaser). |
 | `PenaltyFreeProgression.ts` | 20 | Proxy que anula `applyLossPenalty` (Desafío Diario). |
 | `ActiveSessionBridge.ts` | 34 | Única pieza que expone `GameSession` + use-case a otra escena. |
@@ -292,12 +314,12 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 ---
 
-## `src/shared/` — 1.464 líneas · 6 specs 🟢
+## `src/shared/` — 1.475 líneas · 6 specs 🟢
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
-| `audio/AudioData.ts` | 101 | ✅ 56 L | **Manifiesto único de audio (ADR-015)**: `AUDIO_MANIFEST` (1 música + **23 sfx**) + `SFX as const` (símbolos canónicos que usa presentation). Lo consumen `PreloadScene` (carga) y `AudioService` (volumen por clave). Guardián en el spec: paridad símbolo ↔ manifest ↔ mp3 físico. 🟢 |
-| `i18n/LanguageData.ts` | 489 | ✅ 75 L | **153 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). 2026-10-04 CG-MON-006 (ADR-012): +`SHOP_ADS_HIDDEN_ADBLOCK` y +`SHOP_ADS_HIDDEN_DISABLED` (EN+ES, aviso inline de la tienda; 148 → 150 claves). 2026-10-08 ADR-014: +`BANKER_CAPPED_NOTICE_SINGULAR`/`_PLURAL`, +`TUTORIAL_BANKER_CAPPED_CAPTION` y frase anti-farmeo en `ONBOARDING_BANKER_BODY` (150 → 153 claves, `wc -l` 478 → 489). |
+| `audio/AudioData.ts` | 104 | ✅ 56 L | **Manifiesto único de audio (ADR-015)**: `AUDIO_MANIFEST` (1 música + **23 sfx**) + `SFX as const` (símbolos canónicos que usa presentation). Lo consumen `PreloadScene` (carga) y `AudioService` (volumen por clave). Guardián en el spec: paridad símbolo ↔ manifest ↔ mp3 físico. 🟢 |
+| `i18n/LanguageData.ts` | 497 | ✅ 75 L | **154 claves × en/es** (2026-10-01: +`RESULT_AD_REFUNDED` y +`RESULT_AD_COOLDOWN`; 2026-10-02 ADR-007: +`AD_OVERLAY_TITLE`, +`AD_OVERLAY_HINT`, +`AD_OVERLAY_HINT_MIDGAME`), `as const` + `satisfies` → autocomplete de claves. 2026-10-04 CG-MON-005: las 3 descripciones con `requiresRewardedAd` cierran con el requisito de ad visible en la fila (`(requires ad)` EN / `(requiere anuncio)` ES) — contrato en el spec (+1 test, 6 en total). 2026-10-04 CG-MON-006 (ADR-012): +`SHOP_ADS_HIDDEN_ADBLOCK` y +`SHOP_ADS_HIDDEN_DISABLED` (EN+ES, aviso inline de la tienda; 148 → 150 claves). 2026-10-08 ADR-014: +`BANKER_CAPPED_NOTICE_SINGULAR`/`_PLURAL`, +`TUTORIAL_BANKER_CAPPED_CAPTION` y frase anti-farmeo en `ONBOARDING_BANKER_BODY` (150 → 153 claves, `wc -l` 478 → 489). 2026-10-10 ADR-016: +`SHOP_DECK_LOCKED` (EN+ES, mensaje del mazo oculto; **153 → 154 claves**, `wc -l` 489 → 497 — recuento propio: 308 definiciones ÷ 2 idiomas; AGENTS §3 corregido de 151 a 154). |
 | `i18n/LanguageManager.ts` | 238 | ✅ 284 L | Singleton (único `export default`). Fallback: activo → default → clave. |
 | `utils/CompactScreen.ts` | 65 | ✅ | Detección de layout compacto. |
 | `utils/EventEmitter.ts` | 24 | ❌ | `SimpleEventEmitter<T>` de 24 líneas — sin test, pero es el corazón de los 2 buses. |
@@ -310,7 +332,7 @@ agregar un mazo **sin** registrar su efecto no compila) · 10 efectos temáticos
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (385) | Composition root global (incluye `ListAvailableUpgradesUseCase`) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **mute de la plataforma** `resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, y si no hay override `onMuteAudioChange(→ setPlatformMuted)` (ADR-011: override gana y se saltea la suscripción, funciona en los 3 modos) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (389) | Composition root global (inicia `ListAvailableUpgradesUseCase` + **`ListAvailableDecksUseCase` y `PurchaseDeckUseCase`** en el bag, ADR-016) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **mute de la plataforma** `resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, y si no hay override `onMuteAudioChange(→ setPlatformMuted)` (ADR-011: override gana y se saltea la suscripción, funciona en los 3 modos) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
 | `vite-env.d.ts` (37) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` y `VITE_FULLSCREEN?: 'true' \| 'false'` — **sin lógica** (la validación vive en `resolveAdsMode.ts` y `resolveFullscreenEnabled.ts`, ADR-007/008). Script global a propósito (fusión con `vite/client`). |
 | `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |

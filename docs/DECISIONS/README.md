@@ -25,3 +25,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [013](ADR-013-politica-del-banquero-y-energia-inicial.md) | Política del Banquero (oferta por rondas con ruido inyectado) y energía inicial 60 % — rebalance Fase A + B | Aceptada |
 | [014](ADR-014-regla-anti-farmeo-primera-ronda.md) | Regla anti-farmeo de la 1ª ronda: cap de oferta (1/2/5/10) + cuenta regresiva de 5 partidas | Aceptada |
 | [015](ADR-015-manifiesto-de-audio-unico-y-politica-de-reproduccion.md) | Manifiesto de audio único en `shared/` + política de reproducción de SFX (volumen por clave, anti-apilado, silencio best-effort) | Aceptada |
+| [016](ADR-016-mazo-oculto-por-prerrequisito-declarativo.md) | Mazo oculto por prerrequisito declarativo: el catálogo declara el flag, la visibilidad y la compra viven en 2 use-cases (carta "?" de la tienda) | Aceptada |
