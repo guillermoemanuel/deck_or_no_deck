@@ -7,6 +7,28 @@
 
 ---
 
+## 2026-10-10 · Smoke de escucha APROBADO — cierra la tarea de audio
+
+**Qué:** ejecutado el **smoke manual de escucha** (`docs/testing.md` §5, **ítem 12**) con el
+checklist completo del cierre de audio: clicks → `sfx-click` (un solo sonido por click, sin
+encimar con los propios de cada flujo) · `sfx-whoosh` solo al salir del tutorial ·
+`sfx-purchase`/`sfx-unlock` solo en éxito de compra · `sfx-record` con nueva mejor apuesta ·
+`sfx-banker-annoyed` solo con oferta topada (ADR-014) · `sfx-bonus-claim` en bono periódico y
+banner diario · cartas y Trato/No trato sin click genérico · latido y lose retardado ·
+fanfarria única al aceptar trato (ADR-001) · mezcla de `sfx-card-open`/`sfx-offer` a **0.56**
+(subida en `b3cf444`). **Resultado: correcto — validado por el usuario.**
+
+**Cómo se verificó:** ejecución manual en vivo con el dev server en `http://localhost:5173/`
+(modo portal, `.env` del 09/10); aprobación del usuario 2026-10-10.
+
+**Cierre:** quedan **resueltos** los 2 pendientes de la entrada del 2026-10-09 (smoke de
+escucha + validación de mezcla). **Pendientes restantes:** solo backlog de producto
+(escudo+tanque ≈ 0 % derrota · precios de tienda altos · economía de los 10 mazos · barra
+ámbar de ADR-013) y el WIP sin commitear del usuario (`PeriodicBonusModal.ts` y el borrado
+de `speculation-game.zip`).
+
+---
+
 ## 2026-10-09 · Ops: `.env` → portal (ads-adapter PASS) + servidores locales + subida de volumen de card-open/offer
 
 **Qué se tocó:**

@@ -6,8 +6,8 @@
 > `shared/audio/AudioData.spec` **4 (nuevo)**, `presentation/audio`
 > `GameplaySfx` + `GameplaySoundtrack` + `HeartbeatLoop` **40 (nuevos)** y
 > `presentation/audio/UiSfx.spec` **4 (nuevo)** → de 55 a **60** archivos `*.spec.ts`
-> (5 specs nuevos, sin specs borrados). Pendiente de este cierre: **smoke manual de escucha
-> — §5, ítem 12**.
+> (5 specs nuevos, sin specs borrados). Smoke manual de escucha **ejecutado y aprobado
+> 2026-10-10** — §5, ítem 12.
 > Conteo previo (B4, 2026-10-04, unidad **B4 / CG-MON-006 + ADR-012**: aviso inline de ads en la
 > tienda): **48 suites · 546 tests** —
 > verdes en el último gate (typecheck 0 · lint 0 · `npm test` OK · `npm run build` ✓;
@@ -197,8 +197,8 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     el anuncio se muestra, el efecto se entrega y **no hay reembolso** (saldo sin
     devolución); recomendar dentro del cooldown → `RESULT_AD_COOLDOWN` con botones
     **vivos** y reintento efectivo a los 60 s.
-12. **Smoke de escucha (SFX de partida e interfaz, ADR-015)** (**PENDIENTE de ejecutar**,
-    checklist del cierre de audio 2026-10-09):
+12. **Smoke de escucha (SFX de partida e interfaz, ADR-015)** (**EJECUTADO 2026-10-10 —
+    aprobado por el usuario**; checklist del cierre de audio 2026-10-09):
     - clicks en menú / tutorial / HUD / tienda / tabs / ✕ → `sfx-click` (un solo sonido por
       click, sin encimar con los propios de cada flujo);
     - `sfx-whoosh` **solo** al salir del tutorial (`HowToPlayScene.exitToMainMenu`) — las
@@ -215,9 +215,8 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
       inmediato al cruzar el umbral; `sfx-lose` 900 ms **después** de
       `sfx-energy-depleted`; al aceptar un trato, **una sola** fanfarria (`sfx-deal`, sin
       `sfx-win` — ADR-001);
-    - **volumen de mezcla**: el volumen efectivo de `sfx-card-open`/`sfx-offer` bajó a
-      **0.42** (0.7 × 0.6 del manifiesto, bugfix ADR-015) — validar si está bien o subirlo
-      en `AUDIO_MANIFEST.sfx`.
+    - **volumen de mezcla**: efectivo de `sfx-card-open`/`sfx-offer` subido a **0.56**
+      (0.7 × 0.8 del manifiesto, `b3cf444`) — **validado en el smoke 2026-10-10**.
 
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección

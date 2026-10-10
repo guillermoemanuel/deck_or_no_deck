@@ -77,8 +77,8 @@ nunca puede romper la partida; CrazyGames exige silenciar durante los ads (ADR-0
 - **Volumen efectivo de `sfx-card-open`/`sfx-offer`:** el bugfix (c) los bajó a 0.42
   (0.7 × 0.6 — antes sonaban solo con el volumen del caller); **ajustado el mismo día a
   `volume: 0.8` → 0.56 efectivo** a pedido del usuario (mismo patrón de commit: spec rojo
-  primero). El smoke de escucha (`docs/testing.md` §5, ítem 12) sigue **pendiente** para
-  validar la mezcla final.
+  primero). El smoke de escucha (`docs/testing.md` §5, ítem 12) se ejecutó y **aprobó el
+  2026-10-10** — mezcla validada.
 - **El anti-apilado puede descartar repeticiones legítimas** disparadas a <40 ms: si algún
   efecto lo necesita, se agrega a `ANTI_STACK_EXEMPT_KEYS` (decisión explícita).
 - **Especificación:** `AudioData.spec` (4), `AudioService.spec` 5 → 9 (+4),
