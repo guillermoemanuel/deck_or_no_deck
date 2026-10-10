@@ -28,3 +28,19 @@ describe('DeckSetups — música de gameplay por mazo', () => {
     }
   });
 });
+
+/**
+ * Guardián del mazo oculto de la tienda (carta "?"): `requiresAllBaseDecks`
+ * marca al ÚNICO mazo que se esconde hasta poseer todos los demás mazos base
+ * del catálogo. Si mañana un segundo mazo lo declara (o chessmaster deja de
+ * hacerlo), la regla de visibilidad/compra de application
+ * (ListAvailableDecksUseCase/PurchaseDeckUseCase) cambiaría de significado
+ * sin que nadie lo advierta — acá falla.
+ */
+describe('DeckSetups — mazo oculto requiresAllBaseDecks', () => {
+  it('exactamente un mazo declara requiresAllBaseDecks y es chessmaster', () => {
+    const flagged = DECK_SETUP_IDS.filter(id => DECK_SETUPS[id].requiresAllBaseDecks);
+
+    expect(flagged).toEqual(['chessmaster']);
+  });
+});

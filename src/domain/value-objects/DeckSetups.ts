@@ -45,6 +45,16 @@ export interface IDeckConfig {
   //**Color resplandor de carta */
   readonly glowBorder: number;
 
+  /**
+   * Marca al mazo OCULTO de la tienda (carta "?") hasta que el jugador sea
+   * dueño de todos los demás mazos base del catálogo (los que NO declaran
+   * este flag). Solo 'chessmaster' lo declara. El catálogo acá solo expresa
+   * el dato: la regla de visibilidad vive en application
+   * (ListAvailableDecksUseCase) y la de compra en PurchaseDeckUseCase,
+   * que rechaza con 'locked_prerequisite' ANTES de cobrar.
+   */
+  readonly requiresAllBaseDecks?: true;
+
   // --- Extensibilidad futura (placeholders — aún no implementados) ---
   // readonly sfxFlipKey?: string;   // clave de audio para el sonido de flip de carta de este tema
   // readonly accentColor?: string;  // color hex para marcos/foco de botones acorde a la estética
@@ -216,7 +226,8 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     musicGameplay: 'chess_gameplay',
     numberColor: '#BBC2CC',
     glowBorder: 0xBBC2CC,
-    price: 30000
+    price: 30000,
+    requiresAllBaseDecks: true
   }
 } as const;
 
