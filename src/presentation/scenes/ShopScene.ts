@@ -5,6 +5,7 @@ import { findSessionUpgradeDefinition, SessionUpgradeId } from '../../domain/val
 import { SessionUpgrades } from '../../domain/entities/SessionUpgrades';
 import { PurchaseSessionUpgradeUseCase } from '../../application/use-cases/PurchaseSessionUpgradeUseCase';
 import { DECK_SETUP_IDS, DeckSetupId, getDeckSetup } from '../../domain/value-objects/DeckSetups';
+import { DeckShopEntry } from '../../application/use-cases/ListAvailableDecksUseCase';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
@@ -48,6 +49,10 @@ interface ActionButtonRefs {
   readonly glow: Phaser.GameObjects.Graphics;
   readonly text: Phaser.GameObjects.Text;
   readonly hitZone: Phaser.GameObjects.Zone;
+  /** Ancho real con el que se pintó (150 en Mejoras, 120 en Mazos) —
+   * refreshUpgradeRow()/refreshDeckRow() repintan con ESTE valor para que
+   * el chrome no cambie de tamaño al refrescarse la fila. */
+  readonly width: number;
 }
 
 /** Refs de un botón de pestaña — mismo chrome que ActionButtonRefs, pero
@@ -89,10 +94,30 @@ const COLUMN_OFFSETS = [
   { textX: 20, buttonX: 380 }
 ] as const;
 
-// Layout de mazos: 2 columnas x 5 filas (10 mazos en el catálogo actual).
-const DECK_ROWS_PER_COLUMN = 5;
+// Layout de mazos: 3 columnas x 4 filas (11 mazos → 3+3+3+2) — con 2
+// columnas de 5 filas el catálogo completo no entraba. A diferencia de
+// COLUMN_OFFSETS (que es del tab de Mejoras y NO se toca), estos offsets
+// son PROPIOS de esta grilla: 3 celdas de 300px centradas sobre
+// cameras.main.centerX (pitch 300) → 444px a la izquierda del centro y 442
+// a la derecha, dentro del modal de 940px (±470) con ~26px de margen.
+const DECK_COLUMNS = 3;
+const DECK_COLUMN_OFFSETS = [
+  { textX: -444, buttonX: -218 },
+  { textX: -144, buttonX: 82 },
+  { textX: 156, buttonX: 382 }
+] as const;
 const DECK_ROW_SPACING_Y = 90;
 const DECK_FIRST_ROW_OFFSET_Y = -170;
+// Botón de fila de mazo: 120px en vez de los 150 de ACTION_BUTTON_WIDTH,
+// que en celdas de 300px se comerían la zona de texto. El label más largo
+// posible, "Comprar $30.000" (chessmaster, price 30000), mide ~112px a
+// 13px → entra con margen. Reparto de la celda de 300px: 6 (margen) +
+// miniatura 46 + 8 + texto 104 + 8 + botón 120 + 8 (margen) = 300.
+const DECK_BUTTON_WIDTH = 120;
+const DECK_BUTTON_FONT_SIZE = '13px';
+// Zona de nombre + estado: entre la miniatura (46px, en textX) y el
+// botón, dejando 8px de aire a cada lado (ver renderDeckRow()).
+const DECK_TEXT_WIDTH = 104;
 
 /**
  * ShopScene: tienda con dos pestañas independientes.
@@ -135,6 +160,12 @@ export class ShopScene extends Phaser.Scene {
    * es "Mejoras" (destruido junto con el resto de tabContainer al
    * cambiar de pestaña, ver renderActiveTab()). */
   private deckCounterText: Phaser.GameObjects.Text | null = null;
+
+  /** Última lista resuelta por ListAvailableDecksUseCase al pintar el tab
+   * "Mazos" — se guarda para detectar, tras una compra, si cambió la
+   * visibilidad de alguna fila (completar los 10 mazos base REVELA la
+   * carta "?" de chessmaster y obliga a reconstruir el tab). */
+  private deckEntries: DeckShopEntry[] = [];
 
   constructor() {
     super({ key: 'ShopScene' });
@@ -296,8 +327,21 @@ export class ShopScene extends Phaser.Scene {
     return hitZone;
   }
 
-  /** Botón de acción de fila (Comprar $X / Adquirido) — texto plano, ver ActionButtonRefs. */
-  private createActionButton(x: number, y: number, initialLabel: string, onClick: () => void): ActionButtonRefs {
+  /** Botón de acción de fila (Comprar $X / Adquirido) — texto plano, ver ActionButtonRefs.
+   *
+   * `width`/`fontSize` son parámetros porque el tab de Mazos usa una grilla
+   * de 3 columnas: ahí el botón mide DECK_BUTTON_WIDTH y su label baja a
+   * DECK_BUTTON_FONT_SIZE para que miniatura + nombre + botón quepan en la
+   * celda de 300px sin pisarse. El tab de Mejoras sigue usando el default
+   * (150px / 15px), idéntico a como estaba. */
+  private createActionButton(
+    x: number,
+    y: number,
+    initialLabel: string,
+    onClick: () => void,
+    width: number = ACTION_BUTTON_WIDTH,
+    fontSize: string = '15px'
+  ): ActionButtonRefs {
     const container = this.add.container(x, y);
     const glow = this.add.graphics().setAlpha(0);
     const bg = this.add.graphics();
@@ -306,13 +350,15 @@ export class ShopScene extends Phaser.Scene {
         // QA de legibilidad: se queda en 15px (no 16, como el resto de
         // los textos "13px->16px" de esta pantalla) a propósito — este
         // botón mide 150px de ancho y el label más largo posible,
-        // "Comprar $20.000" (el mazo más caro del catálogo, ver
-        // DECK_PRICE en DeckSetups.ts), ya casi lo llena a 16px. 15px
+        // "Comprar $30.000" (el mazo más caro del catálogo, chessmaster,
+        // price en DeckSetups.ts), ya casi lo llena a 16px. 15px
         // sigue muy por encima del piso de legibilidad (9.4px reales
         // @800x450) sin arriesgar que el precio se salga del botón —
         // sobre todo en la columna derecha, donde el botón ya está
-        // cerca del borde del modal (ver COLUMN_OFFSETS).
-        fontSize: '15px',
+        // cerca del borde del modal (ver COLUMN_OFFSETS). El tab de
+        // Mazos baja a DECK_BUTTON_FONT_SIZE (13px) porque su botón es
+        // más angosto (DECK_BUTTON_WIDTH, grilla de 3 columnas).
+        fontSize,
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffffff'
@@ -320,9 +366,9 @@ export class ShopScene extends Phaser.Scene {
       .setOrigin(0.5);
     container.add([glow, bg, text]);
 
-    const hitZone = this.attachButtonInteractions(container, glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, onClick);
+    const hitZone = this.attachButtonInteractions(container, glow, width, ACTION_BUTTON_HEIGHT, onClick);
 
-    return { container, bg, glow, text, hitZone };
+    return { container, bg, glow, text, hitZone, width };
   }
 
   private createCloseButton(x: number, y: number): void {
@@ -597,7 +643,7 @@ export class ShopScene extends Phaser.Scene {
 
     refs.levelOrOwnedText.setText(status.statusLabel);
     refs.actionButton.text.setText(status.buttonLabel);
-    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, status.buttonDisabled ? COLOR_OWNED : COLOR_BUY);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, ACTION_BUTTON_HEIGHT, status.buttonDisabled ? COLOR_OWNED : COLOR_BUY);
 
     if (status.buttonDisabled) {
       refs.actionButton.hitZone.disableInteractive();
@@ -686,14 +732,23 @@ export class ShopScene extends Phaser.Scene {
       }).setOrigin(0.5)
     );
 
+    // Qué filas dibuja (y con qué visibilidad) lo decide la APLICACIÓN,
+    // no la escena — mismo criterio que listAvailableUpgrades en el tab de
+    // Mejoras: ListAvailableDecksUseCase devuelve chessmaster con
+    // `revealed: false` hasta poseer los demás mazos base. Se guarda la
+    // lista para poder compararla contra la de después de una compra
+    // (ver attemptPurchaseDeck()).
+    this.deckEntries = getServices(this).listAvailableDecks.execute();
+
     // Badge "Obtenidos X/Y" — de un vistazo, cuántos de los N mazos del
     // catálogo ya tiene el jugador. Mismo chrome dorado que el filo
     // interior de los botones, para que se lea como parte de la misma
     // familia visual y no como un elemento suelto.
     const counterY = height / 2 + 275;
     // QA de legibilidad (fontSize 12px -> 15px): a 130px "Obtenidos
-    // 10/10" (el texto más largo posible, catálogo completo en español)
-    // ya prácticamente llenaba el badge sin margen. Se ensancha a 160 —
+    // 11/11" (el texto más largo posible, catálogo completo en español
+    // con el mazo oculto ya revelado) ya prácticamente llenaba el badge
+    // sin margen. Se ensancha a 160 —
     // es un elemento standalone centrado en `width / 2`, sin ningún
     // vecino con el que competir por espacio, así que no hay riesgo de
     // colisión al agrandarlo (a diferencia de los botones de fila, que
@@ -711,12 +766,86 @@ export class ShopScene extends Phaser.Scene {
     this.tabContainer.add(this.deckCounterText);
     this.updateDeckCounter();
 
-    DECK_SETUP_IDS.forEach((deckId, index) => {
-      const column = Math.floor(index / DECK_ROWS_PER_COLUMN);
-      const row = index % DECK_ROWS_PER_COLUMN;
+    // Grilla de 3 columnas (no las COLUMN_OFFSETS de Mejoras): la
+    // posición se lee por ÍNDICE dentro de la fila, no por columna, para
+    // que las 3 primeras filas se llenen de a 3 y las 11 entradas terminen
+    // en 4 filas (3+3+3+2).
+    this.deckEntries.forEach((entry, index) => {
+      const column = index % DECK_COLUMNS;
+      const row = Math.floor(index / DECK_COLUMNS);
       const y = height / 2 + DECK_FIRST_ROW_OFFSET_Y + 30 + row * DECK_ROW_SPACING_Y;
-      const { textX, buttonX } = COLUMN_OFFSETS[column];
-      this.renderDeckRow(deckId, textX, buttonX, y);
+      const { textX, buttonX } = DECK_COLUMN_OFFSETS[column];
+      if (entry.revealed) {
+        this.renderDeckRow(entry.deckId, textX, buttonX, y);
+      } else {
+        this.renderMysteryDeckRow(textX, y);
+      }
+    });
+  }
+
+  /**
+   * Carta misteriosa "?" — fila de un mazo que todavía no se reveló
+   * (chessmaster hasta poseer los 10 mazos base, ver
+   * ListAvailableDecksUseCase). NO se crean nombre, estado ni botón, así
+   * que la fila es inerte POR CONSTRUCCIÓN: no hay zona interactiva, no
+   * hay click y por lo tanto no hay sonido (el patrón de
+   * refreshDeckRow() — hitZone existente con disableInteractive() — no
+   * aplica acá porque no existe hitZone).
+   *
+   * El "?" es un glifo PUNTUARIO (no una cadena localizable, por eso no
+   * lleva clave i18n): glifo Georgia bold dorado sobre rect redondeada
+   * oscura con el mismo chrome de paintButtonChrome (PANEL_FILL +
+   * COLOR_GOLD), y con el mismo 46x64 que ocupa la miniatura real para
+   * que la fila quede alineada con las demás.
+   */
+  private renderMysteryDeckRow(textOffsetX: number, y: number): void {
+    const cx = this.cameras.main.centerX;
+    const textX = cx + textOffsetX;
+
+    const card = this.add.graphics().setPosition(textX + 23, y);
+    card.fillStyle(PANEL_FILL, PANEL_FILL_ALPHA).fillRoundedRect(-23, -32, 46, 64, 6);
+    card.lineStyle(2, COLOR_GOLD, 0.85).strokeRoundedRect(-23, -32, 46, 64, 6);
+    card.lineStyle(1, COLOR_GOLD, 0.25).strokeRoundedRect(-20, -29, 40, 58, 4);
+    this.tabContainer.add(card);
+
+    this.tabContainer.add(
+      this.add
+        .text(textX + 23, y, '?', {
+          fontSize: '34px',
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontStyle: 'bold',
+          color: COLOR_GOLD_HEX
+        })
+        .setOrigin(0.5)
+    );
+  }
+
+  /**
+   * Mensaje temporal (2.6 s) bajo el caption del tab "Mazos". La primera
+   * fila de miniaturas está centrada en h/2 - 140 y su borde superior
+   * llega a h/2 - 172, así que el mensaje vive en h/2 - 183 (con origin
+   * 0.5 y ~17 px de alto queda por encima de la tarjeta con ~2 px de
+   * margen; revisión de code-review: en h/2 - 176 pisaba 4-5 px la
+   * tarjeta de la columna central). Se usa para explicar el único fallo
+   * de compra que la propia fila no puede contar: la carta "?" no tiene
+   * estado donde mostrarse.
+   */
+  private showTemporaryDeckMessage(message: string): void {
+    const { width, height } = this.cameras.main;
+    const messageText = this.add
+      .text(width / 2, height / 2 - 183, message, {
+        fontSize: '15px',
+        fontFamily: 'Arial, sans-serif',
+        color: '#e74c3c'
+      })
+      .setOrigin(0.5);
+    this.tabContainer.add(messageText);
+    this.time.delayedCall(2600, () => {
+      // Si mientras tanto se cambió de pestaña (renderActiveTab() ya
+      // destruyó todo el contenido), no destruir dos veces.
+      if (messageText.scene) {
+        messageText.destroy();
+      }
     });
   }
 
@@ -725,7 +854,11 @@ export class ShopScene extends Phaser.Scene {
     if (!this.deckCounterText) return;
     const services = getServices(this);
     const ownedCount = services.progressionManager.getOwnedDeckIds().length;
-    this.deckCounterText.setText(languageManager.getText('SHOP_DECKS_OWNED_COUNTER', { owned: ownedCount, total: DECK_SETUP_IDS.length }));
+    // El DENOMINADOR son solo las entradas REVELADAS: 10 mientras chessmaster
+    // siga oculto y 11 una vez revelado (los poseídos siempre están
+    // revelados, así que el numerador nunca puede superar al denominador).
+    const revealedTotal = this.deckEntries.filter(entry => entry.revealed).length;
+    this.deckCounterText.setText(languageManager.getText('SHOP_DECKS_OWNED_COUNTER', { owned: ownedCount, total: revealedTotal }));
   }
 
   private renderDeckRow(deckId: DeckSetupId, textOffsetX: number, buttonOffsetX: number, y: number): void {
@@ -744,23 +877,42 @@ export class ShopScene extends Phaser.Scene {
         .setOrigin(0, 0.5)
     );
 
+    // Nombre + estado a la derecha de la miniatura (textX + 54 = 46px de
+    // miniatura + 8px de aire), dentro de DECK_TEXT_WIDTH antes del
+    // botón. El nombre baja de 17px a 14px y envuelve en (a lo sumo) 2
+    // líneas — todos los nombres del catálogo entran en 2 a este ancho
+    // ("Tarot of Marseilles" es el más largo); maxLines corta el dibujo
+    // si alguno llegara a necesitar una 3ra, para que no invada la línea
+    // de precio de abajo. Origin 0.5 en y-14: así una línea y dos líneas
+    // quedan igual de centradas respecto de la miniatura.
     this.tabContainer.add(
-      this.add.text(textX + 60, y - 20, definition.name, {
-        fontSize: '17px',
+      this.add.text(textX + 54, y - 14, definition.name, {
+        fontSize: '14px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
-        color: '#ffffff'
-      })
+        color: '#ffffff',
+        wordWrap: { width: DECK_TEXT_WIDTH },
+        maxLines: 2
+      }).setOrigin(0, 0.5)
     );
 
-    const statusText = this.add.text(textX + 60, y + 2, '', {
+    // Precio/estado: se mantiene en 15px (el texto que tiene que seguir
+    // siendo legible en la grilla de 3 columnas).
+    const statusText = this.add.text(textX + 54, y + 8, '', {
       fontSize: '15px',
       fontFamily: 'Arial, sans-serif',
       color: '#58a6ff'
     });
     this.tabContainer.add(statusText);
 
-    const actionButton = this.createActionButton(buttonX, y, '', () => this.attemptPurchaseDeck(deckId, actionButton.text));
+    const actionButton = this.createActionButton(
+      buttonX,
+      y,
+      '',
+      () => this.attemptPurchaseDeck(deckId, actionButton.text),
+      DECK_BUTTON_WIDTH,
+      DECK_BUTTON_FONT_SIZE
+    );
     this.tabContainer.add(actionButton.container);
 
     this.deckRowRefs.set(deckId, { statusText, actionButton });
@@ -769,14 +921,42 @@ export class ShopScene extends Phaser.Scene {
 
   private attemptPurchaseDeck(deckId: DeckSetupId, buttonText: Phaser.GameObjects.Text): void {
     const services = getServices(this);
-    const result = services.progressionManager.purchaseDeck(deckId);
+    // La compra pasa por el use-case (NO por progressionManager directo):
+    // además de delegar el cobro, ahí vive el rechazo del mazo oculto
+    // 'chessmaster', siempre ANTES de descontar un peso.
+    const result = services.purchaseDeck.execute(deckId);
 
     if (!result.success) {
       this.flashError(buttonText);
+      // 'insufficient_coins' y 'already_owned' se leen en el propio botón
+      // (precio / COMPRADO) y ya tenían solo el flash. 'locked_prerequisite'
+      // no: la fila bloqueada es la carta "?" y NO tiene botón ni estado
+      // donde explicarse, así que se cuenta en el hueco bajo el caption.
+      // (Defensivo: hoy esa fila es inerte y este motivo no debería
+      // alcanzarse — pero si algo llega acá, el click no queda sin
+      // respuesta.)
+      if (result.reason === 'locked_prerequisite') {
+        this.showTemporaryDeckMessage(languageManager.getText('SHOP_DECK_LOCKED'));
+      }
       return;
     }
 
-    this.refreshDeckRow(deckId);
+    // Éxito: re-evaluar la VISIBILIDAD de las filas, porque comprar el
+    // décimo mazo base REVELA la carta "?" de chessmaster (de 10 filas
+    // visibles a 11, con posiciones nuevas). Si cambió alguna entrada se
+    // reconstruye el tab completo con el mecanismo que ya usa la escena
+    // (renderActiveTab, el mismo de cambiar de pestaña); si no cambió
+    // nada, alcanza con refrescar la fila como siempre.
+    const freshEntries = services.listAvailableDecks.execute();
+    const revealChanged = freshEntries.some((entry, index) => entry.revealed !== this.deckEntries[index]?.revealed);
+    this.deckEntries = freshEntries;
+
+    if (revealChanged) {
+      this.renderActiveTab();
+    } else {
+      this.refreshDeckRow(deckId);
+    }
+
     // Éxito real de la compra de mazo (purchaseDeck devolvió success) —
     // "desbloqueo" de contenido nuevo, distinto del PURCHASE de mejoras.
     try {
@@ -798,7 +978,7 @@ export class ShopScene extends Phaser.Scene {
 
     refs.statusText.setText(owned ? ownedLabel : priceText);
     refs.actionButton.text.setText(owned ? ownedLabel : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText }));
-    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, ACTION_BUTTON_WIDTH, ACTION_BUTTON_HEIGHT, owned ? COLOR_OWNED : COLOR_BUY);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, ACTION_BUTTON_HEIGHT, owned ? COLOR_OWNED : COLOR_BUY);
 
     if (owned) {
       refs.actionButton.hitZone.disableInteractive();

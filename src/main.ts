@@ -14,6 +14,8 @@ import { LocalStorageRecordsRepository } from './infrastructure/persistence/Loca
 import { LocalStorageDailyChallengeRepository } from './infrastructure/persistence/LocalStorageDailyChallengeRepository';
 import { GameOutcomeRecorder } from './application/records/GameOutcomeRecorder';
 import { ListAvailableUpgradesUseCase } from './application/use-cases/ListAvailableUpgradesUseCase';
+import { ListAvailableDecksUseCase } from './application/use-cases/ListAvailableDecksUseCase';
+import { PurchaseDeckUseCase } from './application/use-cases/PurchaseDeckUseCase';
 import { CryptoRandomProvider } from './infrastructure/services/CryptoRandomProvider';
 import { AudioService } from './infrastructure/audio/AudioService';
 import { BootScene } from './presentation/scenes/BootScene';
@@ -346,6 +348,8 @@ const services: GameServices = {
   dailyChallengeRepository,
   outcomeRecorder: new GameOutcomeRecorder(recordsRepository, dailyChallengeRepository, progressionManager),
   listAvailableUpgrades: new ListAvailableUpgradesUseCase(crazyGamesService),
+  listAvailableDecks: new ListAvailableDecksUseCase(progressionManager),
+  purchaseDeck: new PurchaseDeckUseCase(progressionManager),
   fullscreenEnabled
 };
 

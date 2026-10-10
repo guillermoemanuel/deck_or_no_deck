@@ -72,6 +72,10 @@ export const TRANSLATIONS = {
     SHOP_UPGRADES_CAPTION: 'Consumables: applied to the CURRENT game and lost when it ends.',
     SHOP_DECKS_CAPTION: 'Collectible decks — permanent unlock for all your future games.',
     SHOP_DECKS_OWNED_COUNTER: 'Owned {owned}/{total}',
+    // Mazo oculto (chessmaster): la fila de la tienda es una carta "?" sin
+    // botón, así que este mensaje solo aparece si algo llega a intentar la
+    // compra de todos modos — ver ShopScene.attemptPurchaseDeck().
+    SHOP_DECK_LOCKED: 'Own every other deck to reveal this one.',
     SHOP_UPGRADE_NOT_PURCHASED: 'Not purchased',
     SHOP_UPGRADE_ACTIVE_THIS_GAME: 'Active this game',
     SHOP_UPGRADE_LEVEL_1_ACTIVE: 'Level 1 active',
@@ -296,6 +300,10 @@ export const TRANSLATIONS = {
     SHOP_UPGRADES_CAPTION: 'Consumibles: se aplican YA en la partida actual y se pierden al terminarla.',
     SHOP_DECKS_CAPTION: 'Mazos coleccionables — desbloqueo permanente para todas tus partidas.',
     SHOP_DECKS_OWNED_COUNTER: 'Obtenidos {owned}/{total}',
+    // Mazo oculto (chessmaster): la fila de la tienda es una carta "?" sin
+    // botón, así que este mensaje solo aparece si algo llega a intentar la
+    // compra de todos modos — ver ShopScene.attemptPurchaseDeck().
+    SHOP_DECK_LOCKED: 'Sé dueño de todos los demás mazos para revelar este.',
     SHOP_UPGRADE_NOT_PURCHASED: 'No comprado',
     SHOP_UPGRADE_ACTIVE_THIS_GAME: 'Activo esta partida',
     SHOP_UPGRADE_LEVEL_1_ACTIVE: 'Nivel 1 activo',

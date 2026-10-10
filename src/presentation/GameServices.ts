@@ -7,6 +7,8 @@ import { IRecordsRepository } from '../domain/ports/IRecordsRepository';
 import { IDailyChallengeRepository } from '../domain/ports/IDailyChallengeRepository';
 import { GameOutcomeRecorder } from '../application/records/GameOutcomeRecorder';
 import { ListAvailableUpgradesUseCase } from '../application/use-cases/ListAvailableUpgradesUseCase';
+import { ListAvailableDecksUseCase } from '../application/use-cases/ListAvailableDecksUseCase';
+import { PurchaseDeckUseCase } from '../application/use-cases/PurchaseDeckUseCase';
 
 /**
  * Contrato del "bag" de dependencias que viaja en game.registry.
@@ -33,6 +35,13 @@ export interface GameServices {
   // de rewarded ads cuando no se pueden mostrar) — misma razón por la que
   // outcomeRecorder viaja acá: única instancia compartida entre escenas.
   readonly listAvailableUpgrades: ListAvailableUpgradesUseCase;
+  // Qué mazos muestra la tienda AHORA (chessmaster queda como carta "?"
+  // hasta poseer los demás mazos base) y la compra de un mazo — misma
+  // razón que listAvailableUpgrades: única instancia compartida entre
+  // escenas, con la regla de visibilidad/prerrequisito en la APLICACIÓN
+  // (no en ShopScene) y el rechazo siempre ANTES de cobrar.
+  readonly listAvailableDecks: ListAvailableDecksUseCase;
+  readonly purchaseDeck: PurchaseDeckUseCase;
   // Muestra el botón de pantalla completa propio (ADR-008): resuelto en
   // main.ts desde `VITE_FULLSCREEN` + `VITE_ADS` — en modo crazygames
   // SIEMPRE false (la plataforma prohíbe el botón propio, CG-PUB-002).
