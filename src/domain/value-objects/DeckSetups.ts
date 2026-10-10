@@ -3,7 +3,7 @@
  * un mazo nuevo implica agregarlo acá Y a DECK_SETUPS (el chequeo de
  * integridad al final de este archivo lo garantiza en tiempo de carga).
  */
-export type DeckSetupId = 'basic' | 'cyberpunk' | 'medieval' | 'tarot' | 'vegas' | 'ww2' | 'dracula' | 'egypt' | 'ovni' | 'glacier';
+export type DeckSetupId = 'basic' | 'cyberpunk' | 'medieval' | 'tarot' | 'vegas' | 'ww2' | 'dracula' | 'egypt' | 'ovni' | 'glacier' | 'chessmaster';
 
 /**
  * Configuración de un mazo temático coleccionable. Estructura pensada
@@ -202,6 +202,21 @@ export const DECK_SETUPS: Readonly<Record<DeckSetupId, IDeckConfig>> = {
     numberColor: '#e5771a',
     glowBorder: 0x00e5ff,
     price: DECK_PRICE
+  },
+  chessmaster: {
+    id: 'chessmaster',
+    name: 'chess master room',
+    background: 'chessmaster-backdrop',
+    cardBack: 'card-back-chess',
+    cardFront: 'card-front-chess',
+    titleColor: '#BBC2CC',
+    portrait: 'chessmaster-portrait',
+    energyBarBg: 'chess-energy-bar-bg',
+    energyBarFill: 'chess-energy-bar-fill',
+    musicGameplay: 'chess_gameplay',
+    numberColor: '#BBC2CC',
+    glowBorder: 0xBBC2CC,
+    price: 30000
   }
 } as const;
 

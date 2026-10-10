@@ -57,7 +57,7 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
 
     const panelWidth = Math.min(620, scene.cameras.main.width - 60);
     const panelBg = scene.add
-      .rectangle(0, 0, panelWidth, 300, COLOR_PANEL_BG, 0.98)
+      .rectangle(0, 0, panelWidth, 360, COLOR_PANEL_BG, 0.98)
       .setStrokeStyle(3, COLOR_GOLD_DIM, 0.9);
 
     const innerFrame = scene.add
@@ -222,7 +222,7 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
       .setOrigin(0.5)
       .setAlpha(0);
 
-    const closeBtn = this.createCloseButton(scene, 0, 160, onClose);
+    const closeBtn = this.createCloseButton(scene, 0, 140, onClose);
 
     this.add([resultText, closeBtn]);
     scene.tweens.add({ targets: resultText, alpha: 1, duration: 200 });

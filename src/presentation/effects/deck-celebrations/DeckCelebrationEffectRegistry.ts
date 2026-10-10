@@ -11,6 +11,7 @@ import { WW2CombatEffect } from './WW2CombatEffect';
 import { TheaterSpotlightsEffect } from './TheaterSpotlightsEffect';
 import { MedievalSiegeEffect } from './MedievalSiegeEffect';
 import { TarotAuraEffect } from './TarotAuraEffect';
+import { ChessCardScatterEffect } from './ChessCardScatterEffect';
 
 /**
  * GRASP Polymorphism + Strategy: mapa COMPLETO mazo -> estrategia de
@@ -36,7 +37,8 @@ const DECK_CELEBRATION_EFFECTS: Record<DeckSetupId, DeckCelebrationEffect> = {
   dracula: new BatSwarmEffect(),
   glacier: new GlacierShatterEffect(),
   egypt: new EgyptSandstormEffect(),
-  ovni: new OvniAbductionEffect()
+  ovni: new OvniAbductionEffect(),
+  chessmaster: new ChessCardScatterEffect()
 };
 
 /**
