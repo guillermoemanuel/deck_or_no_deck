@@ -61,7 +61,7 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
       .setStrokeStyle(3, COLOR_GOLD_DIM, 0.9);
 
     const innerFrame = scene.add
-      .rectangle(0, 0, panelWidth - 20, 280, 0x000000, 0)
+      .rectangle(0, 0, panelWidth - 20, 340, 0x000000, 0)
       .setStrokeStyle(1, COLOR_GOLD, 0.35);
 
     // BUGFIX (i18n hardcodeado): este modal quedó afuera cuando el resto
@@ -213,7 +213,7 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
         ? languageManager.getText('PERIODIC_BONUS_WON', { amount: value.toLocaleString() })
         : languageManager.getText('PERIODIC_BONUS_NO_PRIZE', { hours: PERIODIC_BONUS_COOLDOWN_MS / (60 * 60 * 1000) });
     const resultText = scene.add
-      .text(0, 120, resultMessage, {
+      .text(0, 99, resultMessage, {
         fontSize: '18px',
         fontFamily: FONT_FAMILY,
         fontStyle: 'bold',
