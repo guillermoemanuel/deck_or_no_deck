@@ -21,7 +21,7 @@ npm run dev                                   # vite dev server
 npm run build                                 # tsc --noEmit && vite build
 npx jest <ruta>                               # test selectivo — usar SIEMPRE durante el cambio
 npm test                                      # suite completa (~30 s)
-npm run typecheck                             # tsc --noEmit (incluye los 63 *.spec.ts)
+npm run typecheck                             # tsc --noEmit (incluye los 64 *.spec.ts)
 npm run lint                                  # eslint src (config mínima: eslint.config.mjs)
 npm run test:coverage
 ```
@@ -46,7 +46,7 @@ Verificación: `grep -rn "from '\.\./" src/domain` → vacío.
 |---|---|
 | `presentation/controllers/GameSceneController.ts` | switch `handleEvent()` ~250 líneas / 14 casos; timers mágicos; único traductor evento→UI |
 | `presentation/scenes/GameScene.ts` | composition root de la partida (37 imports) |
-| `presentation/scenes/ShopScene.ts` | escena de 996 L sin test; la lista visible la decide la aplicación (`listAvailableUpgrades` y `listAvailableDecks`, ADR-016); compra de mazos vía `PurchaseDeckUseCase` |
+| `presentation/scenes/ShopScene.ts` | escena de **1.310 L** sin test; la **geometría vive en `presentation/layout/ShopLayout.ts`** (fuente única, ADR-017 — no hardcodear offsets/pitches/tamaños en la escena) y el **scroll del modo compacto en `presentation/components/ScrollableList.ts`** (drag/rueda/touch, anti-click-fantasma); la lista visible la decide la aplicación (`listAvailableUpgrades` y `listAvailableDecks`, ADR-016); compra de mazos vía `PurchaseDeckUseCase` |
 | `domain/entities/GameSession.ts` | raíz del agregado + `EnergyDrainRule` |
 | `main.ts` | composition root global + **selección del adapter de ads por `VITE_ADS`** (ADR-007: `crazygames`\|`portal`\|`none`, carga dinámica del SDK) + **resolución de `VITE_FULLSCREEN` → `GameServices.fullscreenEnabled`** (ADR-008: en `crazygames` siempre `false`) + anti-cheat de `beforeunload` |
 | `shared/i18n/LanguageData.ts` | 154 claves; agregá siempre `en` **y** `es` |

@@ -4,7 +4,21 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-10 (cierre **mazo chessmaster oculto — 11º deck + tab Mazos a
+> Fecha del censo: 2026-10-11 (cierre **tienda móvil — modo compacto con scroll**,
+> ADR-017; 2 commits: `6bd9b24` ShopLayout + spec · `788870f` ScrollableList +
+> integración en ShopScene) · **197 archivos TS · 133 fuente + 64 specs · 30.602 L** —
+> recount por deltas sobre el censo COMPLETO del 2026-10-10 (`wc -l`), no censo
+> completo: **+3 archivos** (2 fuente + 1 spec) — `presentation/layout/ShopLayout.ts`
+> (**587 L**) + `.spec.ts` (**287 L**, 23 tests) y
+> `presentation/components/ScrollableList.ts` (**292 L**, sin spec) — y recontados con
+> `read` `ShopScene.ts` 996 → **1.310** (+314), `UiSfx.ts` 32 → **55** (+23, guard
+> `shouldPlay`) y `UiSfx.spec.ts` 63 → **102** (+3 tests); por capa `presentation/`
+> 13.440 → **14.982** (11 specs), el resto sin cambios (`domain/` **5.168** ·
+> `application/` **4.382** · `infrastructure/` **4.169** · `shared/` **1.475** · raíz
+> **426**). Conteos globales medidos: **64 archivos `*.spec.ts`** con glob (el plan
+> anticipó 66 — `ScrollableList` no tiene spec) · **715 tests** (gate `npm test`;
+> recount: 689 + 23 de `ShopLayout.spec` + 3 de `UiSfx.spec`).
+> Cierre previo — 2026-10-10 (cierre **mazo chessmaster oculto — 11º deck + tab Mazos a
 > 3 columnas**, ADR-016; 3 commits: `2036949` usuario · `0a94c72` flag + use-cases ·
 > `b782f56` UI) · **194 archivos TS · 131 fuente + 63 specs · 29.060 L — censo COMPLETO
 > medido con `wc -l`**: por capa `domain/` **5.168** (20 specs) · `application/` **4.382**
@@ -254,14 +268,14 @@
 
 ---
 
-## `src/presentation/` — 13.440 líneas · 10 specs · **zona más frágil** 🔴
+## `src/presentation/` — 14.982 líneas · 11 specs · **zona más frágil** 🔴
 
 ### Puntos calientes (mayor riesgo al tocar)
 | Archivo | LOC | Spec | Por qué es peligroso |
 |---|---|---|---|
 | `controllers/GameSceneController.ts` | 662 | ❌ | Switch `handleEvent()` de ~250 líneas / 14 casos: timers mágicos (1800/1600/750/2600 ms), launches de escena, flags anti-cheat. Constructor de **14 parámetros posicionales**. **Desde ADR-014:** en `BankerOfferMade` calcula `cappedRemainingGames` (ronda 1 y monto ∈ `CAPPED_OFFER_VALUES`) y se lo pasa al panel. **Desde ADR-015:** instancia `GameplaySoundtrack` (adapter `scene.time.delayedCall`/`remove(false)`), alimenta `onEvent` al inicio de `handleEvent()` y su **primer handler `SHUTDOWN`** llama `soundtrack.stop()`. |
 | `scenes/GameScene.ts` | 642 | ❌ | Composition root de la partida (40 imports) + layout + decisión de producto. Cablea el puerto de ads al use-case de compra, el **generador de ruido de oferta** por sesión (diario → sal del día; normal → `nextFloat()`, ADR-013) y el **streak anti-farmeo** a la factory (diario → `INACTIVE`, ADR-014); `setupOutcomeRecording` suscribe los **2 trackers** con un solo `flush()` en SHUTDOWN. |
-| `scenes/ShopScene.ts` | 996 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); **la compra de mazos pasa por `PurchaseDeckUseCase`** (ADR-016, antes era directo al puerto). **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. **Desde ADR-016:** el tab Mazos es una grilla de **3 columnas** (`DECK_COLUMNS`/`DECK_COLUMN_OFFSETS` propias — las de Mejoras/`COLUMN_OFFSETS` siguen intactas); las filas salen de `listAvailableDecks.execute()` (`{ deckId, revealed }`): las ocultas se dibujan como **carta "?" inerte** (`renderMysteryDeckRow`: sin nombre/estado/botón → sin hitZone ni sonido), el badge "Obtenidos X/Y" usa de denominador las entradas **reveladas** (10 → 11) y comprar el décimo base **re-renderiza el tab** (`renderActiveTab()`). Defensivo: `locked_prerequisite` → `flashError` + mensaje temporal 2,6 s en `h/2 − 183` (`SHOP_DECK_LOCKED`) — **inalcanzable hoy**, ver PLAYBOOK §3. |
+| `scenes/ShopScene.ts` | 1.310 | ❌ | `upgradeStatusFor()` (~32 L) delega en `SessionUpgrades.getState()`; la lista visible la pide a `listAvailableUpgrades` (la aplicación decide qué filtra — la escena no consulta `isRewardedAdAvailable`); mensajes temporales de fila vía `showTemporaryRowMessage` (conflicto Duplicar/Triplicar y ads caídos, sin timer duplicado); **la compra de mazos pasa por `PurchaseDeckUseCase`** (ADR-016, antes era directo al puerto). **Desde ADR-012 (CG-MON-006):** `renderUpgradesTab()` dibuja el **aviso inline** a `height/2 − 176` (UNA línea, sin `wordWrap` a propósito, ámbar `#ffd166`) cuando `adsNotice()` devuelve un motivo — la política vive en el use-case, la escena solo dibuja. **Desde ADR-016:** el tab Mazos es una grilla de **3 columnas** (`DECK_COLUMNS`/`DECK_COLUMN_OFFSETS` propias — las de Mejoras/`COLUMN_OFFSETS` siguen intactas); las filas salen de `listAvailableDecks.execute()` (`{ deckId, revealed }`): las ocultas se dibujan como **carta "?" inerte** (`renderMysteryDeckRow`: sin nombre/estado/botón → sin hitZone ni sonido), el badge "Obtenidos X/Y" usa de denominador las entradas **reveladas** (10 → 11) y comprar el décimo base **re-renderiza el tab** (`renderActiveTab()`). Defensivo: `locked_prerequisite` → `flashError` + mensaje temporal 2,6 s en `h/2 − 183` (`SHOP_DECK_LOCKED`) — **inalcanzable hoy**, ver PLAYBOOK §3. **Desde ADR-017 (2026-10-11, 996 → 1.310 L):** la geometría NO es suya — sale de `resolveShopLayout()` (fuente única `layout/ShopLayout.ts`); en modo compacto dibuja **ambos tabs como 1 columna** dentro de un `components/ScrollableList` (drag/rueda/touch, `wasDragging` anti-click-fantasma, guards en pestañas/✕), `scale.on('resize')` (patrón UIScene, desuscripto en SHUTDOWN) re-resuelve el layout y re-pinta, y el aviso de ads + `SHOP_DECK_LOCKED` se reposicionan en compact. **Prohibido hardcodear geometría acá** (PLAYBOOK §1). 🔴 sigue sin test: el hueco lo cubre el smoke `testing.md` §5 ítem 14. |
 | `scenes/HowToPlayScene.ts` | 920 | ❌ | Bulk en `TUTORIAL_SLIDES` (declarativo → riesgo bajo pese al tamaño). **Desde ADR-014:** caption de la regla anti-farmeo en el paso 3. |
 | `scenes/MainMenuScene.ts` | 588 | ❌ | Layout + selector de idioma + `resetAllProgress()` destructivo. |
 | `scenes/UIScene.ts` | 514 | ❌ | 3 modales, aplica penalidad vía `GamePenalties`, único `setInterval`-like (timer de 30 s del bono). |
@@ -270,19 +284,28 @@
 | `scenes/AdOverlayScene.ts` (+ `.resolution.ts`) | 301 + 70 | ✅ 123 + 46 L | **Overlay del anuncio propio** (ADR-007, solo `VITE_ADS=portal`): countdown 3 s con timer de escena, ✕ cancela, backdrop bloqueador, pausa `GameScene` mientras dura, failsafes `SHUTDOWN`/`DESTROY` (la promise nunca se cuelga). **Registrada en el `config.scene` de `main.ts` (última de la lista — se dibuja arriba de todo; ADR-007 enmienda 2026-10-04); `presentAdOverlay()` — la función **presenter** que `main.ts` inyecta al adapter, inversión de dependencia: infrastructure no importa presentation — solo pide el `start` y degrada en 0 s con `{ completed: false }` si la escena faltara** (BUGFIX: la pareja `scene.add()`+`scene.start()` en runtime era una carrera con la cola de Phaser — primer ad de la sesión → `Scene key not found` → watchdog 15 s). La resolución single-shot vive en `.resolution.ts` (lógica pura); la escena además tiene `.spec.ts` (3 tests, mock de `'phaser'` en node — incluye la degradación red→verde). Paleta/chrome copiados de Shop/HowToPlay (PLAYBOOK §1). |
 | `scenes/AdBlockerScene.ts` | 118 | ✅ 95 L | **Bloqueador de UI durante el ciclo del ad del SDK** (ADR-010, CG-MON-001): backdrop interactivo **sin handler** (absorbe los clicks de las escenas debajo) + spinner con tween (sin texto → sin i18n) + **pausa `GameScene` con flag local**, reanuda en `SHUTDOWN` — mismo mecanismo probado de `AdOverlayScene`. **En el `config.scene` de `main.ts` al FINAL** (boot, nunca `add()` en runtime — lección ADR-007). El cable `createAdBlockerListener(game)`: `'requesting'`/`'started'` → `game.scene.start` una sola vez por ciclo (flag `active`), `'ended'` → `stop` solo si estaba activo — **`main.ts` la conecta SOLO si `adsMode !== 'portal'`** (en portal manda `AdOverlayScene`; los dos apilarían fondo y spinner sobre el countdown). API correcta: `start`, no `launch` (`SceneManager` no tiene `launch`). 🟡 |
 
-### Audio (`src/presentation/audio/` — 9 archivos · 682 L, ADR-015)
+### Layout (ADR-017 — nuevo 2026-10-11)
+| Archivo | LOC | Spec | Nota |
+|---|---|---|---|
+| `layout/ShopLayout.ts` | 587 | ✅ 287 L (23 tests) | **Fuente única de la geometría de la tienda (ADR-017)**: helper puro sin Phaser `resolveShopLayout({ fontFloor, displayScale, measure })` — 2 modos, sin breakpoints: **desktop** (fontFloor 0: constantes históricas congeladas al centavo — panel 940×600, Mejoras 2 col/4 filas, Mazos 3 col pitch 300, botones 150/120×34, sin scroll) y **compacto** (1 columna, contenido 880 px, fuentes post-piso con `measure` inyectado, botón con ancho por etiqueta clamp 150-300, táctiles ≥44 **físicos**, `maxScroll` por filas). Chrome visual congelado en ambos modos (`tabButton.visualHeight` 34, `closeButton.visualRadius` 16 — solo crece la zona táctil) + `clampScrollOffset()`. Su spec congela el desktop: tocar una constante de escritorio rompe el test. 🟢 |
+
+### Audio (`src/presentation/audio/` — 9 archivos · 744 L, ADR-015; `UiSfx` creció con ADR-017)
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
 | `GameplaySfx.ts` | 45 | ✅ 66 L | Fuente única de constantes: latido 25 %/12 %, 900/650 ms, `LOSE_AFTER_DEPLETED_DELAY_MS` 900 ms + `cardSfxKeyForValue(value)` (≤100 → LOW, ≤750 → MID, ≤10000 → HIGH, resto → JACKPOT). 🟢 |
 | `HeartbeatLoop.ts` | 82 | ✅ 75 L | Bucle con `HeartbeatScheduler` inyectado (producción: `scene.time.delayedCall`); primer latido **inmediato** al cruzar el umbral; token anti-tick-tardío. 🟢 |
 | `GameplaySoundtrack.ts` | 126 | ✅ 159 L | Traductor puro `GameEvent` → sfx: deal/no-deal/swap/revive, win **sin doble fanfarria** (flag `dealAccepted`, ADR-001), lose 900 ms tras `EnergyDepleted` cancelable, heartbeat. Sin Phaser; habla por `IAudioService`; `play()` best-effort. 🟢 |
-| `UiSfx.ts` | 32 | ✅ 63 L | `bindUiClick(target, audio?)`: punto único del click genérico `SFX.CLICK` de la UI; interfaz estructural `ClickTarget` (sin Phaser); sin `audio` → sin bind. 🟢 |
+| `UiSfx.ts` | 55 | ✅ 102 L | `bindUiClick(target, audio?, shouldPlay?)`: punto único del click genérico `SFX.CLICK` de la UI; interfaz estructural `ClickTarget` (sin Phaser); sin `audio` → sin bind. **Desde ADR-017:** 3.er parámetro opcional **`shouldPlay`** (retro-compatible, los 11 call sites intactos; 3 tests nuevos): el guard que hace que soltar un drag de scroll sobre un botón no suene click. 🟢 |
 | `testing/fakeScheduler.ts` | 34 | — | Doble compartido `createFakeScheduler()`: timers armados/cancelados/disparados a mano (`fake.timers`, `activeTimers()`). |
 
 ### Componentes (los "tontos" — ✅ cumplen la regla)
 `BankerOfferPanel` 341 (ADR-015: `SFX.OFFER` al ofrecer y `SFX.BANKER_ANNOYED` con la
 oferta topada) · `CardView` 299 (color/valor derivan de `isHighCaseValue` del dominio;
 `reveal()` suena la variante por valor vía `cardSfxKeyForValue`) ·
+`ScrollableList` **292** (ADR-017: **contenedor de scroll vertical compartido** — drag
+con umbral `DRAG_THRESHOLD_PX` 8 px, rueda topOnly, touch, máscara de geometría, clip de
+input de hijos y `wasDragging` anti-click-fantasma; **sin spec propio**, su comportamiento
+geométrico lo cubre `ShopLayout.spec`; reusar antes de escribir otro scroll — PLAYBOOK §1) ·
 `PeriodicBonusModal` 272 · `HudIconButton` 268 · `SwapEventModal` 245 ·
 `EnergyBarView` 248 (relleno/label/pulso derivan de `EnergyLevel.getEnergyZone`; la vista
 solo traduce zona → color) · `SoundFullscreenControls` 214 (✅ **spec 107 L** con 4 tests desde ADR-008: default `false` del 3.er argumento, botón solo con `true` + fullscreen disponible, sin botón muerto en iOS/iframe) ·

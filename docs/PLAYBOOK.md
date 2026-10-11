@@ -93,6 +93,25 @@ hoy la única mitigación es el JSDoc del puerto y de `main.ts` (`type AdService
 Registrado acá como prometió ADR-007 §Decisión: **no** renombrar "de paso" en otra
 unidad — si se hace, es una tarea propia con sus 4 gates.
 
+### 🧱 `ScrollableList` — el componente de scroll vertical (reusar, no reimplementar)
+`presentation/components/ScrollableList.ts` (ADR-017, 2026-10-11): contenedor de scroll
+para listas que no entran en móvil — drag con umbral **8 px** (`DRAG_THRESHOLD_PX`,
+fuente única), rueda **topOnly**, touch, máscara de geometría, clip de input de hijos
+fuera de la ventana y flag `wasDragging` **anti-click-fantasma** (arrastrar sobre
+"Comprar" no compra ni suena). Hoy lo usa solo `ShopScene` (modo compacto); cualquier
+lista futura que quepa mal (p. ej. `BankerOfferPanel`) debe **reusarlo** antes de
+escribir su propio drag/rueda/máscara. El umbral vive en el componente: importar
+`DRAG_THRESHOLD_PX`, nunca re-declarar 8 px en la escena.
+
+### 🧱 Geometría de la tienda: `ShopLayout` es la fuente única (ADR-017)
+`presentation/layout/ShopLayout.ts` — helper **puro sin Phaser** `resolveShopLayout()`
+resuelve panel, grillas, offsets, fuentes y botones según el **piso de fuentes**
+(`getMinDesignFontPx`), en 2 modos: **desktop** (constantes históricas congeladas al
+centavo por su spec) y **compacto** (1 columna, contenido 880 px, botón con ancho por
+etiqueta, táctiles ≥44 físicos, `maxScroll`). **Prohibido hardcodear geometría de tienda
+en `ShopScene`**: un offset, pitch o tamaño nuevo va por `ShopLayout` + su spec; la
+escena solo dibuja lo que el layout devuelve.
+
 ---
 
 ## 2. Contratos frágiles (cambiar = leer primero el spec)
@@ -144,6 +163,8 @@ unidad — si se hace, es una tarea propia con sus 4 gates.
 | Comentario de penalidad tachado | `UIScene.ts` | legado de la migración a i18n |
 | Rama `wantsDouble && wantsTriple` | `ResultScene.buildWonActions` (~L263) | **Potencialmente muerta** (2026-10-01): inalcanzable con el catálogo actual — `SessionUpgradeCatalog.conflictsWith` prohíbe double+triple y `SessionUpgrades` no persiste entre partidas; los flags se calculan en vivo. **No borrada**: es la red de seguridad ante cualquier bug de lógica que otorgue ambos a la vez (si se borrara, un doble flag mostraría un solo botón). Evaluación pendiente del usuario (ADR-006 la documenta). |
 | Camino defensivo `locked_prerequisite` / `SHOP_DECK_LOCKED` | `ShopScene.attemptPurchaseDeck()` + `showTemporaryDeckMessage()` (ADR-016, 2026-10-10) | **Inalcanzable desde la UI hoy**: la fila oculta es una carta "?" **sin botón**, y el predicado de `PurchaseDeckUseCase` es idéntico al de `ListAvailableDecksUseCase` (mismo flag + mismos `BASE_DECK_IDS`) — no hay botón que dispare el rechazo. **Es DEFENSA, no feature viva**: no quitarlo ni "arreglarlo" agregando interacción a la fila "?" sin decisión de producto; si se toca, primero cambiar el spec de los 2 use-cases. |
+| Tira de pestañas invade scroll/título con `displayScale` ≥ ~2.9 | `ShopLayout` modo compacto / `ShopScene` (ADR-017, 2026-10-11) | **Límite aceptado, no rediseñado**: con un piso de fuente muy alto (display de doble densidad) la tira de pestañas (`visualHeight` 34, chrome congelado a propósito) queda pisando la ventana de scroll o el título. Decisión: **NO** rediseñar el chrome por este caso — si algún día se toca, es decisión de producto con smoke nuevo (`testing.md` §5, ítem 14). |
+| Rueda del mouse con scroll **topOnly** | `ScrollableList` (ADR-017, 2026-10-11) | **Decisión explícita**: la rueda solo scrollea cuando el puntero NO está sobre un botón/pestaña; drag y touch son los caminos principales en móvil. **No "mejorarla"** a rueda-global sin revisar junto con el flag `wasDragging` anti-click-fantasma (arrastrar/soltar sobre "Comprar" no debe comprar ni sonar). |
 
 ---
 

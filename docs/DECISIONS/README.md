@@ -26,3 +26,4 @@ Si una decisión se revierte: marcar *Revertida* + nuevo ADR (no borrar el viejo
 | [014](ADR-014-regla-anti-farmeo-primera-ronda.md) | Regla anti-farmeo de la 1ª ronda: cap de oferta (1/2/5/10) + cuenta regresiva de 5 partidas | Aceptada |
 | [015](ADR-015-manifiesto-de-audio-unico-y-politica-de-reproduccion.md) | Manifiesto de audio único en `shared/` + política de reproducción de SFX (volumen por clave, anti-apilado, silencio best-effort) | Aceptada |
 | [016](ADR-016-mazo-oculto-por-prerrequisito-declarativo.md) | Mazo oculto por prerrequisito declarativo: el catálogo declara el flag, la visibilidad y la compra viven en 2 use-cases (carta "?" de la tienda) | Aceptada |
+| [017](ADR-017-tienda-adaptativa-por-piso-de-fuentes.md) | Tienda adaptativa por piso de fuentes: geometría resuelta en `ShopLayout` (desktop congelado / compacto con scroll) + componente compartido `ScrollableList` anti-click-fantasma | Aceptada |

@@ -7,6 +7,77 @@
 
 ---
 
+## 2026-10-11 · Tienda móvil: modo compacto con scroll (ShopLayout + ScrollableList)
+
+**Qué se tocó (2 commits de código, en este orden):**
+
+1. **`6bd9b24` — `presentation/layout/ShopLayout.ts` (587 L, NUEVO) +
+   `ShopLayout.spec.ts` (287 L, NUEVO):** helper **puro sin Phaser**
+   `resolveShopLayout(input)` que resuelve toda la geometría de la tienda según el
+   **piso de fuentes** (`fontFloor = getMinDesignFontPx(displayScale)`, piso global de
+   `shared/utils/CompactScreen`: 0 en desktop, 17-19 en móvil) — **no por breakpoints**.
+   Modo **desktop** = las constantes de `ShopScene` congeladas al centavo (panel 940×600,
+   Mejoras 2 col/4 filas, Mazos 3 col pitch 300, botones 150/120×34, sin scroll). Modo
+   **compacto** = 1 columna, contenido 880 px centrado, fuentes medidas **post-piso**
+   (`measure` inyectado), botón con ancho por etiqueta (clamp 150-300) y zona táctil
+   ≥44 px **físicos**, `maxScroll` por nº de filas + `clampScrollOffset`. Chrome visual
+   congelado en ambos modos: `tabButton.visualHeight = 34` y `closeButton.visualRadius = 16`
+   (la **zona táctil** sí crece). Tests: **23 `it(`** medidos en el spec (19 rojo-primero
+   + 4 del reviewer de chrome).
+2. **`788870f` — `presentation/components/ScrollableList.ts` (292 L, NUEVO, sin spec) +
+   integración en `ShopScene.ts` (996 → 1.310 L, +314) y `UiSfx.ts` (32 → 55 L):**
+   componente compartido de scroll vertical — drag con umbral **8 px** (exportado como
+   `DRAG_THRESHOLD_PX`, fuente única), rueda **topOnly** (decisión: la rueda sobre un
+   botón NO scrollea), touch, máscara de geometría, clip de input de hijos fuera de la
+   ventana y flag `wasDragging` **anti-click-fantasma** (arrastrar sobre "Comprar" no
+   compra ni suena; pestañas/✕ también tienen guard). En compacto `ShopScene` dibuja
+   **ambos tabs** como 1 columna con scroll; `scale.on('resize')` (patrón `UIScene`,
+   desuscripto en SHUTDOWN) re-resuelve el layout y re-pinta la pestaña; si cambia el
+   modo re-tamaña las zonas táctiles del chrome. `UiSfx.bindUiClick` gana el guard
+   opcional **`shouldPlay`** (retro-compatible, los 11 call sites intactos). Aviso de ads
+   y mensaje `SHOP_DECK_LOCKED` reposicionados en compact (el mensaje tapaba el badge
+   "Obtenidos" 2,6 s). Guards `.scene` en `flashError`/mensaje de fila (el re-render
+   puede destruir Texts).
+
+**Cómo se verificó:** gates de los 2 commits (corridos por sus sesiones) —
+`npm run typecheck` **0** · `npm run lint` **0** · `npm test` **715 tests** (689 base +
+26 = `ShopLayout.spec` 23 + 3 nuevos en `UiSfx.spec`, 4 → 7). Reviewer **APROBADO** en
+ambos (4 MINOR + 2 NIT, todos aplicados: chrome visual congelado, re-tamaño de zonas
+táctiles en resize, guards `.scene`, tests nuevos, umbral como fuente única). Recount
+estático de este cierre de docs: **64 archivos `*.spec.ts`** medidos con glob (el plan
+anticipó **66** — discrepancia medida: `ScrollableList` **no tiene spec**, su
+comportamiento testeado vive en `ShopLayout.spec`) y `ShopLayout.spec` medido con grep:
+**23 `it(`** (no 19 — el reviewer sumó los tests de chrome). Este commit de docs **no
+tocó `src/`**; el sandbox de esta sesión no tiene permiso de shell, por eso los gates
+citados son los de los commits de código y los conteos salen de `read`/`glob`/`grep`
+(±1 vs `wc -l`, diferencia ya conocida).
+
+**Docs (esta sesión):** ADR-017
+(`docs/DECISIONS/ADR-017-tienda-adaptativa-por-piso-de-fuentes.md`) + fila en
+`docs/DECISIONS/README.md`; `docs/PLAYBOOK.md` (§1: `ScrollableList` como componente a
+reusar y `ShopLayout` como fuente única de geometría de tienda — prohibido hardcodear
+geometría en la escena; §3: límite `displayScale` ≥ ~2.9 y decisión topOnly de la
+rueda); `docs/MAP.md` (censo nuevo: **197 archivos TS · 133 fuente + 64 specs ·
+30.602 L**, filas de `ShopScene`/`UiSfx` y secciones nuevas de `layout/` y
+`components/`); `docs/testing.md` (64/715 + **ítem 14** del smoke de tienda móvil) y
+`AGENTS.md` (§1 specs 64, §3 `ShopScene` 1.310 L + ShopLayout/ScrollableList).
+
+**Pendientes:**
+
+- **Smoke visual de la tienda** — `docs/testing.md` §5, **ítem 14**: PENDIENTE de
+  ejecutar (desktop 1280×720 debe verse idéntico a antes, sin scroll; 800×450 1 columna
+  con scroll por drag/rueda; arrastrar sobre "Comprar" no compra; soltar sobre
+  pestaña/✕ no activa; cambio de tab → scroll 0; resize re-pinta; táctiles ≥44 físicos;
+  EN↔ES en compact).
+- **Límite conocido aceptado**: con `displayScale` ≥ ~2.9 la tira de pestañas invade la
+  ventana de scroll / el título — decidido **NO** rediseñar (en `PLAYBOOK.md` §3 y
+  ADR-017).
+- **Decisión topOnly**: la rueda del mouse **no** scrollea sobre botones/pestañas (solo
+  drag/touch) — no "mejorarla" a rueda global sin revisar junto con el anti-click-fantasma
+  (ADR-017, `PLAYBOOK.md` §3).
+
+---
+
 ## 2026-10-10 · Mazo chessmaster oculto ("?") + tab Mazos a 3 columnas
 
 **Qué se tocó (3 commits de código, en este orden):**
