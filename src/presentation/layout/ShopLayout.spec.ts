@@ -38,7 +38,7 @@ describe('resolveShopLayout — escritorio (fontFloor = 0)', () => {
     expect(desktop.decks.buttonXFor(LONGEST_BUY_LABEL, 0)).toBe(-218);
     expect(desktop.decks.buttonXFor(LONGEST_BUY_LABEL, 1)).toBe(82);
     expect(desktop.decks.buttonXFor(LONGEST_BUY_LABEL, 2)).toBe(382);
-    expect(desktop.decks.rowsPerColumn).toBe(3);
+    expect(desktop.decks.rowsPerColumn).toBe(4);
     expect(desktop.decks.rowSpacing).toBe(90);
     expect(desktop.decks.firstRowOffsetY).toBe(-170);
     expect(desktop.decks.rowOffsetY(0)).toBe(-140);
@@ -86,11 +86,37 @@ describe('resolveShopLayout — escritorio (fontFloor = 0)', () => {
     expect(desktop.decks.textBlock).toBeNull();
   });
 
+  it('congela la tira de pestañas y el ✕ (34 / r=16) y el caption de cada tab', () => {
+    // En escritorio la táctil y el chrome dibujado coinciden (34 / r=16).
+    expect(desktop.tabButton).toEqual({ width: 160, height: 34, visualHeight: 34 });
+    expect(desktop.closeButton).toEqual({ radius: 16, visualRadius: 16 });
+    // Captions congelados desde ShopScene: Mejoras -200, Mazos -199.
+    expect(desktop.upgrades.captionY).toBe(-200);
+    expect(desktop.decks.captionY).toBe(-199);
+    // En escritorio no hay apilado: blockGap inerte.
+    expect(desktop.upgrades.blockGap).toBe(0);
+    expect(desktop.decks.blockGap).toBe(0);
+  });
+
+  it('expone textXFor por columna (Mejoras en textX, Mazos tras la miniatura)', () => {
+    expect(desktop.upgrades.textXFor(0)).toBe(-450);
+    expect(desktop.upgrades.textXFor(1)).toBe(20);
+    // Mazos: textX + miniatura 46 + aire 8 (= el +54 de renderDeckRow).
+    expect(desktop.decks.textXFor(0)).toBe(-444 + 54);
+    expect(desktop.decks.textXFor(1)).toBe(-144 + 54);
+    expect(desktop.decks.textXFor(2)).toBe(156 + 54);
+  });
+
   it('reparte el índice de entrada en columna/fila como la escena hoy', () => {
+    // Mazos: fila-major sobre 3 columnas (3+3+3+2 = 11 entradas en 4 filas).
     expect(desktop.decks.cellPositionFor(0)).toEqual({ column: 0, row: 0 });
-    expect(desktop.decks.cellPositionFor(3)).toEqual({ column: 1, row: 0 });
+    expect(desktop.decks.cellPositionFor(3)).toEqual({ column: 0, row: 1 });
     expect(desktop.decks.cellPositionFor(4)).toEqual({ column: 1, row: 1 });
-    expect(desktop.decks.cellPositionFor(10)).toEqual({ column: 3, row: 1 });
+    expect(desktop.decks.cellPositionFor(10)).toEqual({ column: 1, row: 3 });
+    // Mejoras: columna-major sobre 4 filas por columna (8 entradas en 2).
+    expect(desktop.upgrades.cellPositionFor(0)).toEqual({ column: 0, row: 0 });
+    expect(desktop.upgrades.cellPositionFor(4)).toEqual({ column: 1, row: 0 });
+    expect(desktop.upgrades.cellPositionFor(7)).toEqual({ column: 1, row: 3 });
   });
 });
 
@@ -110,6 +136,31 @@ describe('resolveShopLayout — compacto (fontFloor = 19, displayScale = 1.6)', 
     // Área de scroll bajo el caption: fija en diseño (el Commit 2 la clipa).
     expect(compact19.scroll.top).toBe(-168);
     expect(compact19.scroll.height).toBe(420);
+  });
+
+  it('agrandiza la tira de pestañas y el ✕ a ≥44 físicos, y omite el caption', () => {
+    // displayScale 1.6 → zona táctil ≥44 px reales (44 * 1.6 = 70.4 ≥ 44).
+    expect(compact19.tabButton.height * (1 / 1.6)).toBeGreaterThanOrEqual(44);
+    expect(compact19.tabButton.width).toBe(160); // el ancho no cambia
+    expect(compact19.closeButton.radius * 2 * (1 / 1.6)).toBeGreaterThanOrEqual(44);
+    // El chrome DIBUJADO se congela en escritorio aunque la táctil crezca
+    // (si no, la tira invadiría el título y el ✕ taparía el panel).
+    expect(compact19.tabButton.visualHeight).toBe(34);
+    expect(compact19.closeButton.visualRadius).toBe(16);
+    // Caption omitido en compacto (la pestaña activa ya nombra la sección).
+    expect(compact19.upgrades.captionY).toBeNull();
+    expect(compact19.decks.captionY).toBeNull();
+    // blockGap es el aire real entre bloques apilados.
+    expect(compact19.upgrades.blockGap).toBe(2);
+    expect(compact19.decks.blockGap).toBe(2);
+  });
+
+  it('textXFor apunta al bloque de texto reservado (tras la miniatura en Mazos)', () => {
+    // Mejoras: sin miniatura, el texto arranca en el borde izquierdo del bloque.
+    expect(compact19.upgrades.textXFor(0)).toBe(compact19.upgrades.textBlock!.x);
+    // Mazos: el texto arranca después de la miniatura (46 + 8).
+    expect(compact19.decks.textXFor(0)).toBe(compact19.decks.textBlock!.x);
+    expect(compact19.decks.textXFor(0)).toBe(-440 + 46 + 8);
   });
 
   it('mantiene cada rectángulo de celda dentro de ±470 horizontales', () => {

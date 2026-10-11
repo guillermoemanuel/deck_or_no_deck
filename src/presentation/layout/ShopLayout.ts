@@ -68,6 +68,18 @@ export interface ShopTabLayout {
   /** Paso vertical uniforme entre filas (alto de fila + aire en compacto). */
   readonly rowSpacing: number;
   /**
+   * Y del caption de la pestaña (± centro del panel); `null` = SIN caption
+   * — en compacto el hueco entre la tira de pestañas (con zona táctil
+   * agrandada) y el área de scroll no admite una línea extra con fuentes
+   * post-piso, y el label de la pestaña activa ya nombra la sección.
+   */
+  readonly captionY: number | null;
+  /**
+   * Aire vertical entre bloques de texto apilados en una celda (solo el
+   * apilado compacto lo usa; en escritorio cada bloque tiene offset fijo).
+   */
+  readonly blockGap: number;
+  /**
    * Bloque horizontal reservado al texto dentro de la celda (solo compacto;
    * en escritorio cada columna pinta en `textX` con su wrap y este campo es
    * null). El ancho se calcula contra el botón MÁS ancho posible del clamp
@@ -99,6 +111,13 @@ export interface ShopTabLayout {
   /** Columna y fila (dentro de la columna) de la entrada `index`. */
   cellPositionFor(index: number): { readonly column: number; readonly row: number };
   /**
+   * Offset horizontal (± centro del panel) del bloque de TEXTO de una
+   * columna: en escritorio es `textX` (más el hueco de la miniatura en
+   * Mazos, +54 = 46 + 8); en compacto ignora la columna y devuelve el
+   * inicio del bloque reservado (textBlock.x).
+   */
+  textXFor(column: number): number;
+  /**
    * Offset vertical (± centro del panel) de la fila. En escritorio es el y
    * del nombre — YA con el +30 que ShopScene suma al dibujar—; en compacto
    * es el centro de la celda.
@@ -126,6 +145,21 @@ export interface ShopLayout {
   readonly content: { readonly left: number; readonly right: number; readonly width: number };
   /** Área de scroll (offsets ± centro); el consumidor la clipa según offset. */
   readonly scroll: { readonly top: number; readonly height: number };
+  /**
+   * Tira de pestañas Mejoras/Mazos. `height` es la ZONA TÁCTIL (≥44
+   * físicos en compacto); `visualHeight` es el alto del chrome DIBUJADO,
+   * que se congela en el valor de escritorio (34) en ambos modos — si el
+   * chrome creciera junto a la zona táctil, en compacto la tira invadiría
+   * el título del modal (MINOR de code-review).
+   */
+  readonly tabButton: { readonly width: number; readonly height: number; readonly visualHeight: number };
+  /**
+   * Círculo de cierre ✕. `radius` es la ZONA TÁCTIL; `visualRadius` el
+   * radio dibujado, congelado en escritorio (16) en ambos modos — si el
+   * círculo creciera con la táctil, en compacto taparía el borde superior
+   * del panel y rozaría el título.
+   */
+  readonly closeButton: { readonly radius: number; readonly visualRadius: number };
   readonly upgrades: ShopTabLayout;
   readonly decks: ShopTabLayout;
   /** Líneas REALES que ocupa `text` al envolver en `spec` (medidas). */
@@ -142,6 +176,9 @@ export interface ShopLayout {
 const PANEL_WIDTH = 940;
 const PANEL_HEIGHT = 600;
 const BUTTON_HEIGHT = 34;
+const TAB_BUTTON_WIDTH = 160;
+/** ✕ de escritorio: círculo r=16 (zona 32) — congelado, no confundir con BUTTON_HEIGHT. */
+const DESKTOP_CLOSE_RADIUS = 16;
 /** ShopScene dibuja la fila en `cy + FIRST_ROW_OFFSET_Y + 30 + row * SPACING`. */
 const DESKTOP_ROW_RENDER_LAG = 30;
 const DESKTOP_TEXT_FONT = 15;
@@ -161,13 +198,16 @@ const DESKTOP_UPGRADES_DESC_MAX_LINES = 3;
 const DESKTOP_UPGRADES_DESC_OFFSET_Y = 18;
 const DESKTOP_UPGRADES_STATUS_OFFSET_Y = 78;
 const DESKTOP_UPGRADES_BUTTON_OFFSET_Y = 18;
+/** Y del caption de la pestaña Mejoras (SHOP_UPGRADES_CAPTION, relativo al centro). */
+const DESKTOP_UPGRADES_CAPTION_OFFSET_Y = -200;
 
 const DESKTOP_DECKS_COLUMNS = [
   { textX: -444, buttonX: -218 },
   { textX: -144, buttonX: 82 },
   { textX: 156, buttonX: 382 }
 ] as const;
-const DESKTOP_DECKS_ROWS_PER_COLUMN = 3;
+/** Filas de la grilla de Mazos: 11 entradas repartidas en 4 filas × 3 columnas (3+3+3+2). */
+const DESKTOP_DECKS_ROWS_PER_COLUMN = 4;
 const DESKTOP_DECKS_ROW_SPACING = 90;
 const DESKTOP_DECKS_FIRST_ROW_OFFSET_Y = -170;
 const DESKTOP_DECKS_BUTTON_WIDTH = 120;
@@ -177,6 +217,8 @@ const DESKTOP_DECKS_NAME_WRAP = 104;
 const DESKTOP_DECKS_NAME_MAX_LINES = 2;
 const DESKTOP_DECKS_NAME_OFFSET_Y = -14;
 const DESKTOP_DECKS_STATUS_OFFSET_Y = 8;
+/** Y del caption de la pestaña Mazos (SHOP_DECKS_CAPTION, relativo al centro). */
+const DESKTOP_DECKS_CAPTION_OFFSET_Y = -199;
 
 const THUMB_WIDTH = 46;
 const THUMB_HEIGHT = 64;
@@ -196,8 +238,12 @@ const COMPACT_CELL_TOP_GAP = 5;
 const COMPACT_ROW_GAP = 10;
 /** Aire vertical entre bloques de texto de una misma celda. */
 const COMPACT_BLOCK_GAP = 2;
-/** Aire horizontal entre bloques de la celda (miniatura/texto/botón). */
-const COMPACT_CELL_GAP = 8;
+/**
+ * Aire horizontal entre bloques de la celda (miniatura/texto/botón) y
+ * entre la miniatura de Mazos y su texto — el mismo 8 px que en escritorio
+ * (textX + 54 = 46 de miniatura + 8, ver textXFor).
+ */
+const CELL_GAP = 8;
 /** Piso del alto de celda para que una sola línea no quede apretada. */
 const COMPACT_MIN_ROW_HEIGHT = 64;
 const COMPACT_LINE_HEIGHT_FACTOR = 1.45;
@@ -232,11 +278,18 @@ export function resolveShopLayout(input: ShopLayoutInput): ShopLayout {
   // pestaña) — una sola fuente, propagada por spread a los dos tabs.
   const linesFor = makeLinesFor(input.measure);
 
+  // Tira de pestañas y ✕: en escritorio congelados (34 / r=16); en compacto
+  // heredan la zona táctil ≥44 físicos igual que los botones de fila.
+  const tabHeight = mode === 'desktop' ? BUTTON_HEIGHT : compactButtonHeight(input.displayScale);
+  const closeRadius = mode === 'desktop' ? DESKTOP_CLOSE_RADIUS : Math.ceil(tabHeight / 2);
+
   return {
     mode,
     panel: { width: PANEL_WIDTH, height: PANEL_HEIGHT },
     content,
     scroll,
+    tabButton: { width: TAB_BUTTON_WIDTH, height: tabHeight, visualHeight: BUTTON_HEIGHT },
+    closeButton: { radius: closeRadius, visualRadius: DESKTOP_CLOSE_RADIUS },
     upgrades:
       mode === 'desktop'
         ? { ...desktopUpgradesTab(), linesFor }
@@ -285,6 +338,10 @@ function desktopUpgradesTab(): ShopTabBody {
     rowsPerColumn: DESKTOP_UPGRADES_ROWS_PER_COLUMN,
     firstRowOffsetY: DESKTOP_UPGRADES_FIRST_ROW_OFFSET_Y,
     rowSpacing: DESKTOP_UPGRADES_ROW_SPACING,
+    captionY: DESKTOP_UPGRADES_CAPTION_OFFSET_Y,
+    // En escritorio cada bloque tiene offset fijo (nameOffsetY/descriptionOffsetY/
+    // statusOffsetY): blockGap no se usa para apilar.
+    blockGap: 0,
     textBlock: null,
     thumb: null,
     name: { fontSize: DESKTOP_UPGRADES_NAME_FONT, bold: true, wrapWidth: 0, maxLines: 0 },
@@ -308,6 +365,8 @@ function desktopUpgradesTab(): ShopTabBody {
       column: Math.floor(index / DESKTOP_UPGRADES_ROWS_PER_COLUMN),
       row: index % DESKTOP_UPGRADES_ROWS_PER_COLUMN
     }),
+    // Mejoras: nombre/descripción/estado todos en textX (sin miniatura).
+    textXFor: column => DESKTOP_UPGRADES_COLUMNS[column].textX,
     rowOffsetY: row =>
       DESKTOP_UPGRADES_FIRST_ROW_OFFSET_Y + DESKTOP_ROW_RENDER_LAG + row * DESKTOP_UPGRADES_ROW_SPACING,
     buttonXFor: (_label, column) => DESKTOP_UPGRADES_COLUMNS[column].buttonX,
@@ -323,6 +382,10 @@ function desktopDecksTab(): ShopTabBody {
     rowsPerColumn: DESKTOP_DECKS_ROWS_PER_COLUMN,
     firstRowOffsetY: DESKTOP_DECKS_FIRST_ROW_OFFSET_Y,
     rowSpacing: DESKTOP_DECKS_ROW_SPACING,
+    captionY: DESKTOP_DECKS_CAPTION_OFFSET_Y,
+    // En escritorio cada bloque tiene offset fijo (nameOffsetY/statusOffsetY):
+    // blockGap no se usa para apilar.
+    blockGap: 0,
     textBlock: null,
     thumb: { width: THUMB_WIDTH, height: THUMB_HEIGHT },
     name: {
@@ -342,10 +405,17 @@ function desktopDecksTab(): ShopTabBody {
       height: BUTTON_HEIGHT,
       widthFor: () => DESKTOP_DECKS_BUTTON_WIDTH
     },
+    // Mazos: la posición se lee por ÍNDICE dentro de la FILA (no por
+    // columna como en Mejoras): las 3 primeras filas se llenan de a 3 y
+    // las 11 entradas terminan en 4 filas (3+3+3+2). Por eso el módulo es
+    // por CANTIDAD DE COLUMNAS y no por filas-por-columna.
     cellPositionFor: index => ({
-      column: Math.floor(index / DESKTOP_DECKS_ROWS_PER_COLUMN),
-      row: index % DESKTOP_DECKS_ROWS_PER_COLUMN
+      column: index % DESKTOP_DECKS_COLUMNS.length,
+      row: Math.floor(index / DESKTOP_DECKS_COLUMNS.length)
     }),
+    // Mazos: nombre/estado arrancan a la derecha de la miniatura (textX + 54
+    // = miniatura 46 + aire 8, ver renderDeckRow actual).
+    textXFor: column => DESKTOP_DECKS_COLUMNS[column].textX + THUMB_WIDTH + CELL_GAP,
     rowOffsetY: row => DESKTOP_DECKS_FIRST_ROW_OFFSET_Y + DESKTOP_ROW_RENDER_LAG + row * DESKTOP_DECKS_ROW_SPACING,
     buttonXFor: (_label, column) => DESKTOP_DECKS_COLUMNS[column].buttonX,
     contentHeightFor: rowCount => rowCount * DESKTOP_DECKS_ROW_SPACING,
@@ -385,7 +455,7 @@ function compactButtonWidthFor(measure: Measure, buttonFont: number, label: stri
  * (tope del clamp) + aire, así ninguna etiqueta invade el texto.
  */
 function compactTextRight(contentRight: number): number {
-  return contentRight - COMPACT_BUTTON_MAX_WIDTH - COMPACT_CELL_GAP;
+  return contentRight - COMPACT_BUTTON_MAX_WIDTH - CELL_GAP;
 }
 
 /** Filas compactas con scroll: paso uniforme y primera celda dentro del área. */
@@ -430,6 +500,11 @@ function compactUpgradesTab(input: ShopLayoutInput, content: { left: number; rig
     rowsPerColumn: 1,
     firstRowOffsetY: scrollGeometry.firstRowOffsetY,
     rowSpacing: scrollGeometry.rowSpacing,
+    // Sin caption en compacto: el hueco tira-de-pestañas → área de scroll
+    // no admite una línea extra con fuentes post-piso, y el label "Mejoras"
+    // de la pestaña activa ya nombra la sección.
+    captionY: null,
+    blockGap: COMPACT_BLOCK_GAP,
     textBlock,
     thumb: null,
     name: { fontSize: nameFont, bold: true, wrapWidth: 0, maxLines: COMPACT_UPGRADES_NAME_MAX_LINES },
@@ -445,6 +520,7 @@ function compactUpgradesTab(input: ShopLayoutInput, content: { left: number; rig
       widthFor: (label: string) => compactButtonWidthFor(input.measure, buttonFont, label)
     },
     cellPositionFor: index => ({ column: 0, row: index }),
+    textXFor: () => textBlock.x,
     rowOffsetY: row => scrollGeometry.firstRowOffsetY + row * scrollGeometry.rowSpacing,
     buttonXFor: (label: string, _column: number) =>
       content.right - compactButtonWidthFor(input.measure, buttonFont, label) / 2,
@@ -460,7 +536,8 @@ function compactDecksTab(input: ShopLayoutInput, content: { left: number; right:
   const buttonFont = Math.max(DESKTOP_DECKS_BUTTON_FONT, floor);
 
   const textX = content.left;
-  const textBlock = { x: textX + THUMB_WIDTH + COMPACT_CELL_GAP, width: compactTextRight(content.right) - (textX + THUMB_WIDTH + COMPACT_CELL_GAP) };
+  const textBlockStart = textX + THUMB_WIDTH + CELL_GAP;
+  const textBlock = { x: textBlockStart, width: compactTextRight(content.right) - textBlockStart };
   const buttonHeight = compactButtonHeight(input.displayScale);
 
   // PEOR CASO: nombre en su máximo de 2 líneas + estado, sin bajar del
@@ -480,6 +557,9 @@ function compactDecksTab(input: ShopLayoutInput, content: { left: number; right:
     rowsPerColumn: 1,
     firstRowOffsetY: scrollGeometry.firstRowOffsetY,
     rowSpacing: scrollGeometry.rowSpacing,
+    // Sin caption en compacto — ver comentario en compactUpgradesTab.
+    captionY: null,
+    blockGap: COMPACT_BLOCK_GAP,
     textBlock,
     thumb: { width: THUMB_WIDTH, height: THUMB_HEIGHT },
     name: { fontSize: nameFont, bold: true, wrapWidth: textBlock.width, maxLines: COMPACT_DECKS_NAME_MAX_LINES },
@@ -495,6 +575,9 @@ function compactDecksTab(input: ShopLayoutInput, content: { left: number; right:
       widthFor: (label: string) => compactButtonWidthFor(input.measure, buttonFont, label)
     },
     cellPositionFor: index => ({ column: 0, row: index }),
+    // Mazos compactos: la miniatura ocupa textX y el texto arranca en el
+    // bloque reservado (textBlock.x = textX + miniatura + aire).
+    textXFor: () => textBlock.x,
     rowOffsetY: row => scrollGeometry.firstRowOffsetY + row * scrollGeometry.rowSpacing,
     buttonXFor: (label: string, _column: number) =>
       content.right - compactButtonWidthFor(input.measure, buttonFont, label) / 2,

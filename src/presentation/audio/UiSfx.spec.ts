@@ -1,16 +1,16 @@
 import { SFX } from '../../shared/audio/AudioData';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import { bindUiClick, ClickTarget } from './UiSfx';
+import { bindUiClick, ClickPointerLike, ClickTarget } from './UiSfx';
 
 describe('bindUiClick', () => {
-  function createTarget(): { target: ClickTarget; on: jest.Mock; fire: () => void } {
-    const handlers: Record<string, () => void> = {};
-    const on = jest.fn((event: 'pointerup', callback: () => void) => {
+  function createTarget(): { target: ClickTarget; on: jest.Mock; fire: (pointer?: ClickPointerLike) => void } {
+    const handlers: Record<string, (pointer?: ClickPointerLike) => void> = {};
+    const on = jest.fn((event: 'pointerup', callback: (pointer?: ClickPointerLike) => void) => {
       handlers[event] = callback;
       return undefined;
     });
     const target: ClickTarget = { on };
-    return { target, on, fire: () => handlers['pointerup']?.() };
+    return { target, on, fire: (pointer?: ClickPointerLike) => handlers['pointerup']?.(pointer) };
   }
 
   function createAudio(playImpl?: () => void): { audio: IAudioService; play: jest.Mock } {
@@ -59,5 +59,44 @@ describe('bindUiClick', () => {
     bindUiClick(target, audio);
 
     expect(() => fire()).not.toThrow();
+  });
+
+  // --- guard shouldPlay (click fantasma de scroll en la Tienda compacta) ---
+
+  it('guard que decide false → no reproduce SFX.CLICK', () => {
+    const { target, fire } = createTarget();
+    const { audio, play } = createAudio();
+    const shouldPlay = jest.fn((pointer: ClickPointerLike) => pointer.downY === pointer.y);
+
+    bindUiClick(target, audio, shouldPlay);
+
+    fire({ downY: 0, y: 200 });
+    expect(shouldPlay).toHaveBeenCalledTimes(1);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('guard que decide true → reproduce SFX.CLICK', () => {
+    const { target, fire } = createTarget();
+    const { audio, play } = createAudio();
+    const shouldPlay = jest.fn((pointer: ClickPointerLike) => pointer.downY === pointer.y);
+
+    bindUiClick(target, audio, shouldPlay);
+
+    fire({ downY: 100, y: 100 });
+    expect(shouldPlay).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith(SFX.CLICK);
+  });
+
+  it('handler invocado SIN pointer → el guard se salta y reproduce (click clásico)', () => {
+    const { target, fire } = createTarget();
+    const { audio, play } = createAudio();
+    const shouldPlay = jest.fn(() => false);
+
+    bindUiClick(target, audio, shouldPlay);
+
+    fire();
+    expect(shouldPlay).not.toHaveBeenCalled();
+    expect(play).toHaveBeenCalledTimes(1);
   });
 });

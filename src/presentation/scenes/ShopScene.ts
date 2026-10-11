@@ -9,8 +9,11 @@ import { DeckShopEntry } from '../../application/use-cases/ListAvailableDecksUse
 import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
+import { DRAG_THRESHOLD_PX, ScrollableList } from '../components/ScrollableList';
+import { resolveShopLayout, ShopButtonSpec, ShopLayout, ShopTabLayout, ShopTextSpec } from '../layout/ShopLayout';
+import { getMinDesignFontPx } from '../../shared/utils/CompactScreen';
 import { SFX } from '../../shared/audio/AudioData';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, ClickPointerLike } from '../audio/UiSfx';
 
 /**
  * Paleta y "chrome" de botones — MISMA convención "Casino de Lujo" que el
@@ -33,10 +36,23 @@ const PRESS_SCALE = 1.1;
 const HOVER_TWEEN_MS = 120;
 const PRESS_TWEEN_MS = 70;
 
-const TAB_WIDTH = 160;
-const TAB_HEIGHT = 34;
-const ACTION_BUTTON_WIDTH = 150;
-const ACTION_BUTTON_HEIGHT = 34;
+// Y (relativo al centro) del aviso de ads del tab Mejoras y del mensaje
+// temporal de Mazos en ESCRITORIO — congelados desde el código previo. En
+// compacto viven BAJO el área de scroll (ver renderUpgradesTab/
+// showTemporaryDeckMessage), porque el hueco entre la tira de pestañas y
+// el inicio del scroll no admite una línea extra con fuentes post-piso.
+const ADS_NOTICE_OFFSET_Y_DESKTOP = -176;
+const DECK_MESSAGE_OFFSET_Y_DESKTOP = -183;
+/** Aire bajo el borde inferior del área de scroll para el aviso/mensaje compacto. */
+const COMPACT_NOTICE_GAP = 18;
+/**
+ * Click fantasma (px de diseño): un pointerup que cierra un arrastre sobre
+ * un botón NO debe activarlo. Usa el MISMO umbral del ScrollableList
+ * (fuente única exportada), pero la escena lo aplica también a la caída
+ * vertical del propio pointer como red de seguridad (el componente solo
+ * levanta `wasDragging` cuando el arrastre arrancó dentro de su ventana).
+ */
+const DRAG_CLICK_SLOP_PX = DRAG_THRESHOLD_PX;
 
 /** Refs de un botón-panel genérico (chrome + hitZone), reutilizado por
  * los botones de acción de cada fila (Comprar/Adquirido). El texto es un
@@ -49,10 +65,13 @@ interface ActionButtonRefs {
   readonly glow: Phaser.GameObjects.Graphics;
   readonly text: Phaser.GameObjects.Text;
   readonly hitZone: Phaser.GameObjects.Zone;
-  /** Ancho real con el que se pintó (150 en Mejoras, 120 en Mazos) —
-   * refreshUpgradeRow()/refreshDeckRow() repintan con ESTE valor para que
-   * el chrome no cambie de tamaño al refrescarse la fila. */
+  /** Ancho REAL con el que se pintó (150 en Mejoras, 120 en Mazos en
+   * escritorio; medido por etiqueta en compacto) — refreshUpgradeRow()/
+   * refreshDeckRow() repintan con ESTE valor para que el chrome no cambie
+   * de tamaño al refrescarse la fila. */
   readonly width: number;
+  /** Alto de la zona táctil (34 en escritorio; ≥44 físicos en compacto). */
+  readonly height: number;
 }
 
 /** Refs de un botón de pestaña — mismo chrome que ActionButtonRefs, pero
@@ -63,6 +82,8 @@ interface TabButtonRefs {
   readonly bg: Phaser.GameObjects.Graphics;
   readonly glow: Phaser.GameObjects.Graphics;
   readonly label: LocalizedText;
+  /** Zona interactiva — se re-tamaña en resize si cambia el modo (ver refreshChromeHitAreas). */
+  readonly hitZone: Phaser.GameObjects.Zone;
 }
 
 interface UpgradeRowRefs {
@@ -77,48 +98,6 @@ interface DeckRowRefs {
 
 type ShopTab = 'upgrades' | 'decks';
 
-// Layout en 2 columnas de 4 filas (8 upgrades de partida) — evita que el
-// catálogo desborde el modal a medida que se agregan nuevas mejoras.
-const ROWS_PER_COLUMN = 4;
-
-// QA de legibilidad (fontSize de la descripción 12px -> 15px): la
-// descripción más larga del catálogo ("Mitiga a la mitad el drenaje...",
-// 83 caracteres) pasa de 2 a 3 líneas dentro de wordWrap.width=280 a este
-// tamaño — 105 alcanzaba para 2 líneas, pero dejaba la 3ra pisando el
-// renglón siguiente. Sube a 118 para darle lugar a esa 3ra línea sin
-// que el catálogo dé la sensación de estar apretado.
-const ROW_SPACING_Y = 118;
-const FIRST_ROW_OFFSET_Y = -190;
-const COLUMN_OFFSETS = [
-  { textX: -450, buttonX: -90 },
-  { textX: 20, buttonX: 380 }
-] as const;
-
-// Layout de mazos: 3 columnas x 4 filas (11 mazos → 3+3+3+2) — con 2
-// columnas de 5 filas el catálogo completo no entraba. A diferencia de
-// COLUMN_OFFSETS (que es del tab de Mejoras y NO se toca), estos offsets
-// son PROPIOS de esta grilla: 3 celdas de 300px centradas sobre
-// cameras.main.centerX (pitch 300) → 444px a la izquierda del centro y 442
-// a la derecha, dentro del modal de 940px (±470) con ~26px de margen.
-const DECK_COLUMNS = 3;
-const DECK_COLUMN_OFFSETS = [
-  { textX: -444, buttonX: -218 },
-  { textX: -144, buttonX: 82 },
-  { textX: 156, buttonX: 382 }
-] as const;
-const DECK_ROW_SPACING_Y = 90;
-const DECK_FIRST_ROW_OFFSET_Y = -170;
-// Botón de fila de mazo: 120px en vez de los 150 de ACTION_BUTTON_WIDTH,
-// que en celdas de 300px se comerían la zona de texto. El label más largo
-// posible, "Comprar $30.000" (chessmaster, price 30000), mide ~112px a
-// 13px → entra con margen. Reparto de la celda de 300px: 6 (margen) +
-// miniatura 46 + 8 + texto 104 + 8 + botón 120 + 8 (margen) = 300.
-const DECK_BUTTON_WIDTH = 120;
-const DECK_BUTTON_FONT_SIZE = '13px';
-// Zona de nombre + estado: entre la miniatura (46px, en textX) y el
-// botón, dejando 8px de aire a cada lado (ver renderDeckRow()).
-const DECK_TEXT_WIDTH = 104;
-
 /**
  * ShopScene: tienda con dos pestañas independientes.
  *
@@ -132,6 +111,13 @@ const DECK_TEXT_WIDTH = 104;
  *   cuál usar vive en DeckSelectionScene; acá solo se compran. Incluye un
  *   contador "obtenidos X/Y" (ver deckCounterText) para que el jugador
  *   vea de un vistazo cuántos de los mazos del catálogo ya tiene.
+ *
+ * GEOMETRÍA vía `resolveShopLayout` (fuente única, ver ShopLayout.ts):
+ * la escena ya NO tiene constantes de grilla propias. En ESCRITORIO el
+ * layout devuelve exactamente la geometría anterior (2 columnas de Mejoras,
+ * 3 de Mazos, sin scroll) — byte-idéntico. En COMPACTO (pantalla chica,
+ * `fontFloor > 0`) pasa a UNA columna con scroll vertical dentro de un
+ * `ScrollableList`, fuentes subidas al piso y zonas táctiles ≥44 px.
  *
  * i18n EN VIVO (ejemplo de escena secundaria pedido explícitamente): esta
  * escena se abre con `scene.launch()` SOBRE MainMenuScene, que sigue
@@ -155,17 +141,71 @@ export class ShopScene extends Phaser.Scene {
 
   private upgradesTabRefs!: TabButtonRefs;
   private decksTabRefs!: TabButtonRefs;
+  /** Círculo del ✕ — su hit area se re-tamaña si el resize cambia el modo. */
+  private closeButtonBg?: Phaser.GameObjects.Arc;
+
+  /** Geometría resuelta (fuente única) — ver resolveLayout(). */
+  private layout!: ShopLayout;
+
+  /** Contenedor de scroll (solo modo compacto; null en escritorio). */
+  private scrollList: ScrollableList | null = null;
+
+  /** Cache de medición de textos por (fuente|texto) para no crear/destruir
+   * un Text de medición en cada fila/repintado. */
+  private measureCache = new Map<string, number>();
 
   /** Badge "Obtenidos X/Y" del tab "Mazos" — null mientras el tab activo
    * es "Mejoras" (destruido junto con el resto de tabContainer al
    * cambiar de pestaña, ver renderActiveTab()). */
   private deckCounterText: Phaser.GameObjects.Text | null = null;
+  /** Fondo (pill dorado) del badge — se oculta junto con el texto cuando
+   * el mensaje temporal compacto ocuparía su lugar (ver showTemporaryDeckMessage). */
+  private deckCounterBg: Phaser.GameObjects.Graphics | null = null;
 
   /** Última lista resuelta por ListAvailableDecksUseCase al pintar el tab
    * "Mazos" — se guarda para detectar, tras una compra, si cambió la
    * visibilidad de alguna fila (completar los 10 mazos base REVELA la
    * carta "?" de chessmaster y obliga a reconstruir el tab). */
   private deckEntries: DeckShopEntry[] = [];
+
+  // Bound una sola vez en create() para poder hacer `off()` con la MISMA
+  // referencia en SHUTDOWN — pasar una arrow function nueva a `off()` no
+  // desengancharía nada (los listeners de ScaleManager NO mueren con la
+  // escena; patrón de UIScene.handleScaleResize).
+  private readonly handleScaleResize = (): void => {
+    // Guard contra destrucción: el ScaleManager vive a nivel Game y puede
+    // disparar resize cuando la escena ya no está activa.
+    if (!this.sys || !this.sys.isActive()) return;
+    // El piso de fuente (y por lo tanto el modo) puede cambiar con la
+    // escala — se re-resuelve y se repinta la pestaña activa. El chrome
+    // DIBUJADO está congelado en escritorio en ambos modos (visualHeight/
+    // visualRadius), así que no se repinta; solo se re-tamañan las zonas
+    // táctiles (pestañas y ✕) si el modo cambió.
+    const previousMode = this.layout.mode;
+    this.layout = this.resolveLayout();
+    if (this.layout.mode !== previousMode) {
+      this.refreshChromeHitAreas();
+    }
+    this.renderActiveTab();
+  };
+
+  /**
+   * Re-tamaña las zonas interactivas del chrome estático (tira de pestañas
+   * y ✕) al nuevo modo — el chrome dibujado no cambia (congelado), pero la
+   * táctil sí: 34/r16 en escritorio, ≥44 físicos en compacto. Se hace con
+   * `setInteractive` de nuevo sobre la MISMA zona (Phaser reemplaza el hit
+   * area sin duplicar listeners, que viven en el GameObject).
+   */
+  private refreshChromeHitAreas(): void {
+    const { width, height } = this.layout.tabButton;
+    [this.upgradesTabRefs, this.decksTabRefs].forEach(refs => {
+      refs.hitZone.setSize(width, height).setInteractive({ useHandCursor: true });
+    });
+    this.closeButtonBg?.setInteractive(
+      new Phaser.Geom.Circle(0, 0, this.layout.closeButton.radius),
+      Phaser.Geom.Circle.Contains
+    );
+  }
 
   constructor() {
     super({ key: 'ShopScene' });
@@ -190,6 +230,10 @@ export class ShopScene extends Phaser.Scene {
     // desde el menú principal, antes de jugar).
     this.activeTab = bridge ? 'upgrades' : 'decks';
 
+    // Geometría resuelta (fuente única) ANTES de dibujar el panel — todos
+    // los rectángulos/posiciones de abajo salen del layout.
+    this.layout = this.resolveLayout();
+
     const { width, height } = this.cameras.main;
 
     // Backdrop bloqueador: sin esto, esta escena se abre con `scene.launch()`
@@ -204,7 +248,7 @@ export class ShopScene extends Phaser.Scene {
 
     // Si se abrió desde el HUD durante una partida (GameScene+UIScene
     // activas), se pausa GameScene mientras se compra — mismo criterio que
-    // el modal de "Salir al Menú" y el del bono periódico en UIScene: así
+    // el modal de "Salir al Menú" y del bono periódico en UIScene: así
     // ninguna animación, timer del banquero ni input del tablero avanza
     // mientras el jugador está en la Tienda. Se reanuda en SHUTDOWN, sin
     // importar por qué vía se cierra esta escena (✕, `scene.stop()`, etc.).
@@ -220,15 +264,16 @@ export class ShopScene extends Phaser.Scene {
     // Panel principal — mismo tratamiento "Casino de Lujo" que el modal
     // de HowToPlayScene (panel carbón + borde de acento + resplandor
     // exterior sutil) en vez del Rectangle plano de un solo color/borde
-    // que tenía antes.
-    const modalX = width / 2 - 470;
-    const modalY = height / 2 - 300;
+    // que tenía antes. Ancho/alto desde el layout (940×600 en escritorio).
+    const panel = this.layout.panel;
+    const modalX = width / 2 - panel.width / 2;
+    const modalY = height / 2 - panel.height / 2;
     const modalBg = this.add.graphics();
-    modalBg.fillStyle(PANEL_FILL, 0.97).fillRoundedRect(modalX, modalY, 940, 600, 18);
-    modalBg.lineStyle(3, ACCENT_COLOR, 0.9).strokeRoundedRect(modalX, modalY, 940, 600, 18);
-    modalBg.lineStyle(8, ACCENT_COLOR, 0.15).strokeRoundedRect(modalX - 4, modalY - 4, 948, 608, 20);
+    modalBg.fillStyle(PANEL_FILL, 0.97).fillRoundedRect(modalX, modalY, panel.width, panel.height, 18);
+    modalBg.lineStyle(3, ACCENT_COLOR, 0.9).strokeRoundedRect(modalX, modalY, panel.width, panel.height, 18);
+    modalBg.lineStyle(8, ACCENT_COLOR, 0.15).strokeRoundedRect(modalX - 4, modalY - 4, panel.width + 8, panel.height + 8, 20);
     // Filo dorado interior muy fino, misma convención "premium" que createCasinoButton().
-    modalBg.lineStyle(1, COLOR_GOLD, 0.2).strokeRoundedRect(modalX + 5, modalY + 5, 930, 590, 14);
+    modalBg.lineStyle(1, COLOR_GOLD, 0.2).strokeRoundedRect(modalX + 5, modalY + 5, panel.width - 10, panel.height - 10, 14);
 
     new LocalizedText(this, width / 2, height / 2 - 270, 'SHOP_TITLE', {
       fontSize: '20px',
@@ -277,10 +322,136 @@ export class ShopScene extends Phaser.Scene {
     // Único punto de suscripción de la escena: refresca el contenido
     // DINÁMICO (filas de upgrades/mazos, que ya viven fuera de
     // LocalizedText porque combinan una clave i18n con estado de compra
-    // en tiempo real). Se desuscribe al detener la escena — mismo patrón
-    // ya usado en MainMenuScene y en ProgressionManager.onEvent.
-    const unsubscribe = languageManager.onLanguageChanged(() => this.refreshAllRows());
+    // en tiempo real). Se desusubre al detener la escena — mismo patrón
+    // ya usado en MainMenuScene y en ProgressionManager.onEvent. En modo
+    // compacto se RE PINTA la pestaña entera (no solo refreshAllRows)
+    // porque el apilado vertical de cada celda depende de la cantidad de
+    // líneas, que cambia con el idioma.
+    const unsubscribe = languageManager.onLanguageChanged(() => {
+      if (this.layout.mode === 'compact') {
+        this.renderActiveTab();
+      } else {
+        this.refreshAllRows();
+      }
+    });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribe);
+
+    // Resize del ScaleManager (pantalla chica → piso de fuente puede
+    // cambiar y con él el modo desktop/compacto) — patrón de
+    // UIScene.handleScaleResize: se desuscribe en SHUTDOWN porque los
+    // listeners de this.scale NO mueren con la escena.
+    this.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
+      // El ScrollableList vive fuera de tabContainer (sus filas no pasan
+      // por removeAll) — se destruye explícito también al apagar la escena.
+      this.destroyScrollList();
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Geometría (fuente única: resolveShopLayout) + medición de textos
+  // ------------------------------------------------------------------
+
+  private resolveLayout(): ShopLayout {
+    const displayScale = this.scale.displayScale.x;
+    const fontFloor = getMinDesignFontPx(displayScale);
+    return resolveShopLayout({ fontFloor, displayScale, measure: this.measureTextWidth });
+  }
+
+  /**
+   * Medidor de ancho de texto inyectado al layout. Usa un Text TEMPORAL
+   * oculto (creado/destruido on-demand y cacheado por fuente|texto): la
+   * única forma de conocer el ancho RENDERIZADO de una cadena es medir un
+   * Text real (Phaser lo rasteriza vía canvas y reporta `.width`) — el
+   * estático `Text.MeasureText` devuelve métricas de la FUENTE
+   * (ascent/descent/lineHeight), no el ancho de un string concreto.
+   */
+  private measureTextWidth = (text: string, fontPx: number): number => {
+    const key = `${fontPx}|${text}`;
+    const cached = this.measureCache.get(key);
+    if (cached !== undefined) return cached;
+    const probe = this.make.text(
+      { x: 0, y: 0, text, style: { fontSize: `${fontPx}px`, fontFamily: 'Arial, sans-serif' } },
+      false
+    );
+    const width = probe.width;
+    probe.destroy();
+    this.measureCache.set(key, width);
+    return width;
+  };
+
+  /** Container al que se agregan las filas: tabContainer en escritorio,
+   * el contenido scrolleable del ScrollableList en compacto. */
+  private rowParent(): Phaser.GameObjects.Container {
+    return this.layout.mode === 'compact' && this.scrollList ? this.scrollList.contentContainer : this.tabContainer;
+  }
+
+  private createScrollList(): void {
+    const cx = this.cameras.main.centerX;
+    const cy = this.cameras.main.centerY;
+    const scroll = this.layout.scroll;
+    // El contenedor vive en el centro del panel (coords de fila relativas
+    // al centro) y la ventana visible se desplaza a `windowOffsetY` (= el
+    // centro del área de scroll respecto del centro del panel).
+    this.scrollList = new ScrollableList(this, {
+      x: cx,
+      y: cy,
+      width: this.layout.content.width,
+      height: scroll.height,
+      windowOffsetY: scroll.top + scroll.height / 2
+    });
+  }
+
+  private destroyScrollList(): void {
+    if (this.scrollList) {
+      this.scrollList.destroy();
+      this.scrollList = null;
+    }
+  }
+
+  /**
+   * Anti click-fantasma: true si este pointerup NO representa un click
+   * real (cerró un arrastre de scroll sobre el botón). El
+   * ScrollableList levanta `wasDragging` al arrastrar dentro de su
+   * ventana; además se chequea la caída vertical del propio pointer como
+   * red de seguridad. En ESCRITORIO no hay lista ⇒ siempre false ⇒
+   * comportamiento idéntico al histórico.
+   */
+  private isDragAbortedClick(pointer: ClickPointerLike): boolean {
+    const list = this.scrollList;
+    if (!list) return false;
+    if (Math.abs(pointer.downY - pointer.y) > DRAG_CLICK_SLOP_PX) return true;
+    return list.wasDragging();
+  }
+
+  /**
+   * Variante LIGERA del anti click-fantasma: solo el flag del
+   * ScrollableList, sin la red de caída vertical del pointer. Para los
+   * controles que viven FUERA de la ventana de scroll — pestañas y ✕ —
+   * donde un "fling" que arrancó en la lista y termina arriba no debe
+   * cambiar de pestaña ni cerrar la Tienda; pero un ✕ tocado con el dedo
+   * que tiembla sí debe responder (su down nunca estuvo en la lista ⇒ el
+   * flag está apagado). Escritorio: sin lista ⇒ siempre false ⇒
+   * comportamiento idéntico al histórico.
+   */
+  private releasedAfterScrollDrag(): boolean {
+    return this.scrollList ? this.scrollList.wasDragging() : false;
+  }
+
+  /** Estilo de texto derivado de un ShopTextSpec. `includeMaxLines` es
+   * false solo para la descripción de Mejoras en escritorio (el código
+   * previo no pasaba maxLines ahí — se conserva byte-idéntico). */
+  private textStyleFromSpec(spec: ShopTextSpec, color: string, fontStyle?: string, includeMaxLines = true): Phaser.Types.GameObjects.Text.TextStyle {
+    const style: Phaser.Types.GameObjects.Text.TextStyle = {
+      fontSize: `${spec.fontSize}px`,
+      fontFamily: 'Arial, sans-serif',
+      color
+    };
+    if (fontStyle) style.fontStyle = fontStyle;
+    if (spec.wrapWidth > 0) style.wordWrap = { width: spec.wrapWidth };
+    if (includeMaxLines && spec.maxLines > 0) style.maxLines = spec.maxLines;
+    return style;
   }
 
   // ------------------------------------------------------------------
@@ -303,8 +474,15 @@ export class ShopScene extends Phaser.Scene {
     glow.fillStyle(accentColor, 0.35).fillRoundedRect(-width / 2 - 6, -height / 2 - 6, width + 12, height + 12, radius + 2);
   }
 
-  /** Zona interactiva + tweens de hover/press/click — misma "sensación táctil" que createCasinoButton()/HudIconButton en el resto del juego. */
-  private attachButtonInteractions(container: Phaser.GameObjects.Container, glow: Phaser.GameObjects.Graphics, width: number, height: number, onClick: () => void): Phaser.GameObjects.Zone {
+  /** Zona interactiva + tweens de hover/press/click — misma "sensación táctil" que createCasinoButton()/HudIconButton en el resto del juego. `dragGuard` (opcional) suprime el click y su sonido cuando el pointerup cierra un arrastre (click fantasma). */
+  private attachButtonInteractions(
+    container: Phaser.GameObjects.Container,
+    glow: Phaser.GameObjects.Graphics,
+    width: number,
+    height: number,
+    onClick: () => void,
+    dragGuard?: (pointer: ClickPointerLike) => boolean
+  ): Phaser.GameObjects.Zone {
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
 
@@ -316,49 +494,37 @@ export class ShopScene extends Phaser.Scene {
       this.tweens.add({ targets: container, scale: 1, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
       this.tweens.add({ targets: glow, alpha: 0, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
     });
-    hitZone.on('pointerup', () => {
+    hitZone.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      // Click fantasma: si el pointerup cierra un arrastre sobre este
+      // botón, NO se dispara la acción (ni el tween de press).
+      if (dragGuard && dragGuard(pointer)) return;
       this.tweens.add({ targets: container, scale: PRESS_SCALE, duration: PRESS_TWEEN_MS, yoyo: true, ease: 'Quad.easeOut', onComplete: onClick });
     });
     // Punto único del click genérico de UI de tienda para botones de
     // acción (Comprar) y pestañas — el ✕ tiene su propia zona en
-    // createCloseButton y se bindea ahí.
-    bindUiClick(hitZone, getServices(this).audioService);
+    // createCloseButton y se bindea ahí. El MISMO guard suprime el sonido
+    // en un click fantasma.
+    bindUiClick(hitZone, getServices(this).audioService, dragGuard ? pointer => !dragGuard(pointer) : undefined);
 
     return hitZone;
   }
 
-  /** Botón de acción de fila (Comprar $X / Adquirido) — texto plano, ver ActionButtonRefs.
-   *
-   * `width`/`fontSize` son parámetros porque el tab de Mazos usa una grilla
-   * de 3 columnas: ahí el botón mide DECK_BUTTON_WIDTH y su label baja a
-   * DECK_BUTTON_FONT_SIZE para que miniatura + nombre + botón quepan en la
-   * celda de 300px sin pisarse. El tab de Mejoras sigue usando el default
-   * (150px / 15px), idéntico a como estaba. */
+  /** Botón de acción de fila (Comprar $X / Adquirido) — texto plano, ver ActionButtonRefs. El ancho/fuente/altura salen del ShopButtonSpec de la pestaña (fijo en escritorio, medido y con zona táctil ≥44 físicos en compacto). */
   private createActionButton(
     x: number,
     y: number,
     initialLabel: string,
     onClick: () => void,
-    width: number = ACTION_BUTTON_WIDTH,
-    fontSize: string = '15px'
+    button: ShopButtonSpec
   ): ActionButtonRefs {
+    const width = button.widthFor(initialLabel);
+    const height = button.height;
     const container = this.add.container(x, y);
     const glow = this.add.graphics().setAlpha(0);
     const bg = this.add.graphics();
     const text = this.add
       .text(0, 0, initialLabel, {
-        // QA de legibilidad: se queda en 15px (no 16, como el resto de
-        // los textos "13px->16px" de esta pantalla) a propósito — este
-        // botón mide 150px de ancho y el label más largo posible,
-        // "Comprar $30.000" (el mazo más caro del catálogo, chessmaster,
-        // price en DeckSetups.ts), ya casi lo llena a 16px. 15px
-        // sigue muy por encima del piso de legibilidad (9.4px reales
-        // @800x450) sin arriesgar que el precio se salga del botón —
-        // sobre todo en la columna derecha, donde el botón ya está
-        // cerca del borde del modal (ver COLUMN_OFFSETS). El tab de
-        // Mazos baja a DECK_BUTTON_FONT_SIZE (13px) porque su botón es
-        // más angosto (DECK_BUTTON_WIDTH, grilla de 3 columnas).
-        fontSize,
+        fontSize: `${button.fontPx}px`,
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
         color: '#ffffff'
@@ -366,21 +532,40 @@ export class ShopScene extends Phaser.Scene {
       .setOrigin(0.5);
     container.add([glow, bg, text]);
 
-    const hitZone = this.attachButtonInteractions(container, glow, width, ACTION_BUTTON_HEIGHT, onClick);
+    const hitZone = this.attachButtonInteractions(container, glow, width, height, onClick, pointer => this.isDragAbortedClick(pointer));
 
-    return { container, bg, glow, text, hitZone, width };
+    return { container, bg, glow, text, hitZone, width, height };
   }
 
   private createCloseButton(x: number, y: number): void {
-    const bg = this.add.circle(0, 0, 16, PANEL_FILL, 0.95).setStrokeStyle(2, COLOR_DANGER, 0.8).setInteractive({ useHandCursor: true });
-    const label = this.add.text(0, 0, '✕', { fontSize: '16px', fontFamily: 'Arial, sans-serif', color: '#ffffff' }).setOrigin(0.5);
+    // Chrome dibujado CONGELADO en escritorio (r=16) en ambos modos; la
+    // ZONA táctil crece en compacto a ≥44 físicos (radio desde el layout)
+    // — si el círculo dibujado creciera con la táctil, en compacto taparía
+    // el borde superior del panel y rozaría el título (MINOR de review).
+    const visualRadius = this.layout.closeButton.visualRadius;
+    const touchRadius = this.layout.closeButton.radius;
+    const bg = this.add
+      .circle(0, 0, visualRadius, PANEL_FILL, 0.95)
+      .setStrokeStyle(2, COLOR_DANGER, 0.8)
+      // Hit area circular del radio TÁCTIL (mayor que el dibujado) — el
+      // jugador toca un círculo invisible más grande sin cambiar el look.
+      .setInteractive(new Phaser.Geom.Circle(0, 0, touchRadius), Phaser.Geom.Circle.Contains);
+    const label = this.add.text(0, 0, '✕', { fontSize: `${Math.max(16, visualRadius)}px`, fontFamily: 'Arial, sans-serif', color: '#ffffff' }).setOrigin(0.5);
 
     bg.on('pointerover', () => bg.setFillStyle(0x6e2a2a, 0.95));
     bg.on('pointerout', () => bg.setFillStyle(PANEL_FILL, 0.95));
-    bg.on('pointerup', () => this.scene.stop());
+    // Anti click-fantasma: un arrastre de scroll que termina sobre el ✕ no
+    // debe cerrar la Tienda (ver releasedAfterScrollDrag).
+    bg.on('pointerup', () => {
+      if (this.releasedAfterScrollDrag()) return;
+      this.scene.stop();
+    });
     // El ✕ no pasa por attachButtonInteractions (tiene su propia zona
     // circular) — se le registra el click genérico directamente acá.
-    bindUiClick(bg, getServices(this).audioService);
+    bindUiClick(bg, getServices(this).audioService, () => !this.releasedAfterScrollDrag());
+
+    // Ref para re-tamañar la hit area en resize si cambia el modo.
+    this.closeButtonBg = bg;
 
     this.add.container(x, y, [bg, label]);
   }
@@ -410,9 +595,11 @@ export class ShopScene extends Phaser.Scene {
     }).setOrigin(0.5);
     container.add([glow, bg, label]);
 
-    this.attachButtonInteractions(container, glow, TAB_WIDTH, TAB_HEIGHT, onClick);
+    // Anti click-fantasma (variante ligera): un arrastre de scroll que
+    // termina sobre una pestaña no debe cambiar de pestaña.
+    const hitZone = this.attachButtonInteractions(container, glow, this.layout.tabButton.width, this.layout.tabButton.height, onClick, () => this.releasedAfterScrollDrag());
 
-    return { container, bg, glow, label };
+    return { container, bg, glow, label, hitZone };
   }
 
   private switchTab(tab: ShopTab): void {
@@ -428,13 +615,22 @@ export class ShopScene extends Phaser.Scene {
       { refs: this.decksTabRefs, active: this.activeTab === 'decks' }
     ].forEach(({ refs, active }) => {
       if (!refs) return;
-      this.paintButtonChrome(refs.bg, refs.glow, TAB_WIDTH, TAB_HEIGHT, active ? ACCENT_COLOR : COLOR_OWNED);
+      // Chrome dibujado con la ALTURA visual congelada (34) en ambos modos;
+      // la zona táctil de attachButtonInteractions usa la altura real
+      // (mayor en compacto). Si se pintara con la táctil, en compacto la
+      // tira invadiría el título (MINOR de review).
+      this.paintButtonChrome(refs.bg, refs.glow, this.layout.tabButton.width, this.layout.tabButton.visualHeight, active ? ACCENT_COLOR : COLOR_OWNED);
       refs.label.setColor(active ? '#ffffff' : '#8b949e');
       refs.container.setAlpha(active ? 1 : 0.85);
     });
   }
 
   private renderActiveTab(): void {
+    // Destruir el scrollList ANTES de vaciar tabContainer: sus filas viven dentro
+    // del contenido scrolleable (fuera de tabContainer), así que no las
+    // limpia el removeAll — se destruyen acá para no dejar GameObjects
+    // huérfanos ni listeners de input del componente.
+    this.destroyScrollList();
     this.tabContainer.removeAll(true); // destruye el contenido del tab anterior
     this.upgradeRowRefs.clear();
     this.deckRowRefs.clear();
@@ -443,6 +639,12 @@ export class ShopScene extends Phaser.Scene {
     // referencia acá para no dejar un puntero a un GameObject destruido
     // (se recrea en renderDecksTab() si corresponde).
     this.deckCounterText = null;
+    this.deckCounterBg = null;
+
+    // Modo compacto: UNA columna con scroll vertical.
+    if (this.layout.mode === 'compact') {
+      this.createScrollList();
+    }
 
     if (this.activeTab === 'upgrades') {
       this.renderUpgradesTab();
@@ -451,7 +653,7 @@ export class ShopScene extends Phaser.Scene {
     }
   }
 
-  /** Vuelve a resolver el texto de TODAS las filas del tab activo tras un cambio de idioma. */
+  /** Vuelve a resolver el texto de TODAS las filas del tab activo tras un cambio de idioma (solo escritorio — en compacto se re-pinta la pestaña entera). */
   private refreshAllRows(): void {
     this.upgradeRowRefs.forEach((_refs, id) => this.refreshUpgradeRow(id));
     this.deckRowRefs.forEach((_refs, id) => this.refreshDeckRow(id));
@@ -463,14 +665,17 @@ export class ShopScene extends Phaser.Scene {
   // ------------------------------------------------------------------
 
   private renderUpgradesTab(): void {
-    const { width, height } = this.cameras.main;
+    const tab = this.layout.upgrades;
+    const cx = this.cameras.main.centerX;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
 
     if (!this.sessionUpgrades || !this.purchaseUpgradeUseCase) {
       this.tabContainer.add(
         new LocalizedText(
           this,
-          width / 2,
-          height / 2,
+          cx,
+          cy,
           'SHOP_NO_ACTIVE_SESSION',
           { fontSize: '17px', fontFamily: 'Arial, sans-serif', color: '#8b949e', align: 'center' }
         ).setOrigin(0.5)
@@ -478,30 +683,37 @@ export class ShopScene extends Phaser.Scene {
       return;
     }
 
-    this.tabContainer.add(
-      new LocalizedText(this, width / 2, height / 2 - 200, 'SHOP_UPGRADES_CAPTION', {
-        fontSize: '15px',
-        fontFamily: 'Arial, sans-serif',
-        color: '#8b949e'
-      }).setOrigin(0.5)
-    );
+    // Caption: solo escritorio (en compacto captionY es null — la pestaña
+    // activa ya nombra la sección y el hueco no admite la línea extra).
+    if (tab.captionY !== null) {
+      this.tabContainer.add(
+        new LocalizedText(this, cx, cy + tab.captionY, 'SHOP_UPGRADES_CAPTION', {
+          fontSize: '15px',
+          fontFamily: 'Arial, sans-serif',
+          color: '#8b949e'
+        }).setOrigin(0.5)
+      );
+    }
 
     // CG-MON-006: cuando el filtro de abajo OCULTA filas por un motivo
     // permanente (adblock / ads_disabled), la tienda lo dice INLINE —
     // sin este aviso, el jugador veía 5 filas y no entendía por qué
     // faltaban Duplicar/Triplicar/Revivir (popup: descartado por la
     // auditoría). La política de "¿corresponde?" vive en el use-case;
-    // acá solo se dibuja: UNA línea centrada bajo el caption — el hueco
-    // entre caption (-200, origin 0.5) y la primera fila (-160, origin
-    // 0,0) da ~32px, y una línea de 15px entra con margen. Por eso el
-    // copy es corto y SIN wordWrap: dos líneas pisarían la primera fila.
+    // acá solo se dibuja: UNA línea centrada. En escritorio va bajo el
+    // caption (h/2-176); en compacto, BAJO el área de scroll (hoy la
+    // primera fila llega casi al borde superior del scroll, así que no
+    // hay lugar arriba sin pisarla) — ver COMPACT_NOTICE_GAP.
     const avisoAds = getServices(this).listAvailableUpgrades.adsNotice();
     if (avisoAds !== null) {
+      const noticeY = compact
+        ? cy + this.layout.scroll.top + this.layout.scroll.height + COMPACT_NOTICE_GAP
+        : cy + ADS_NOTICE_OFFSET_Y_DESKTOP;
       this.tabContainer.add(
         new LocalizedText(
           this,
-          width / 2,
-          height / 2 - 176,
+          cx,
+          noticeY,
           avisoAds === 'adblock' ? 'SHOP_ADS_HIDDEN_ADBLOCK' : 'SHOP_ADS_HIDDEN_DISABLED',
           { fontSize: '15px', fontFamily: 'Arial, sans-serif', color: '#ffd166' }
         ).setOrigin(0.5)
@@ -515,55 +727,90 @@ export class ShopScene extends Phaser.Scene {
     // (SessionUpgradeDefinition.requiresRewardedAd).
     const visibleUpgrades = getServices(this).listAvailableUpgrades.execute();
 
+    const parent = this.rowParent();
     visibleUpgrades.forEach((definition, index) => {
-      const column = Math.floor(index / ROWS_PER_COLUMN);
-      const row = index % ROWS_PER_COLUMN;
-      const y = height / 2 + FIRST_ROW_OFFSET_Y + 30 + row * ROW_SPACING_Y;
-      const { textX, buttonX } = COLUMN_OFFSETS[column];
-      this.renderUpgradeRow(definition.id, textX, buttonX, y);
+      this.renderUpgradeRow(definition.id, index, tab, parent);
     });
+
+    // Altura total del contenido (base del scroll) — solo compacto.
+    if (compact) {
+      this.scrollList?.setContentHeight(tab.contentHeightFor(visibleUpgrades.length));
+    }
   }
 
-  private renderUpgradeRow(upgradeId: SessionUpgradeId, textOffsetX: number, buttonOffsetX: number, y: number): void {
+  private renderUpgradeRow(upgradeId: SessionUpgradeId, index: number, tab: ShopTabLayout, parent: Phaser.GameObjects.Container): void {
     const definition = findSessionUpgradeDefinition(upgradeId)!;
+    const { column, row } = tab.cellPositionFor(index);
     const cx = this.cameras.main.centerX;
-    const textX = cx + textOffsetX;
-    const buttonX = cx + buttonOffsetX;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
+    // En escritorio las coords son absolutas (sobre tabContainer en 0,0);
+    // en compacto son relativas al centro del panel (el contenedor del
+    // scrollList vive ahí).
+    const dx = compact ? 0 : cx;
+    const dy = compact ? 0 : cy;
 
-    this.tabContainer.add(
-      new LocalizedText(this, textX, y, definition.name as TranslationKey, {
-        fontSize: '17px',
-        fontFamily: 'Arial, sans-serif',
-        fontStyle: 'bold',
-        color: '#ffffff'
-      })
-    );
-    this.tabContainer.add(
-      new LocalizedText(this, textX, y + 18, definition.description as TranslationKey, {
-        fontSize: '15px',
-        fontFamily: 'Arial, sans-serif',
-        color: '#8b949e',
-        // QA de legibilidad: 280 en vez de 260 — aprovecha el espacio
-        // horizontal real disponible antes del botón de la fila (ver
-        // COLUMN_OFFSETS, ~285px libres en ambas columnas), aunque no
-        // alcanza para evitar una 3ra línea en la descripción más larga
-        // del catálogo — de ahí el ROW_SPACING_Y más alto de arriba.
-        wordWrap: { width: 280 }
-      })
-    );
+    const status = this.upgradeStatusFor(upgradeId, this.sessionUpgrades!);
+    const textX = dx + tab.textXFor(column);
+    const buttonX = dx + tab.buttonXFor(status.buttonLabel, column);
+    const anchorY = tab.rowOffsetY(row); // ± centro del panel
 
-    // QA de legibilidad: y+78 (no y+58) — dejando lugar para que la
-    // descripción de arriba ocupe hasta 3 líneas a 15px sin pisarlo (ver
-    // el comentario de ROW_SPACING_Y más arriba).
-    const levelOrOwnedText = this.add.text(textX, y + 78, '', {
-      fontSize: '15px',
+    const nameStyle = this.textStyleFromSpec(tab.name, '#ffffff', tab.name.bold ? 'bold' : undefined);
+
+    let nameY: number;
+    let descY = 0;
+    let statusY: number;
+
+    if (compact) {
+      // Apilado vertical nombre→descripción→estado, centrado en la celda.
+      const descKey = definition.description as TranslationKey;
+      const descText = languageManager.getText(descKey);
+      const nameLines = tab.linesFor(languageManager.getText(definition.name as TranslationKey), tab.name);
+      const descLines = tab.description ? tab.linesFor(descText, tab.description) : 0;
+      const nameLH = this.layout.lineHeightFor(tab.name.fontSize);
+      const descLH = tab.description ? this.layout.lineHeightFor(tab.description.fontSize) : 0;
+      const statusLH = this.layout.lineHeightFor(tab.status.fontSize);
+      const gap = tab.blockGap;
+      const totalH = nameLines * nameLH + descLines * descLH + statusLH + gap * 2;
+      let cursor = dy + anchorY - totalH / 2;
+      nameY = cursor;
+      cursor += nameLines * nameLH + gap;
+      descY = cursor;
+      cursor += descLines * descLH + gap;
+      statusY = cursor;
+    } else {
+      nameY = dy + anchorY;
+      descY = nameY + tab.descriptionOffsetY!;
+      statusY = nameY + tab.statusOffsetY!;
+    }
+
+    parent.add(new LocalizedText(this, textX, nameY, definition.name as TranslationKey, nameStyle));
+
+    if (tab.description) {
+      // maxLines solo en compacto: el código de escritorio no lo pasaba
+      // (se conserva byte-idéntico — ninguna descripción excede 3 líneas).
+      const descStyle = this.textStyleFromSpec(tab.description, '#8b949e', undefined, compact);
+      parent.add(new LocalizedText(this, textX, descY, definition.description as TranslationKey, descStyle));
+    }
+
+    // QA de legibilidad: y+78 (no y+58) en escritorio — dejando lugar para
+    // que la descripción de arriba ocupe hasta 3 líneas a 15px sin pisarlo.
+    const levelOrOwnedText = this.add.text(textX, statusY, '', {
+      fontSize: `${tab.status.fontSize}px`,
       fontFamily: 'Arial, sans-serif',
       color: '#58a6ff'
     });
-    this.tabContainer.add(levelOrOwnedText);
+    parent.add(levelOrOwnedText);
 
-    const actionButton = this.createActionButton(buttonX, y + 18, '', () => this.attemptPurchaseUpgrade(upgradeId, actionButton.text));
-    this.tabContainer.add(actionButton.container);
+    const buttonY = dy + anchorY + tab.buttonOffsetY!;
+    const actionButton = this.createActionButton(
+      buttonX,
+      buttonY,
+      status.buttonLabel,
+      () => this.attemptPurchaseUpgrade(upgradeId, actionButton.text),
+      tab.button
+    );
+    parent.add(actionButton.container);
 
     this.upgradeRowRefs.set(upgradeId, { levelOrOwnedText, actionButton });
     this.refreshUpgradeRow(upgradeId);
@@ -628,8 +875,10 @@ export class ShopScene extends Phaser.Scene {
     const originalColor = refs.levelOrOwnedText.style.color;
     refs.levelOrOwnedText.setText(message).setColor('#e74c3c');
     this.time.delayedCall(2200, () => {
-      // Si mientras tanto se compró/cambió de fila, no pisar el estado nuevo.
-      if (refs.levelOrOwnedText.text === message) {
+      // Si mientras tanto se compró/cambió de fila, no pisar el estado
+      // nuevo; y si el re-render (resize/idioma en compacto) destruyó el
+      // texto, no operar sobre un Text destruido (canvas devuelto al pool).
+      if (refs.levelOrOwnedText.scene && refs.levelOrOwnedText.text === message) {
         refs.levelOrOwnedText.setText(originalText).setColor(originalColor);
       }
     });
@@ -643,7 +892,7 @@ export class ShopScene extends Phaser.Scene {
 
     refs.levelOrOwnedText.setText(status.statusLabel);
     refs.actionButton.text.setText(status.buttonLabel);
-    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, ACTION_BUTTON_HEIGHT, status.buttonDisabled ? COLOR_OWNED : COLOR_BUY);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, refs.actionButton.height, status.buttonDisabled ? COLOR_OWNED : COLOR_BUY);
 
     if (status.buttonDisabled) {
       refs.actionButton.hitZone.disableInteractive();
@@ -722,15 +971,21 @@ export class ShopScene extends Phaser.Scene {
   // ------------------------------------------------------------------
 
   private renderDecksTab(): void {
-    const { width, height } = this.cameras.main;
+    const tab = this.layout.decks;
+    const cx = this.cameras.main.centerX;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
 
-    this.tabContainer.add(
-      new LocalizedText(this, width / 2, height / 2 - 199, 'SHOP_DECKS_CAPTION', {
-        fontSize: '15px',
-        fontFamily: 'Arial, sans-serif',
-        color: '#8b949e'
-      }).setOrigin(0.5)
-    );
+    // Caption: solo escritorio (compact lo omite, ver renderUpgradesTab).
+    if (tab.captionY !== null) {
+      this.tabContainer.add(
+        new LocalizedText(this, cx, cy + tab.captionY, 'SHOP_DECKS_CAPTION', {
+          fontSize: '15px',
+          fontFamily: 'Arial, sans-serif',
+          color: '#8b949e'
+        }).setOrigin(0.5)
+      );
+    }
 
     // Qué filas dibuja (y con qué visibilidad) lo decide la APLICACIÓN,
     // no la escena — mismo criterio que listAvailableUpgrades en el tab de
@@ -743,44 +998,40 @@ export class ShopScene extends Phaser.Scene {
     // Badge "Obtenidos X/Y" — de un vistazo, cuántos de los N mazos del
     // catálogo ya tiene el jugador. Mismo chrome dorado que el filo
     // interior de los botones, para que se lea como parte de la misma
-    // familia visual y no como un elemento suelto.
-    const counterY = height / 2 + 275;
-    // QA de legibilidad (fontSize 12px -> 15px): a 130px "Obtenidos
-    // 11/11" (el texto más largo posible, catálogo completo en español
-    // con el mazo oculto ya revelado) ya prácticamente llenaba el badge
-    // sin margen. Se ensancha a 160 —
-    // es un elemento standalone centrado en `width / 2`, sin ningún
-    // vecino con el que competir por espacio, así que no hay riesgo de
-    // colisión al agrandarlo (a diferencia de los botones de fila, que
-    // sí están apretados contra la grilla — ver createActionButton()).
+    // familia visual y no como un elemento suelto. Vive en tabContainer
+    // (NO scrollea) y en compacto queda bajo el área de scroll (cy+275).
+    const counterY = cy + 275;
     const counterWidth = 160;
     const counterHeight = 26;
     const counterBg = this.add.graphics();
-    counterBg.fillStyle(PANEL_FILL, 0.9).fillRoundedRect(width / 2 - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
-    counterBg.lineStyle(2, COLOR_GOLD, 0.7).strokeRoundedRect(width / 2 - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
+    counterBg.fillStyle(PANEL_FILL, 0.9).fillRoundedRect(cx - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
+    counterBg.lineStyle(2, COLOR_GOLD, 0.7).strokeRoundedRect(cx - counterWidth / 2, counterY - counterHeight / 2, counterWidth, counterHeight, counterHeight / 2);
     this.tabContainer.add(counterBg);
+    this.deckCounterBg = counterBg;
 
     this.deckCounterText = this.add
-      .text(width / 2, counterY, '', { fontSize: '15px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: COLOR_GOLD_HEX })
+      .text(cx, counterY, '', { fontSize: '15px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: COLOR_GOLD_HEX })
       .setOrigin(0.5);
     this.tabContainer.add(this.deckCounterText);
     this.updateDeckCounter();
-
-    // Grilla de 3 columnas (no las COLUMN_OFFSETS de Mejoras): la
-    // posición se lee por ÍNDICE dentro de la fila, no por columna, para
-    // que las 3 primeras filas se llenen de a 3 y las 11 entradas terminen
-    // en 4 filas (3+3+3+2).
+    const parent = this.rowParent();
+    // Escritorio: 3 columnas con la posición leída por ÍNDICE dentro de la
+    // FILA (fila-major): las 3 primeras filas se llenen de a 3 y las 11
+    // entradas terminan en 4 filas (3+3+3+2). Compacto: 1 columna con
+    // scroll (cellPositionFor devuelve columna 0, fila = índice).
     this.deckEntries.forEach((entry, index) => {
-      const column = index % DECK_COLUMNS;
-      const row = Math.floor(index / DECK_COLUMNS);
-      const y = height / 2 + DECK_FIRST_ROW_OFFSET_Y + 30 + row * DECK_ROW_SPACING_Y;
-      const { textX, buttonX } = DECK_COLUMN_OFFSETS[column];
+      const { column, row } = tab.cellPositionFor(index);
       if (entry.revealed) {
-        this.renderDeckRow(entry.deckId, textX, buttonX, y);
+        this.renderDeckRow(entry.deckId, index, tab, parent);
       } else {
-        this.renderMysteryDeckRow(textX, y);
+        this.renderMysteryDeckRow(column, row, tab, parent);
       }
     });
+
+    // Altura total del contenido (base del scroll) — solo compacto.
+    if (compact) {
+      this.scrollList?.setContentHeight(tab.contentHeightFor(this.deckEntries.length));
+    }
   }
 
   /**
@@ -795,22 +1046,32 @@ export class ShopScene extends Phaser.Scene {
    * El "?" es un glifo PUNTUARIO (no una cadena localizable, por eso no
    * lleva clave i18n): glifo Georgia bold dorado sobre rect redondeada
    * oscura con el mismo chrome de paintButtonChrome (PANEL_FILL +
-   * COLOR_GOLD), y con el mismo 46x64 que ocupa la miniatura real para
+   * COLOR_GOLD), y con el mismo tamaño que ocupa la miniatura real para
    * que la fila quede alineada con las demás.
    */
-  private renderMysteryDeckRow(textOffsetX: number, y: number): void {
+  private renderMysteryDeckRow(column: number, row: number, tab: ShopTabLayout, parent: Phaser.GameObjects.Container): void {
+    const { width: thumbW, height: thumbH } = tab.thumb!;
     const cx = this.cameras.main.centerX;
-    const textX = cx + textOffsetX;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
+    const dx = compact ? 0 : cx;
+    const dy = compact ? 0 : cy;
 
-    const card = this.add.graphics().setPosition(textX + 23, y);
-    card.fillStyle(PANEL_FILL, PANEL_FILL_ALPHA).fillRoundedRect(-23, -32, 46, 64, 6);
-    card.lineStyle(2, COLOR_GOLD, 0.85).strokeRoundedRect(-23, -32, 46, 64, 6);
-    card.lineStyle(1, COLOR_GOLD, 0.25).strokeRoundedRect(-20, -29, 40, 58, 4);
-    this.tabContainer.add(card);
+    // MISMO textX que ocuparía la miniatura real de ESA columna (no el de
+    // la columna 0): la "?" vive en el centro de la fila/columna que le
+    // tocó en la grilla, igual que las demás.
+    const cardCenterX = dx + tab.columns[column].textX + thumbW / 2;
+    const cardCenterY = dy + tab.rowOffsetY(row);
 
-    this.tabContainer.add(
+    const card = this.add.graphics().setPosition(cardCenterX, cardCenterY);
+    card.fillStyle(PANEL_FILL, PANEL_FILL_ALPHA).fillRoundedRect(-thumbW / 2, -thumbH / 2, thumbW, thumbH, 6);
+    card.lineStyle(2, COLOR_GOLD, 0.85).strokeRoundedRect(-thumbW / 2, -thumbH / 2, thumbW, thumbH, 6);
+    card.lineStyle(1, COLOR_GOLD, 0.25).strokeRoundedRect(-thumbW / 2 + 3, -thumbH / 2 + 3, thumbW - 6, thumbH - 6, 4);
+    parent.add(card);
+
+    parent.add(
       this.add
-        .text(textX + 23, y, '?', {
+        .text(cardCenterX, cardCenterY, '?', {
           fontSize: '34px',
           fontFamily: 'Georgia, "Times New Roman", serif',
           fontStyle: 'bold',
@@ -821,30 +1082,49 @@ export class ShopScene extends Phaser.Scene {
   }
 
   /**
-   * Mensaje temporal (2.6 s) bajo el caption del tab "Mazos". La primera
-   * fila de miniaturas está centrada en h/2 - 140 y su borde superior
-   * llega a h/2 - 172, así que el mensaje vive en h/2 - 183 (con origin
-   * 0.5 y ~17 px de alto queda por encima de la tarjeta con ~2 px de
-   * margen; revisión de code-review: en h/2 - 176 pisaba 4-5 px la
-   * tarjeta de la columna central). Se usa para explicar el único fallo
-   * de compra que la propia fila no puede contar: la carta "?" no tiene
-   * estado donde mostrarse.
+   * Mensaje temporal (2.6 s) explicando el único fallo de compra que la
+   * propia fila no puede contar: la carta "?" no tiene estado donde
+   * mostrarse. En escritorio vive sobre el hueco del caption (h/2-183,
+   * congelado tras la revisión de code-review: en h/2 - 176 pisaba 4-5 px
+   * la tarjeta de la columna central). En compacto el caption no existe y
+   * el hueco arriba lo ocupa la tira de pestañas — se dibuja BAJO el área
+   * de scroll (mismo hueco que el aviso de ads del tab Mejoras).
    */
   private showTemporaryDeckMessage(message: string): void {
-    const { width, height } = this.cameras.main;
+    const { width } = this.cameras.main;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
+    const messageY = compact
+      ? cy + this.layout.scroll.top + this.layout.scroll.height + COMPACT_NOTICE_GAP
+      : cy + DECK_MESSAGE_OFFSET_Y_DESKTOP;
     const messageText = this.add
-      .text(width / 2, height / 2 - 183, message, {
+      .text(width / 2, messageY, message, {
         fontSize: '15px',
         fontFamily: 'Arial, sans-serif',
         color: '#e74c3c'
       })
       .setOrigin(0.5);
     this.tabContainer.add(messageText);
+
+    // En compacto el mensaje cae EN el mismo hueco que ocupa el badge
+    // "Obtenidos X/Y" (cy+275): se oculta el badge mientras dure para que
+    // no queden dos textos superpuestos, y se repone después.
+    const counterBg = this.deckCounterBg;
+    const counterText = this.deckCounterText;
+    if (compact && counterBg && counterText) {
+      counterBg.setVisible(false);
+      counterText.setVisible(false);
+    }
+
     this.time.delayedCall(2600, () => {
       // Si mientras tanto se cambió de pestaña (renderActiveTab() ya
       // destruyó todo el contenido), no destruir dos veces.
       if (messageText.scene) {
         messageText.destroy();
+      }
+      if (compact && counterBg && counterText && counterBg.scene && counterText.scene) {
+        counterBg.setVisible(true);
+        counterText.setVisible(true);
       }
     });
   }
@@ -861,59 +1141,86 @@ export class ShopScene extends Phaser.Scene {
     this.deckCounterText.setText(languageManager.getText('SHOP_DECKS_OWNED_COUNTER', { owned: ownedCount, total: revealedTotal }));
   }
 
-  private renderDeckRow(deckId: DeckSetupId, textOffsetX: number, buttonOffsetX: number, y: number): void {
+  private renderDeckRow(deckId: DeckSetupId, index: number, tab: ShopTabLayout, parent: Phaser.GameObjects.Container): void {
     // NOTA i18n: `definition.name` (nombre del mazo) también viene del
     // catálogo de dominio en español fijo — mismo caso que las mejoras,
     // señalado arriba en renderUpgradeRow().
     const definition = getDeckSetup(deckId);
+    const { column, row } = tab.cellPositionFor(index);
     const cx = this.cameras.main.centerX;
-    const textX = cx + textOffsetX;
-    const buttonX = cx + buttonOffsetX;
+    const cy = this.cameras.main.centerY;
+    const compact = this.layout.mode === 'compact';
+    const dx = compact ? 0 : cx;
+    const dy = compact ? 0 : cy;
 
-    this.tabContainer.add(
+    const services = getServices(this);
+    const owned = services.progressionManager.getOwnedDeckIds().includes(deckId);
+    const ownedLabel = languageManager.getText('SHOP_OWNED_LABEL');
+    const priceText = `$${definition.price.toLocaleString()}`;
+    const buttonLabel = owned ? ownedLabel : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText });
+
+    const thumbW = tab.thumb!.width;
+    const thumbH = tab.thumb!.height;
+    const thumbX = dx + tab.columns[column].textX;
+    const textX = dx + tab.textXFor(column);
+    const anchorY = tab.rowOffsetY(row); // ± centro (/thumb vertical)
+
+    // Miniatura a la izquierda de la celda.
+    parent.add(
       this.add
-        .image(textX, y, `shop-cardback-${deckId}`)
-        .setDisplaySize(46, 64)
+        .image(thumbX, dy + anchorY, `shop-cardback-${deckId}`)
+        .setDisplaySize(thumbW, thumbH)
         .setOrigin(0, 0.5)
     );
 
-    // Nombre + estado a la derecha de la miniatura (textX + 54 = 46px de
-    // miniatura + 8px de aire), dentro de DECK_TEXT_WIDTH antes del
-    // botón. El nombre baja de 17px a 14px y envuelve en (a lo sumo) 2
-    // líneas — todos los nombres del catálogo entran en 2 a este ancho
-    // ("Tarot of Marseilles" es el más largo); maxLines corta el dibujo
-    // si alguno llegara a necesitar una 3ra, para que no invada la línea
-    // de precio de abajo. Origin 0.5 en y-14: así una línea y dos líneas
-    // quedan igual de centradas respecto de la miniatura.
-    this.tabContainer.add(
-      this.add.text(textX + 54, y - 14, definition.name, {
-        fontSize: '14px',
-        fontFamily: 'Arial, sans-serif',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        wordWrap: { width: DECK_TEXT_WIDTH },
-        maxLines: 2
-      }).setOrigin(0, 0.5)
+    const nameStyle = this.textStyleFromSpec(tab.name, '#ffffff', tab.name.bold ? 'bold' : undefined);
+
+    let nameY: number;
+    let statusY: number;
+    // Nombre: en escritorio origin (0, 0.5) (así 1 y 2 líneas quedan igual
+    // de centradas respecto de la miniatura); en compacto origin (0, 0)
+    // porque el apilado fluye desde el borde superior de la celda.
+    const nameOriginY = compact ? 0 : 0.5;
+
+    if (compact) {
+      // Apilado vertical nombre→estado, centrado en la celda (sin bajar de
+      // la miniatura: el alto de fila ya la contempla).
+      const nameLines = tab.linesFor(definition.name, tab.name);
+      const nameLH = this.layout.lineHeightFor(tab.name.fontSize);
+      const statusLH = this.layout.lineHeightFor(tab.status.fontSize);
+      const gap = tab.blockGap;
+      const totalH = nameLines * nameLH + statusLH + gap;
+      let cursor = dy + anchorY - totalH / 2;
+      nameY = cursor;
+      cursor += nameLines * nameLH + gap;
+      statusY = cursor;
+    } else {
+      // Escritorio: nombre en y-14 (origin 0.5, así 1 y 2 líneas quedan
+      // igual de centradas respecto de la miniatura) y estado en y+8.
+      nameY = dy + anchorY + tab.nameOffsetY!;
+      statusY = dy + anchorY + tab.statusOffsetY!;
+    }
+
+    // Nombre + estado a la derecha de la miniatura (ver textXFor).
+    parent.add(
+      this.add.text(textX, nameY, definition.name, nameStyle).setOrigin(0, nameOriginY)
     );
 
-    // Precio/estado: se mantiene en 15px (el texto que tiene que seguir
-    // siendo legible en la grilla de 3 columnas).
-    const statusText = this.add.text(textX + 54, y + 8, '', {
-      fontSize: '15px',
+    const statusText = this.add.text(textX, statusY, '', {
+      fontSize: `${tab.status.fontSize}px`,
       fontFamily: 'Arial, sans-serif',
       color: '#58a6ff'
     });
-    this.tabContainer.add(statusText);
+    parent.add(statusText);
 
     const actionButton = this.createActionButton(
-      buttonX,
-      y,
-      '',
+      dx + tab.buttonXFor(buttonLabel, column),
+      dy + anchorY + tab.buttonOffsetY!,
+      buttonLabel,
       () => this.attemptPurchaseDeck(deckId, actionButton.text),
-      DECK_BUTTON_WIDTH,
-      DECK_BUTTON_FONT_SIZE
+      tab.button
     );
-    this.tabContainer.add(actionButton.container);
+    parent.add(actionButton.container);
 
     this.deckRowRefs.set(deckId, { statusText, actionButton });
     this.refreshDeckRow(deckId);
@@ -978,7 +1285,7 @@ export class ShopScene extends Phaser.Scene {
 
     refs.statusText.setText(owned ? ownedLabel : priceText);
     refs.actionButton.text.setText(owned ? ownedLabel : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText }));
-    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, ACTION_BUTTON_HEIGHT, owned ? COLOR_OWNED : COLOR_BUY);
+    this.paintButtonChrome(refs.actionButton.bg, refs.actionButton.glow, refs.actionButton.width, refs.actionButton.height, owned ? COLOR_OWNED : COLOR_BUY);
 
     if (owned) {
       refs.actionButton.hitZone.disableInteractive();
@@ -992,6 +1299,12 @@ export class ShopScene extends Phaser.Scene {
   private flashError(buttonText: Phaser.GameObjects.Text): void {
     const originalColor = buttonText.style.color;
     buttonText.setColor('#e74c3c');
-    this.time.delayedCall(400, () => buttonText.setColor(originalColor));
+    this.time.delayedCall(400, () => {
+      // Guard .scene: un re-render (resize/idioma) puede destruir el texto
+      // durante los 400 ms — no restaurar color sobre un Text destruido.
+      if (buttonText.scene) {
+        buttonText.setColor(originalColor);
+      }
+    });
   }
 }
