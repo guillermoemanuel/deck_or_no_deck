@@ -3,6 +3,7 @@ import { CrazyGamesService } from './infrastructure/services/CrazyGamesService';
 import { OwnRewardedAdService } from './infrastructure/services/OwnRewardedAdService';
 import { resolveAdsMode } from './infrastructure/config/resolveAdsMode';
 import { resolveFullscreenEnabled } from './infrastructure/config/resolveFullscreenEnabled';
+import { createScaleRefreshRetry } from './infrastructure/display/scaleResizeRetry';
 import { resolveMuteAudioOverride } from './infrastructure/config/resolveMuteAudioOverride';
 import { AdOverlayScene, presentAdOverlay } from './presentation/scenes/AdOverlayScene';
 import { AdBlockerScene, createAdBlockerListener } from './presentation/scenes/AdBlockerScene';
@@ -248,8 +249,19 @@ languageManager.onLanguageChanged(renderRotateOverlayText);
 
 // iOS informa el tamaño del viewport con retraso tras girar: se vuelve a medir.
 const refreshScale = (): void => {game.scale.refresh()};
-window.addEventListener('orientationchange', () => window.setTimeout(refreshScale, 300));
-window.visualViewport?.addEventListener('resize', refreshScale);
+// Re-agendado del refresh (cancela pendiente + timers 100/350 ms): usado por
+// los eventos de fullscreen de Phaser y —clave en builds CrazyGames— por el
+// 'resize' de window/visualViewport, donde llega la señal cuando el fullscreen
+// lo dispara el portal sobre el iframe y Phaser no emite evento propio.
+const scaleRetry = createScaleRefreshRetry(refreshScale);
+// iOS informa el tamaño del viewport con retraso tras girar. Routeado por
+// scaleRetry (MINOR de review): el retry tardío de 350 ms cubre el asentamiento
+// lento de iOS y el cancelPending evita duplicar timers contra los retries que
+// la propia rotación dispara vía 'resize'.
+window.addEventListener('orientationchange', () => scaleRetry.retry());
+// Refresh inmediato para iOS + re-agendado demorado (el layout del viewport
+// puede asentar tarde tras un resize del iframe del portal).
+window.visualViewport?.addEventListener('resize', () => {refreshScale(); scaleRetry.retry();});
 
 // Sin menú contextual (pulsación larga en móvil / clic derecho) ni zoom por gesto (iOS Safari).
 document.addEventListener('contextmenu', event => event.preventDefault());
@@ -271,15 +283,30 @@ game.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, () => {
   // técnicamente sí lo pidió (a diferencia de F11, que el propio navegador
   // sincroniza con su motor de layout sin pasar por este evento). Dos
   // reintentos cortos cubren tanto el caso rápido como el más lento.
-  window.setTimeout(refreshScale, 100);
-  window.setTimeout(refreshScale, 350);
+  // BUGFIX (CG-preview-fullscreen): en builds CrazyGames el fullscreen lo
+  // dispara el portal sobre el iframe, así que ESTE evento de Phaser nunca
+  // se emite y este retry no corre — por eso el mismo retry también vive
+  // colgado de 'window.resize' (más abajo), que sí llega con el iframe.
+  scaleRetry.retry();
 });
 
 // Mismo remedio al volver a modo ventana, por si el navegador reporta el
-// tamaño anterior (el de fullscreen) en el primer resize tras salir.
+// tamaño anterior (el de fullscreen) en el primer resize tras salir. El
+// retry demorado extra es inocuo e idempotente (cancela lo pendiente).
 game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, () => {
-  window.setTimeout(refreshScale, 100);
+  scaleRetry.retry();
 });
+
+// BUGFIX (CG-preview-fullscreen): en el preview de CrazyGames el fullscreen
+// lo dispara el PORTAL sobre el iframe — Phaser nunca emite
+// ENTER_FULLSCREEN/LEAVE_FULLSCREEN, así que los retries de arriba no corren.
+// El fullscreen del portal se materializa como un 'resize' del iframe, que
+// puede llegar con el tamaño viejo (la race ya documentada en el handler de
+// ENTER_FULLSCREEN); el FIT de Phaser escucha 'resize' y refresca de
+// inmediato contra esas medidas, pero este re-agendado demorado (100/350 ms)
+// vuelve a medir cuando el layout ya asentó. Cancela lo pendiente entre
+// eventos, así los ráfagos de resize no apilan timers.
+window.addEventListener('resize', () => scaleRetry.retry());
 
 // AUDITORÍA DE AUDIO: AudioService requiere la instancia de Phaser.Game
 // (no de una Scene puntual) para poder vivir más allá del ciclo de vida
