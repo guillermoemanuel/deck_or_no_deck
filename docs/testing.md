@@ -1,6 +1,16 @@
 # Testing
 
-> Estado al **2026-10-11** (cierre **tienda móvil: modo compacto con scroll**, ADR-017):
+> Estado al **2026-10-12** (fix **fullscreen en el preview de CrazyGames**, commit
+> `2ec91a6`): **65 suites · 721 tests** — verdes en los 4 gates (`npx jest
+> src/infrastructure/display` 6/6 · typecheck 0 · lint 0 · `npm test` OK), reviewer
+> **APROBADO** (1 MINOR aplicado + 3 NITs sin acción). Desglose: **+1 suite / +6
+> tests** — spec nuevo `infrastructure/display/scaleResizeRetry.spec.ts` (6 tests
+> red→verde, escrito antes que la implementación) → **65/721**; recount estático de
+> este cierre: **65 archivos `*.spec.ts`** medidos con glob.
+> Smoke de escucha **aprobado 2026-10-10** — §5, ítem 12; **smoke visual del tab Mazos
+> PENDIENTE** — §5, ítem 13; **smoke de la tienda en móvil PENDIENTE** — §5, ítem 14;
+> **smoke de fullscreen en el preview de CrazyGames PENDIENTE** — §5, ítem 15.
+> Cierre previo (2026-10-11, cierre **tienda móvil: modo compacto con scroll**, ADR-017):
 > **64 suites · 715 tests** — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test`
 > OK) en los 2 commits (`6bd9b24` ShopLayout + spec · `788870f` ScrollableList +
 > integración en ShopScene), reviewer **APROBADO** en ambos. Desglose desde el cierre
@@ -103,7 +113,7 @@ npm run lint                  # eslint src
 |---|---|---|---|
 | `domain/` | 20 | alta (umbral 88/80/90/88) | 🟢 incluye `FirstRoundDealStreak.spec` (20 tests) y `FirstRoundDealStreak.farming.spec` (3 tests de simulación con semilla fija, ADR-014) |
 | `application/` | 16 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014; **desde ADR-016** `ListAvailableDecksUseCase.spec` (5) y `PurchaseDeckUseCase.spec` (6) |
-| `infrastructure/` | 11 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (9 tests — era 5, +4 de ADR-015: volumen por clave, anti-apilado <40 ms, `warnMissing`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
+| `infrastructure/` | 12 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (9 tests — era 5, +4 de ADR-015: volumen por clave, anti-apilado <40 ms, `warnMissing`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; de display **`scaleResizeRetry.spec` (6 tests, 2026-10-12: fix fullscreen en el preview CG)**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
 | `shared/` | 6 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) y `shared/audio/AudioData.spec` **(4, nuevo desde ADR-015)**: guardián del manifiesto — paridad símbolo ↔ manifest 23 = 23, sin claves duplicadas, mp3 físicos con `fs.existsSync` |
 | `presentation/` | 11 | casi nada (fuera del collector) | 🔴 ver §5 — specs: **`layout/ShopLayout.spec` (23 — ADR-017: congela la geometría de escritorio y valida el modo compacto)**, `DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7 — ADR-016)**, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado) y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (7 — desde ADR-017: +3 del guard `shouldPlay`)**; el resto de escenas sin test — **`ScrollableList` quedó sin spec** (su geometría la cubre `ShopLayout.spec`; el comportamiento de puntero va al smoke §5 ítem 14) |
 
@@ -275,6 +285,20 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     - **táctiles ≥44 px físicos**: pestañas, ✕ y botones se clickean cómodos en touch;
     - **EN↔ES en compact** refresca descripciones, nombres, precios y botones
       (mediciones post-piso, sin texto pisado).
+15. **Smoke de fullscreen en el preview de CrazyGames (fix `2ec91a6`)** —
+    **PENDIENTE de ejecutar** (nuevo el 2026-10-12; `scaleResizeRetry.spec` (6)
+    cubre el helper puro, pero la señal del portal solo existe en vivo):
+    - abrir el **preview de CrazyGames** y apretar el **fullscreen del portal** →
+      el canvas **llena la pantalla sin barras negras** en ≤ ~500 ms (retry
+      100/350 ms — en modo `crazygames` la señal llega por `window.resize` /
+      `visualViewport.resize`, no por eventos de Phaser);
+    - **salir y re-entrar** del fullscreen: sin barras en ninguna de las dos
+      direcciones;
+    - **regresión local**: en desktop con botón propio (`VITE_ADS=portal`/`none` +
+      `VITE_FULLSCREEN=true`) el botón fullscreen sigue funcionando igual — los
+      handlers `ENTER/LEAVE_FULLSCREEN` ahora pasan por el mismo retry;
+    - **resize continuo** (arrastrar la ventana / rotar) **no** apila timers (el
+      retry cancela lo pendiente antes de re-programar).
 
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección
@@ -282,8 +306,9 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 **1-4 y 9-11**
 el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
 penalidad −5000 que puede dejar saldo negativo, bono periódico forzado); ítem **12**
-(smoke de escucha) verificado 2026-10-10; ítem **13** (tab Mazos, ADR-016) e ítem **14**
-(tienda en móvil / modo compacto, ADR-017) **pendientes de ejecutar**. Notas de esa
+(smoke de escucha) verificado 2026-10-10; ítem **13** (tab Mazos, ADR-016), ítem **14**
+(tienda en móvil / modo compacto, ADR-017) e ítem **15** (fullscreen en el preview de
+CrazyGames, fix `2ec91a6`) **pendientes de ejecutar**. Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
 Duplicar/Triplicar/Revivir porque en el modo default (`VITE_ADS=crazygames`) `main.ts`
 carga el SDK real de CrazyGames **dinámicamente** (`loadCrazyGamesSdk()` — el `<script>`

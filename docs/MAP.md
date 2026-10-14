@@ -4,7 +4,18 @@
 > Peligrosidad = qué tan fácil es romper algo sin que los tests lo atrapen:
 > 🔴 alto (sin tests / lógica oculta / mucha superficie) · 🟡 medio · 🟢 bajo (lógica pura con spec).
 >
-> Fecha del censo: 2026-10-11 (cierre **tienda móvil — modo compacto con scroll**,
+> Fecha del censo: 2026-10-12 (fix **fullscreen en el preview de CrazyGames**, commit
+> `2ec91a6`) · **199 archivos TS · 134 fuente + 65 specs · 30.933 L** — recount por
+> deltas sobre el censo del 2026-10-11, no censo completo: **+2 archivos** (1 fuente +
+> 1 spec) — `infrastructure/display/scaleResizeRetry.ts` (**91 L**) + `.spec.ts`
+> (**212 L**, 6 tests) — y recontado con `read` `main.ts` 389 → **417** (+28, los
+> listeners de `window.resize` / `visualViewport.resize` / `orientationchange` ahora
+> cuelgan del retry); por capa `infrastructure/` 4.169 → **4.472** (12 specs) y raíz
+> 426 → **454**, el resto sin cambios (`domain/` **5.168** · `application/` **4.382** ·
+> `presentation/` **14.982** · `shared/` **1.475**). Conteos globales medidos: **65
+> archivos `*.spec.ts`** con glob · **721 tests** (gate `npm test`; recount: 715 + 6 de
+> `scaleResizeRetry.spec`).
+> Cierre previo — 2026-10-11 (cierre **tienda móvil — modo compacto con scroll**,
 > ADR-017; 2 commits: `6bd9b24` ShopLayout + spec · `788870f` ScrollableList +
 > integración en ShopScene) · **197 archivos TS · 133 fuente + 64 specs · 30.602 L** —
 > recount por deltas sobre el censo COMPLETO del 2026-10-10 (`wc -l`), no censo
@@ -246,7 +257,7 @@
 
 ---
 
-## `src/infrastructure/` — 4.169 líneas · 11 specs · zona de riesgo medio 🟡
+## `src/infrastructure/` — 4.472 líneas · 12 specs · zona de riesgo medio 🟡
 
 | Archivo | LOC | Spec | Nota |
 |---|---|---|---|
@@ -256,6 +267,7 @@
 | `config/resolveAdsMode.ts` | 83 | ✅ 66 L | `VITE_ADS` → modo efectivo: **estricto** — solo los 3 literales exactos (espacios/mayúsculas/typos → default `crazygames` + `console.warn`; `undefined`/vacío → default sin warn). Espejo por construcción del gate plegable de `main.ts` (ADR-007). 🟢 |
 | `config/resolveFullscreenEnabled.ts` | 70 | ✅ 71 L | `VITE_FULLSCREEN` + `adsMode` → booleano del botón fullscreen propio (**pareja invariante de `VITE_ADS`**, ADR-008): default seguro `false` sin env/basura; en `crazygames` **siempre** `false` aunque el env diga `'true'` (se ignora + `console.warn` — la plataforma prohíbe el botón, CG-PUB-002); en `portal`/`none` solo los literales exactos `'true'`/`'false'` (cualquier variante → `false` + warn con el crudo). El flag sale de `main.ts` en el bag `GameServices.fullscreenEnabled` — presentation no lee env directo. 🟢 |
 | `config/resolveMuteAudioOverride.ts` | 34 | ✅ 36 L | **Override local de `?muteAudio=`** (ADR-011, patrón de `resolveFullscreenEnabled`): `true`/`false` si el parámetro está presente y es válido, `null` si no está (**manda el SDK**) o si el valor es basura (`?muteAudio=si`, `TRUE`, vacío → `null` + `console.warn`). `false` sirve para **negar** el mute de plataforma en local y probar en modos sin SDK. 🟢 |
+| `display/scaleResizeRetry.ts` | 91 | ✅ 212 L (6 tests) | **Helper puro de re-agendado del refresh de escala (fix fullscreen en el preview de CrazyGames, `2ec91a6`)**: `createScaleRefreshRetry(refresh, scheduler?)` con `RETRY_DELAYS_MS` [100, 350]; `retry()` **cancela lo pendiente ANTES de re-programar** (los ráfagos de resize no apilan timers) y `dispose()` suelta todo (hoy sin call sites de producción, por diseño); scheduler default en `window.setTimeout`/`clearTimeout` (sin `window` lanza `Error` explicativo). **Sin Phaser ni imports de producción.** Único consumidor: `main.ts`, colgado de `ENTER/LEAVE_FULLSCREEN` (Phaser) + `window.resize` / `visualViewport.resize` / `orientationchange` — en `crazygames` el fullscreen lo dispara el PORTAL sobre el iframe y Phaser no emite evento propio. 🟢 |
 | `persistence/LocalStorageProgressionRepository.ts` | 206 | ✅ 125 L | **Esquema v5** (ADR-014): `migrateIfNeeded()` v3→v5 (todos los campos) y v4→v5 (backfill `firstRoundDealStreak` `(0,0)`); validación al cargar el streak (enteros, rangos → si no, `0/0`); `clearAll`/`createDefault` incluyen el campo. Bloque de comentarios con merge artifact (L17-28). 🟡 |
 | `persistence/ProgressionManager.ts` | 164 | ✅ 285 L | Fachada de meta-progresión + eventos. **Desde ADR-014:** delega `get/setFirstRoundDealStreak` en el repo (sin evento propio). |
 | `audio/AudioService.ts` | 308 | ✅ 184 L | **Desde ADR-011:** capa `platformMuted` (mute de la plataforma) separada del pref `muted`; fuente única `applyMute()` → `sound.mute = muted \|\| platformMuted`; `isMuted()` = **efectivo**; `setPlatformMuted()` es método **concreto** (no está en el puerto `IAudioService`, solo lo llama `main.ts`). Anclado a `Phaser.Game`. **Desde ADR-015:** volumen por clave `(options.volume ?? sfxVolume) × volumenDelManifiesto` (el volumen del manifiesto ya no se ignora), anti-apilado de la misma clave <40 ms (reloj inyectable, exento `sfx-coins-count`), `warnMissing(key)` con la carpeta real según familia, `static preload()` **borrado** (era código muerto con path inexistente). 🟡 |
@@ -355,7 +367,7 @@ agregar un mazo **sin** registrar su efecto no compila) · **11 efectos temátic
 
 | Archivo | Nota |
 |---|---|
-| `main.ts` (389) | Composition root global (inicia `ListAvailableUpgradesUseCase` + **`ListAvailableDecksUseCase` y `PurchaseDeckUseCase`** en el bag, ADR-016) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **mute de la plataforma** `resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, y si no hay override `onMuteAudioChange(→ setPlatformMuted)` (ADR-011: override gana y se saltea la suscripción, funciona en los 3 modos) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`). |
+| `main.ts` (417) | Composition root global (inicia `ListAvailableUpgradesUseCase` + **`ListAvailableDecksUseCase` y `PurchaseDeckUseCase`** en el bag, ADR-016) + **lista `scene` de 11 escenas**, con `AdOverlayScene` y `AdBlockerScene` **al final** (dormidas hasta su primer `start()`, ADR-007 enmienda 2026-10-04 / ADR-010) + **selección del adapter de ads por `VITE_ADS`** vía `resolveAdsMode()` (ADR-007: `crazygames`/`portal`/`none`; en `portal` inyecta el presenter del overlay) + **cable del bloqueador** `onAdLifecycle(createAdBlockerListener(game))` **solo si `adsMode !== 'portal'`** (ADR-010) + **resolución del botón fullscreen propio** `resolveFullscreenEnabled(VITE_FULLSCREEN, adsMode)` → campo `fullscreenEnabled` del bag (ADR-008: el modo manda, default `false`) + **mute de la plataforma** `resolveMuteAudioOverride(window.location.search)` → `setPlatformMuted()`, y si no hay override `onMuteAudioChange(→ setPlatformMuted)` (ADR-011: override gana y se saltea la suscripción, funciona en los 3 modos) + **carga dinámica** del SDK de CrazyGames (`loadCrazyGamesSdk()`, solo modo `crazygames`; el `<script>` salió de `index.html`) + `beforeunload` (gameplayStop + penalidad de abandono con `LOSS_PENALTY_AMOUNT`) + **retry del refresh de escala** `createScaleRefreshRetry` (fix fullscreen en el preview CG, `2ec91a6`): `ENTER/LEAVE_FULLSCREEN` de Phaser re-agendan el refresh vía `scaleRetry.retry()` y lo mismo cuelga de `window.resize` / `visualViewport.resize` / `orientationchange` (donde llega la señal cuando el fullscreen lo dispara el portal). |
 | `vite-env.d.ts` (37) | Tipos de `import.meta.env` con `VITE_ADS?: 'crazygames' \| 'portal' \| 'none'` y `VITE_FULLSCREEN?: 'true' \| 'false'` — **sin lógica** (la validación vive en `resolveAdsMode.ts` y `resolveFullscreenEnabled.ts`, ADR-007/008). Script global a propósito (fusión con `vite/client`). |
 | `index.html` | **Ya NO carga el SDK** (desde ADR-007 el `<script>` de CrazyGames salió de acá — ver `loadCrazyGamesSdk()` en `main.ts`) + overlay "gira el dispositivo". |
 | `vite.config.ts` | `base: './'`, esbuild (no terser), `manualChunks` → `phaser-vendor`. |

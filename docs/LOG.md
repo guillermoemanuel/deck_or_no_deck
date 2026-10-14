@@ -7,6 +7,69 @@
 
 ---
 
+## 2026-10-12 · Fix fullscreen en preview CrazyGames (retry de resize colgado de window.resize)
+
+**Qué se tocó (código: commit `2ec91a6`; docs: esta sesión):**
+
+1. **`src/infrastructure/display/scaleResizeRetry.ts` (91 L, NUEVO) +
+   `scaleResizeRetry.spec.ts` (212 L, NUEVO, 6 tests — escrito por test-engineer
+   ANTES de la implementación):** helper **puro** (sin Phaser ni imports de
+   producción) `createScaleRefreshRetry(refresh, scheduler?)` con
+   `RETRY_DELAYS_MS = [100, 350]`: `retry()` **cancela lo pendiente ANTES de
+   re-programar** (re-armado sin apilar timers durante resize continuo),
+   `dispose()` suelta todo (hoy sin call sites de producción, por diseño);
+   scheduler default `window.setTimeout`/`clearTimeout` que lanza `Error` con
+   "window" si no hay `window`.
+2. **`main.ts` (389 → 417 L, +28):** `ENTER/LEAVE_FULLSCREEN` de Phaser pasan a
+   usar `scaleRetry.retry()` (reemplazan los `window.setTimeout(refreshScale,
+   100/350)` sueltos) y se agregan listeners NUEVOS en `window.resize`,
+   `visualViewport.resize` (junto al refresh inmediato de iOS) y
+   `orientationchange` (antes un setTimeout suelto de 300 ms — MINOR del
+   reviewer, aplicado).
+
+**Causa raíz:** en el preview de CrazyGames el fullscreen lo dispara el PORTAL
+sobre el iframe; en modo `crazygames` el botón fullscreen propio está prohibido
+(ADR-008) → Phaser nunca pide fullscreen → nunca emite
+`ENTER/LEAVE_FULLSCREEN` → los retries no corrían → el primer resize del iframe
+llegaba con el tamaño viejo (race ya documentada en el handler de
+`ENTER_FULLSCREEN`) → FIT con medidas stale → canvas chico centrado con barras
+negras.
+
+**Cómo se verificó:** gates corridos por el orquestador —
+`npx jest src/infrastructure/display` **6/6** · `npm run typecheck` **0** ·
+`npm run lint` **0** · `npm test` **65 suites / 721 tests** (base 64/715 + el
+spec nuevo). Reviewer **APROBADO** (1 MINOR aplicado — `orientationchange`
+routeado por el retry; 3 NITs sin acción: LEAVE ahora programa 100+350 y antes
+solo 100 — idempotente y comentado; riesgo residual si el portal asienta >350 ms
+sin resize posterior; `dispose()` sin uso por diseño). Recount de este cierre:
+**65 archivos `*.spec.ts`** con glob · `main.ts` **417 L** con `read` ·
+`scaleResizeRetry.spec.ts` con grep: **6 `it(`**. Este commit de docs **no tocó
+`src/`**; la sesión no tiene shell estable, por eso los gates citados son los del
+commit de código y los conteos salen de `read`/`glob`/`grep`.
+
+**Docs (esta sesión):** `docs/LOG.md` (esta entrada) · `docs/testing.md`
+(conteos 65/721 + **ítem 15 de §5: smoke de fullscreen en el preview CG —
+PENDIENTE**) · `docs/MAP.md` (censo: **199 archivos TS · 134 fuente + 65 specs ·
+30.933 L**; fila nueva `display/scaleResizeRetry.ts`) · `AGENTS.md` (§1: typecheck
+incluye los 65 specs). `docs/PLAYBOOK.md` sin cambios (el riesgo >350 ms queda
+registrado en LOG/testing, no como deuda de diseño).
+
+**Pendientes:**
+
+- **(a) Smoke del usuario:** preview CG → fullscreen del portal debe llenar la
+  pantalla sin barras a los ~350 ms (`testing.md` §5, ítem 15).
+- **(b) 404 de assets en el build del CDN (del usuario):** se sondeó el CDN build
+  `1` (`deck-or-no-deck-flq.game-files.crazygames.com/deck-or-no-deck-flq/1/`):
+  **7 fronts dan 404** (`card-front-{basic,chess,cyberpunk,egypt,glacier,medieval,ovni}.png`)
+  mientras el dist local está completo (22/22) y el JS del CDN coincide con el
+  build local → zip/subida incompleto: el usuario debe verificar el zip y
+  re-subir.
+- **(c) Informativo:** la consola del preview trae muchos logs que **NO** son del
+  juego (React #418, Workbox/service-worker, GPT, [Portal]/[GameFrame] — todo de
+  la plataforma CrazyGames).
+- **(d) Riesgo residual aceptado:** portal que asienta >350 ms sin resize
+  posterior queda fuera del retry.
+
 ## 2026-10-11 · Tienda móvil: modo compacto con scroll (ShopLayout + ScrollableList)
 
 **Qué se tocó (2 commits de código, en este orden):**
