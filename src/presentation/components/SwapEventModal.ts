@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { LocalizedText } from './LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts / ResultScene.ts — mismos valores hex, para que este
@@ -30,6 +30,10 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
  * de forma simbólica en vez de sobre un sprite concreto.
  */
 export class SwapEventModal extends Phaser.GameObjects.Container {
+  private readonly keepBtn: Phaser.GameObjects.Container;
+  private readonly swapBtn: Phaser.GameObjects.Container;
+  // Teclado PC (Fase 7): índice de botón enfocado (0 = Mantener, 1 = Cambiar).
+  private focusedButtonIndex = 0;
   constructor(scene: Phaser.Scene, private readonly audio?: IAudioService) {
     const cx = scene.cameras.main.centerX;
     const cy = scene.cameras.main.centerY;
@@ -101,6 +105,8 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     );
 
     this.add([backdrop, panelBg, innerFrame, glow, titleText, bodyText, keepBtn, swapBtn]);
+    this.keepBtn = keepBtn;
+    this.swapBtn = swapBtn;
     scene.add.existing(this);
 
     // Animación de entrada
@@ -113,6 +119,57 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
       duration: 220,
       ease: 'Back.easeOut'
     });
+  }
+
+  /**
+   * Teclado PC (Fase 7): mueve el foco de botón una posición a la izqda
+   * o drcha. Se detiene en el borde (índice 0 ó 1); no hay enrollamiento.
+   * El resaltado usa el mismo glow que el hover del ratón, así el efecto
+   * visual es idéntico tanto con puntero como con flechas.
+   */
+  moveFocus(dir: 'left' | 'right'): void {
+    if (dir === 'left') {
+      if (this.focusedButtonIndex > 0) this.focusedButtonIndex--;
+    } else {
+      if (this.focusedButtonIndex < 1) this.focusedButtonIndex++;
+    }
+    this.highlightFocusedButton();
+  }
+
+  /**
+   * Teclado PC (Fase 7): activa el botón enfocado — idéntico efecto que
+   * el `pointerup` del ratón: emite el evento correspondiente ('swap-declined'
+   * o 'swap-accepted-choose-card') y cierra el modal. El sonido va por
+   * `playUiClick` (punto único ADR-015), paridad con el click del ratón.
+   */
+  activateFocusedButton(): void {
+    playUiClick(this.audio);
+    if (this.focusedButtonIndex === 0) {
+      this.onDecline();
+    } else {
+      this.onAcceptSwap();
+    }
+  }
+
+  private highlightFocusedButton(): void {
+    // Apaga el glow de ambos botones.
+    ;(this.keepBtn as any).children.forEach((child: any) => {
+      try { child.setAlpha(0); } catch {}
+    });
+    ;(this.swapBtn as any).children.forEach((child: any) => {
+      try { child.setAlpha(0); } catch {}
+    });
+    // Enciende el glow del botón enfocado.
+    const glowGfx = this.focusedButtonIndex === 0
+      ? (this.keepBtn as any).children.find(
+          (c: any) => 'setAlpha' in c
+        ) as Phaser.GameObjects.Graphics
+      : (this.swapBtn as any).children.find(
+          (c: any) => 'setAlpha' in c
+        ) as Phaser.GameObjects.Graphics;
+    if (glowGfx) {
+      glowGfx.setAlpha(0.4);
+    }
   }
 
   private onDecline(): void {
