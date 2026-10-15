@@ -1,22 +1,36 @@
 # Testing
 
-> Estado al **2026-10-12** (fix **fullscreen en el preview de CrazyGames**, commit
+> Estado al **2026-10-13** (**controles de teclado PC** — 5 commits `b7093a3` ·
+> `b721163` · `d90d8a6` · `f42b926` · `c150b87`, ADR-018): **69 suites · 772 tests**
+> — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test` OK). El desglose de los
+> 4 specs nuevos y de los specs que crecieron está en la nota **2026-10-13** más
+> abajo; recount estático de este cierre: **69 archivos `*.spec.ts`** medidos con
+> glob por capa (domain 20 · application 16 · infrastructure 12 · shared 6 ·
+> presentation 15).
+> Cierre previo (2026-10-12, fix **fullscreen en el preview de CrazyGames**, commit
 > `2ec91a6`): **65 suites · 721 tests** — verdes en los 4 gates (`npx jest
 > src/infrastructure/display` 6/6 · typecheck 0 · lint 0 · `npm test` OK), reviewer
 > **APROBADO** (1 MINOR aplicado + 3 NITs sin acción). Desglose: **+1 suite / +6
 > tests** — spec nuevo `infrastructure/display/scaleResizeRetry.spec.ts` (6 tests
 > red→verde, escrito antes que la implementación) → **65/721**; recount estático de
-> este cierre: **65 archivos `*.spec.ts`** medidos con glob.
-> **2026-10-13 · +2 suites de controles de teclado PC (Fase 1 y 3):**
-> `presentation/input/KeyboardNavigation.spec.ts` (**20 tests** — núcleo puro de
-> foco: `nextFocusIndex` euclídeo + `bindKeys`, rojo→verde en la Fase 1) y
-> `presentation/components/CardView.spec.ts` (**9 tests** — gaps `isLocked()` /
-> `setKeyboardFocus()` de la Fase 3, escritos rojos y volcados a verde el mismo
-> día; el spec se tipa contra el contrato, así que typecheck/lint nunca cayeron).
-> Recount de este cierre: **67 archivos `*.spec.ts` · 755 tests**.
-> Smoke de escucha **aprobado 2026-10-10** — §5, ítem 12; **smoke visual del tab Mazos
-> PENDIENTE** — §5, ítem 13; **smoke de la tienda en móvil PENDIENTE** — §5, ítem 14;
-> **smoke de fullscreen en el preview de CrazyGames PENDIENTE** — §5, ítem 15.
+> ese cierre: **65 archivos `*.spec.ts`** medidos con glob.
+> **2026-10-13 · controles de teclado PC (5 commits — `b7093a3`·`b721163`·`d90d8a6`·`f42b926`·`c150b87`):**
+> **+4 suites nuevas** — `presentation/input/KeyboardNavigation.spec.ts`
+> (**20 tests** — núcleo puro de foco: `nextFocusIndex` euclídeo + `bindKeys`,
+> rojo→verde en la Fase 1), `presentation/components/CardView.spec.ts`
+> (**13 tests** — gaps `isLocked()` / `setKeyboardFocus()` de la Fase 3; arrancó
+> con 9 y creció con los fixes de revisión, el spec se tipa contra el contrato,
+> así que typecheck/lint nunca cayeron), `presentation/layout/ShopLayout.scrollOffsetToReveal.spec.ts`
+> (**7 tests** — Fase 4, rojo por TS2305) y `presentation/components/BankerOfferPanel.spec.ts`
+> (**6 tests** — guard `exitStarted`, Fase 5); además **specs existentes crecieron**:
+> `UiSfx.spec` 7 → **10** y `SoundFullscreenControls.spec` 4 → **6** (los refactors
+> previos de la Fase 2). Recount de este cierre: **69 archivos `*.spec.ts` · 772
+> tests** (domain 20 · application 16 · infrastructure 12 · shared 6 ·
+> presentation **15**). Smoke de escucha **aprobado 2026-10-10** — §5, ítem 12;
+> **smoke visual del tab Mazos PENDIENTE** — §5, ítem 13; **smoke de la tienda en
+> móvil PENDIENTE** — §5, ítem 14; **smoke de fullscreen en el preview de
+> CrazyGames PENDIENTE** — §5, ítem 15; **smoke de teclado PC PENDIENTE** — §5,
+> **ítems 16-26**.
 > Cierre previo (2026-10-11, cierre **tienda móvil: modo compacto con scroll**, ADR-017):
 > **64 suites · 715 tests** — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test`
 > OK) en los 2 commits (`6bd9b24` ShopLayout + spec · `788870f` ScrollableList +
@@ -122,7 +136,7 @@ npm run lint                  # eslint src
 | `application/` | 16 | alta (umbral 88/82/90/88, nuevo en Fase 4) | 🟢 incluye `FirstRoundDealStreakTracker.spec` (13) y `RecordFirstRoundDealOutcomeUseCase.spec` (7) — ADR-014; **desde ADR-016** `ListAvailableDecksUseCase.spec` (5) y `PurchaseDeckUseCase.spec` (6) |
 | `infrastructure/` | 12 | parcial | 🟡 sin spec: `jsonStorage`, `CryptoRandomProvider` (+7 specs: 3 con ADR-007 — `resolveAdsMode`, `RewardCooldownTracker`, `OwnRewardedAdService` — `resolveFullscreenEnabled` con ADR-008 (5 tests) y de ADR-011 **`AudioService.spec` (9 tests — era 5, +4 de ADR-015: volumen por clave, anti-apilado <40 ms, `warnMissing`)** y **`resolveMuteAudioOverride.spec` (4 tests)** — con eso `infrastructure/config` quedó en **3 specs / 16 tests**; de display **`scaleResizeRetry.spec` (6 tests, 2026-10-12: fix fullscreen en el preview CG)**; y **`LocalStorageProgressionRepository.spec` (ADR-014: migraciones v3→v5/v4→v5, saneo del streak, `clearAll`)** que cerró el hueco que este renglón declaraba |
 | `shared/` | 6 | buena | 🟢 `LanguageData.spec` con **6 tests** (+1 de CG-MON-005: toda mejora con `requiresRewardedAd` declara el requisito de ad en su descripción, EN y ES) y `shared/audio/AudioData.spec` **(4, nuevo desde ADR-015)**: guardián del manifiesto — paridad símbolo ↔ manifest 23 = 23, sin claves duplicadas, mp3 físicos con `fs.existsSync` |
-| `presentation/` | 13 | casi nada (fuera del collector) | 🔴 ver §5 — specs: **`layout/ShopLayout.spec` (23 — ADR-017: congela la geometría de escritorio y valida el modo compacto)**, `DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7 — ADR-016)**, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (4 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado), **`components/CardView.spec` (9 — gaps `isLocked()`/`setKeyboardFocus()` de la Fase 3 de teclado)**, **`input/KeyboardNavigation.spec` (20 — núcleo puro de foco de la Fase 1)** y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (7 — desde ADR-017: +3 del guard `shouldPlay`)**; el resto de escenas sin test — **`ScrollableList` quedó sin spec** (su geometría la cubre `ShopLayout.spec`; el comportamiento de puntero va al smoke §5 ítem 14) |
+| `presentation/` | 15 | casi nada (fuera del collector) | 🔴 ver §5 — specs: **`layout/ShopLayout.spec` (23 — ADR-017: congela la geometría de escritorio y valida el modo compacto)**, **`layout/ShopLayout.scrollOffsetToReveal.spec` (7 — teclado Fase 4: scroll-into-view de la fila enfocada)**, `DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7 — ADR-016)**, `AdOverlayScene.resolution.spec` (lógica pura), `AdOverlayScene.spec.ts` (3 tests, mock de `'phaser'` en node), `AdBlockerScene.spec.ts` (5 tests del listener, mock de `'phaser'` en node; ADR-010), `SoundFullscreenControls.spec` (6 tests, mock de `'phaser'` + `HudIconButton` al estilo del anterior; ADR-008 — incluye la regresión del botón heredado y, desde la Fase 2 de teclado, `toggleMuted()` público + su delegación), **`components/CardView.spec` (13 — gaps `isLocked()`/`setKeyboardFocus()` de la Fase 3 de teclado)**, **`components/BankerOfferPanel.spec` (6 — guard `exitStarted` compartido ratón/teclado, Fase 5)**, **`input/KeyboardNavigation.spec` (20 — núcleo puro de foco de la Fase 1)** y desde ADR-015 **`audio/GameplaySfx.spec` (19) · `audio/GameplaySoundtrack.spec` (14) · `audio/HeartbeatLoop.spec` (7)** (módulos puros con `createFakeScheduler()` — 40 tests en total) y **`audio/UiSfx.spec` (10 — desde ADR-017: +3 del guard `shouldPlay`; desde la Fase 2: +3 de `playUiClick`)**; el resto de escenas sin test — **`ScrollableList` quedó sin spec** (su geometría la cubre `ShopLayout.spec`; el comportamiento de puntero va al smoke §5 ítem 14) |
 
 ---
 
@@ -137,6 +151,7 @@ npm run lint                  # eslint src
 | `DeterministicRandomProvider` | ídem | shuffle invertido o `fixedOrder` → tableros deterministas |
 | `createFakeScheduler()` | `presentation/audio/testing/` | reloj falso para `HeartbeatLoop`/`GameplaySoundtrack`: timers armados a mano (`fake.timers`, `activeTimers()`, `callback()`), cancelaciones visibles — ADR-015 |
 | `createFakeScene()` · `createCard()` | helper inline en `presentation/components/CardView.spec.ts` | scene falsa de Phaser para la `CardView` REAL: glow con `strokeAlpha` observable (lo que refleja `setStrokeStyle`), sprite con flag `interactive` + `handlers` de puntero registrados (para disparar el hover a mano), `tweens.add` contable — va de la mano con el mock mínimo de `'phaser'` (`GameObjects.Container`, porque CardView lo extiende) |
+| `completePendingTweens()` | helper inline en `presentation/components/BankerOfferPanel.spec.ts` | descarga la cola de tweens a mano **por lotes** (los callbacks anidan: el `onComplete` del botón recién ahí pide el tween de salida) — permite simular "durante el tween de salida" y observar el emit; sostiene los **6 tests** del guard `exitStarted` (**guard exitStarted: doble-fire ratón/teclado**, tween de 150 ms drenado, emite exactamente una vez). Mismo patrón de mock mínimo de `'phaser'` que `CardView.spec` (el panel extiende `GameObjects.Container`, cuyo `emit` es un `jest.fn` por instancia) |
 | `collectEvents(bus)` | `application/use-cases/testing/` | acumula eventos para asserts de secuencia (usado en 6 de 8 specs de use-cases) |
 | `installStorage()` | helper en `LocalStorageRecordsRepositories.spec.ts` | `window.localStorage` con Map |
 | `installFakeSdk()` + `flushMicrotasks()` | helper en `CrazyGamesService.spec.ts` | SDK falso con callbacks disparados a mano + fake timers |
@@ -169,13 +184,17 @@ dependen del ciclo de vida de Phaser y un test ahí sería mayormente mocks. Lo 
 testea en `presentation/` es **lógica pura o componentes con `'phaser'` mockeado en node**
 (`DeckCelebrationEffect.spec`, **`ChessCardScatterEffect.spec` (7, ADR-016)**, `AdOverlayScene.resolution.spec`, `AdOverlayScene.spec`,
 `AdBlockerScene.spec` — solo el cable `createAdBlockerListener`, ADR-010 —,
-`SoundFullscreenControls.spec` — este último reproduce el bug CG-PUB-002 —, **`components/CardView.spec` (9 — cubre `isLocked()`/`setKeyboardFocus()`)**, **`input/KeyboardNavigation.spec` (20 — módulo puro `nextFocusIndex`/`bindKeys`, sin Phaser)**, desde ADR-017
-**`layout/ShopLayout.spec` (23 — geometría de la tienda, helper puro sin Phaser)**, y
+`SoundFullscreenControls.spec` (6) — este último reproduce el bug CG-PUB-002 —, **`components/CardView.spec` (13 — cubre `isLocked()`/`setKeyboardFocus()`)**, **`components/BankerOfferPanel.spec` (6 — guard `exitStarted`, Fase 5 de teclado)**, **`input/KeyboardNavigation.spec` (20 — módulo puro `nextFocusIndex`/`bindKeys`, sin Phaser)**, desde ADR-017
+**`layout/ShopLayout.spec` (23 — geometría de la tienda, helper puro sin Phaser)**,
+**`layout/ShopLayout.scrollOffsetToReveal.spec` (7 — teclado Fase 4, helper puro)**, y
 desde ADR-015
 los módulos puros de `presentation/audio/`: `GameplaySfx.spec`, `GameplaySoundtrack.spec`,
-`HeartbeatLoop.spec` con `createFakeScheduler()` y `UiSfx.spec`). **`ScrollableList` quedó
+`HeartbeatLoop.spec` con `createFakeScheduler()` y `UiSfx.spec` (10)). **`ScrollableList` quedó
 sin spec** (ADR-017): su comportamiento de puntero (drag/rueda/wasDragging) solo lo cubre
-el smoke del ítem 14.
+el smoke del ítem 14. Con **ADR-018** (controles de teclado) el mismo criterio dejó el
+**wiring por escena sin test**: lo testeable se extrajo a `presentation/input/` (46 tests
+en specs nuevos: 20 + 13 + 7 + 6) y el resto lo cubre el **smoke de teclado PC, ítems
+16-26**.
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
 testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el
@@ -308,6 +327,44 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
     - **resize continuo** (arrastrar la ventana / rotar) **no** apila timers (el
       retry cancela lo pendiente antes de re-programar).
 
+**Smoke de controles de teclado PC (ADR-018) — ítems 16-26: PENDIENTES de
+ejecutar, sin excepción** (nuevo 2026-10-13; los 4 specs nuevos cubren el núcleo
+puro, el **wiring por escena no tiene test** — esto es lo que lo verifica):
+
+16. **Menú principal** *(PENDIENTE)*: ↑↓ mueven el foco, ENTER activa la
+    opción enfocada, N/M cambian idioma, S silencia — y **mantener S ~1 s no debe
+    flashear** (guard `event.repeat`).
+17. **Menú con el modal "Nuevo Juego" abierto** *(PENDIENTE)*: ↑↓/ENTER/N/M/S
+    **inertes**, solo cierra ESC (del diálogo).
+18. **Partida** *(PENDIENTE)*: ↑↓←→ recorren la **selección secreta** (13
+    cartas) y el **tablero** (12); ENTER abre la carta enfocada; carta ya
+    **revelada/bloqueada no responde**; el foco salta a la primera habilitada.
+19. **Partida con el modal del banquero** *(PENDIENTE)*: ENTER = **TRATO** —
+    una sola vez aunque se pulse **doble**; ESC = **NO TRATO**; **ESC sin panel no
+    hace nada**; durante el delay de 1800 ms ENTER/ESC **inertes**.
+20. **UIScene** *(PENDIENTE)*: con la **tienda abierta** Z/X/C/S/ESC son
+    **inertes** (overlay); ESC cierra en el orden tienda → bono → modal de salida;
+    el **modal de salida** se opera con ↑↓ (alterna), ENTER (confirma/cancela) y
+    ESC (cancela).
+21. **Tienda** *(PENDIENTE)*: ↑↓ cambia de fila, ←→ cambia de tab (**resetea
+    el foco**), ENTER compra (**fila ya comprada = inerte y muda**, paridad con el
+    ratón), ESC cierra (paridad con la ✕); en **modo compacto**, enfocar una fila
+    fuera de ventana hace **auto-scroll** (`scrollOffsetToReveal`).
+22. **HowToPlay** *(PENDIENTE)*: ←/→ cambian de paso, ESPACIO vuelve al menú
+    **sin scrollear la página**, S silencia.
+23. **DeckSelection** *(PENDIENTE)*: ←/→ recorren los mazos con **wrap
+    circular** (highlight y preview siguen, **sin sonido** al navegar), ENTER
+    acepta el mazo, S silencia.
+24. **ResultScene** *(PENDIENTE)*: ↑↓←→ entre los botones **vivos**
+    (deshabilitados omitidos), ENTER dispara **UNA sola vez** (doble ENTER no
+    duplica el ad); **regresión del BLOCKER**: tras comprar multiply y caer en
+    `ads_cooldown`, ENTER en "Jugar de nuevo" **SÍ funciona**; el ratón sigue
+    intacto.
+25. **Foco vs hover** *(PENDIENTE)*: pasar el ratón sobre un botón con foco de
+    teclado — al salir, el glow **vuelve al estado correcto** (comparten tween).
+26. **Transiciones** *(PENDIENTE)*: de menú a partida y viceversa las flechas
+    **no scrollean la página** (captures `add`/`remove` simétricas).
+
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección
 *Smoke general del Sprint B* más abajo). Los **11 ítems verificados en vivo** — ítems
@@ -315,8 +372,9 @@ Además: **smoke manual** por feature (checklist sugerido, ~5 min):
 el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, abandono con
 penalidad −5000 que puede dejar saldo negativo, bono periódico forzado); ítem **12**
 (smoke de escucha) verificado 2026-10-10; ítem **13** (tab Mazos, ADR-016), ítem **14**
-(tienda en móvil / modo compacto, ADR-017) e ítem **15** (fullscreen en el preview de
-CrazyGames, fix `2ec91a6`) **pendientes de ejecutar**. Notas de esa
+(tienda en móvil / modo compacto, ADR-017), ítem **15** (fullscreen en el preview de
+CrazyGames, fix `2ec91a6`) e **ítems 16-26** (controles de teclado PC, ADR-018)
+**pendientes de ejecutar**. Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
 Duplicar/Triplicar/Revivir porque en el modo default (`VITE_ADS=crazygames`) `main.ts`
 carga el SDK real de CrazyGames **dinámicamente** (`loadCrazyGamesSdk()` — el `<script>`

@@ -1,0 +1,110 @@
+# ADR-018: Controles de teclado PC — foco por geometría, callbacks directos y guards anti-modal
+
+**Estado:** Aceptada · **Registrada:** 2026-10-13 · **Unidad:** controles de teclado PC
+(5 commits: `b7093a3` núcleo puro · `b721163` menú · `d90d8a6` partida · `f42b926`
+tienda · `c150b87` tutoriales/resultado/banquero)
+
+## Contexto
+
+El juego corre en web desktop (1280×720 fijo, coordenadas de diseño) y hasta ahora
+**solo se jugaba con el ratón**: flechas de scroll de página, tabulación nativa y
+pointer. Tres restricciones condicionaron todo el diseño:
+
+- **Phaser emite `keydown` en TODA escena RUNNING.** El teclado no "pertenecce" a una
+  escena: con varias escenas vivas (partida + `UIScene`, modal sobre escena, overlay
+  de ad) un handler suelto se dispara desde la escena equivocada. El riesgo no era
+  escribir el teclado, era escribirlo **sin saber quién está arriba**.
+- **Las escenas de `presentation/` no tienen test** (decisión mantenida): el wiring
+  solo podía verificarlo el smoke manual, así que la lógica con valor testeable
+  (`nextFocusIndex`, `bindKeys`) tenía que vivir **fuera** de la escena.
+- **Phaser no tiene navegación por foco**: no hay "widget enfocado", solo objetos
+  interactivos con pointer. Reutilizar el hover existente era el único camino sin
+  rediseñar la UI de 8+ escenas.
+
+## Decisión
+
+- **(a) Núcleo puro en `src/presentation/input/`** — sin Phaser ni DOM:
+  - `KeyboardNavigation.ts`: **`nextFocusIndex(items, currentIndex, direction)`**
+    elige el candidato **habilitado** del lado correcto del eje primario con **menor
+    distancia euclídea** (`Math.hypot`), no el de menor índice — así "abajo" desde la
+    esquina superior derecha de una grilla cae en la celda de abajo; **empate → menor
+    índice**; fuera de rango (nada enfocado `-1`, índice residual tras re-render) →
+    `firstEnabledIndex`; sin candidatos → índice actual; lista vacía → `-1`. El item
+    ACTUAL puede estar deshabilitado: solo se filtran los candidatos.
+  - `KeyBindings.ts`: **`bindKeys(target, bindings)`** registra cada handler como
+    `'keydown-<KEY>'` con **la MISMA referencia** (sin wrapper — la igualdad
+    referencial on/off es contrato, AGENTS §5) y devuelve `unsubscribe()` idempotente
+    con los pares exactos; target nullish → noop seguro. El handler recibe el evento
+    de Phaser (`(...args: never[])`) para poder leer `event.repeat`.
+  - Spec propio: `KeyboardNavigation.spec.ts` (20 tests, rojo→verde en la Fase 1).
+- **(b) El foco REUTILIZA el highlight del hover** (no hay segundo estilo visual):
+  `CardView.setKeyboardFocus()` con **dueño único** del highlight
+  (`pointerHovered || keyboardFocused` — si cada dueño apagara lo suyo, el hover y el
+  foco se pisaban); en los botones de escena, closures compartidas entre ratón y
+  teclado (`ResultScene`, `BankerOfferPanel`, tienda). Mismo tween, misma escala.
+- **(c) Los handlers invocan los MISMOS callbacks/emits que el ratón — nunca un
+  pointer sintético.** `pointerup` fabricado a mano **revienta** con `pointer`
+  undefined en el `dragGuard` de `ShopScene` (`wasDragging`), y además duplicaría el
+  camino de negocio. ENTER en una carta emite `'card-clicked'`; en la tienda llama
+  `attemptPurchase*` directo; en `ResultScene` invoca la closure `onClick`; en el
+  banquero, `keyboardAcceptOffer`/`keyboardRejectOffer` → el MISMO emit que el click.
+- **(d) Sonido SOLO al activar**, vía `UiSfx.playUiClick` (punto único, ADR-015):
+  mover el foco con las flechas es silencioso; el foco no es un hover más.
+- **(e) Hints invisibles:** cero claves i18n nuevas en las 5 fases (decisión del
+  usuario) — no hay texto en pantalla que explique las teclas.
+- **(f) Guards de teclado, en este orden:**
+  1. **`isForeground()` / `hasActiveOverlayScene()`** con
+     `this.scene.manager.getScenes(true)` — el `ScenePlugin` del repo **no tiene**
+     `getScenes`, hay que ir por el manager; chequeo **explícito** de
+     `AdOverlayScene`/`AdBlockerScene` donde aplique (ex- blocker `isForeground` de la
+     Fase 2, RECHAZADO en review).
+  2. Guard **anti-modal propio** (diálogo/panel abierto → teclas inertes) y
+     guard **anti-overlay** (escena encima → la de abajo no responde).
+  3. **`event.repeat`**: mantener una flecha no repite acciones (mantener S 1 s no
+     flashea).
+  4. **Orden**: el guard de overlay va **primero**; en `GameScene`, ENTER = TRATO se
+     intercepta **antes** del guard `locked` (decisión de producto: la oferta es
+     prioritaria).
+- **(g) `addCapture`/`removeCapture` simétricos por escena** (alta en `create`,
+  baja en `SHUTDOWN`): solo donde el scroll de la página molesta — `MainMenuScene`
+  (UP/DOWN), `GameScene` (4 flechas), `HowToPlayScene` (LEFT/RIGHT/SPACE),
+  `DeckSelectionScene` (LEFT/RIGHT). `ShopScene`/`UIScene`/`ResultScene` decidieron
+  **no** capturar (ya hay capturas de otra escena arriba).
+- **(h) El banquero comparte UNA guarda de salida** (`exitStarted`) entre ratón y
+  teclado: un segundo intento durante el tween de 150 ms no emite dos veces — esto
+  además arregló el doble-click del **ratón** (bug preexistente).
+- **(i) Acciones one-shot con liberación GARANTIZADA**: en `ResultScene`,
+  `kbActionTaken` se libera con `Promise.resolve().finally()` (no por render), porque
+  multiply/revive **no** navegan y dejaban ENTER muerto (BLOCKER de la Fase 5).
+
+## Consecuencias
+
+- **Buena: mismo camino de negocio que el ratón, 0 duplicación de lógica.** Un bug de
+  juego no puede existir "solo en teclado": teclado y ratón terminan en el mismo
+  callback/use-case/emit. Las escenas "tontas" no acumularon lógica de negocio nueva
+  (la orquestación sigue en `GameSceneController`).
+- **Buena: la parte testeable vive en `presentation/input/`** (46 tests en specs
+  nuevos: 20 + 13 + 7 + 6) — lo que no se testea (el wiring) queda para el smoke
+  (`testing.md` §5, ítems 16-26).
+- **Mala: `isForeground`/`hasActiveOverlayScene` está duplicado en 5 escenas**
+  (`MainMenuScene`, `ShopScene`, `ResultScene` / `UIScene`, `GameScene`) — misma
+  semántica, patrón idéntico con `getScenes(true)`. Registro vivo en
+  `PLAYBOOK.md` §1: extraer a `src/presentation/input/` **si aparece una 6.ª**.
+- **Mala: `removeCapture` es global a nivel juego y no tiene refcount** (NIT
+  documentado en el código): dos escenas capturando la misma tecla en paralelo se
+  pisan — por eso las capturas son pocas y simétricas.
+- **Mala: `ConfirmDialog` genérico sigue sin navegación de teclado** (solo ESC lo
+  cierra): los diálogos montados sobre `UIScene` sí tienen ↑↓+ENTER, pero no se
+  extrajo el patrón al componente.
+- **Mala: el hover del ratón apaga temporalmente el glow del foco de teclado** (comparten
+  tween) — cosmético, cubierto por el smoke.
+
+## No decidido / pendiente
+
+- **ConfirmDialog con ↑↓+ENTER** (candidato a "Fase 7"): decidió dejarse fuera para
+  no alargar la Fase 3; el modal de salida de `UIScene` ya funciona como referencia.
+- **Hints de teclas en pantalla**: **decisión del usuario** — se prefirieron hints
+  invisibles (0 claves i18n nuevas). Si se quieren, serían claves nuevas EN+ES y
+  debería revisarse dónde se muestran sin ensuciar el layout de 8 escenas.
+- **ESC en partida sin panel = no-op** (decisión consciente, no bug): no se inventa
+  una salida a menú con ESC.

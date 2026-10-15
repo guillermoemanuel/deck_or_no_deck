@@ -7,6 +7,122 @@
 
 ---
 
+## 2026-10-13 · Controles de teclado PC (6 fases — núcleo puro + wiring por escena)
+
+**Qué se tocó (código: 5 commits, en este orden; docs: esta sesión):**
+
+1. **`b7093a3` — Fase 1, núcleo puro:** `presentation/input/KeyboardNavigation.ts`
+   (**84 L**, NUEVO: `nextFocusIndex` con elección **euclídea** por `Math.hypot` +
+   `firstEnabledIndex`, sin Phaser) · `presentation/input/KeyBindings.ts` (**55 L**,
+   NUEVO: `bindKeys` registra handlers con **referencia única** — wrappers romperían
+   la igualdad referencial on/off del emitter, AGENTS §5) ·
+   `KeyboardNavigation.spec.ts` (**252 L**, NUEVO, **20 tests** rojo→verde).
+2. **`b721163` — Fase 2, menú principal:** `MainMenuScene.ts` 588 → **759** (+171):
+   ↑↓ mueven el foco, ENTER activa invocando **`onClick` directo** (nunca pointer
+   sintético), N/M idioma, S sonido; guards `isForeground`
+   (`this.scene.manager.getScenes(true)`), `newGameDialogOpen` y `event.repeat`.
+   Refactors previos: `UiSfx.playUiClick` (punto único del sonido, ADR-015 —
+   `UiSfx.ts` 55 → **74** y su spec 102 → **134**, 7 → 10 tests) y
+   `SoundFullscreenControls.toggleMuted()` **público** (214 → **227** y su spec 107 →
+   **161**, 4 → 6 tests). **0 claves i18n nuevas**: sin hints en pantalla (decisión
+   del usuario).
+3. **`d90d8a6` — Fase 3, partida:** `GameScene.ts` (+flechas en la selección secreta
+   de 13 cartas y en el tablero de 12; ENTER emite `'card-clicked'` del pointerup;
+   guards swap modal/locked/overlay) · `UIScene.ts` 514 → **751** (+237: Z bono,
+   X tienda, C modal de salida, S sonido y ESC con **política de cierre** —
+   salida→cancelar, bono→`requestClose`, tienda→stop; el modal de salida queda
+   operable con ↑↓+ENTER) · `CardView.ts` 299 → **390** (gaps `isLocked()` /
+   `setKeyboardFocus()` y **dueño único** del highlight `pointerHovered ||
+   keyboardFocused`) · `CardView.spec.ts` (**378 L**, NUEVO, **13 tests**; arrancó
+   con 9 en la Fase 3) · `GameSceneController.ts` (getters `areCardsLocked` /
+   `isSwapModalOpen`) · `PeriodicBonusModal.ts` 272 → **304** (`requestClose()`).
+4. **`f42b926` — Fase 4, tienda:** `ShopScene.ts` 1.310 → **1.679** (+369: ↑↓ filas
+   **reconstruidas por pulsación**, ←→ tabs, ENTER = `attemptPurchase*` **directo**
+   — fila deshabilitada inerte y muda, paridad con el ratón —, ESC = `scene.stop`
+   en paridad con la ✕; guard `isForeground` + `event.repeat`; **sin** `addCapture`,
+   que sería una captura global sin refcount) · `ShopLayout.ts` 587 → **624**
+   (`scrollOffsetToReveal()` nueva) + `ShopLayout.scrollOffsetToReveal.spec.ts`
+   (**100 L**, NUEVO, **7 tests** rojo por TS2305) — scroll-into-view **obligatorio**
+   porque `syncInputToWindow` oculta las filas fuera de la ventana.
+5. **`c150b87` — Fase 5, tutoriales/resultado/banquero:** `HowToPlayScene.ts` 920 →
+   **1.016** (←/→ pasos, ESPACIO/ESC = menú **sin scrollear la página**, ENTER
+   siguiente, S; captures LEFT/RIGHT/SPACE) · `DeckSelectionScene.ts` 496 → **610**
+   (←/→ con **wrap circular** sobre `ownedDeckIds` vía `applyPreviewFocus`, ENTER =
+   `acceptDeckSelection` punto único, S) · `ResultScene.ts` 566 → **772** (foco
+   ↑↓←→ sobre entries con geometría real, ENTER = closure `onClick`,
+   `disableActionButton` marca entries, `isForeground` con chequeo **explícito** de
+   AdOverlay/AdBlocker; `kbActionTaken` se libera con `Promise.resolve().finally()` —
+   FIX del **BLOCKER**: antes era one-shot por render y dejaba ENTER muerto tras
+   multiply/revive que no navegan) · `BankerOfferPanel.ts` 341 → **380**
+   (`acceptFromKeyboard`/`rejectFromKeyboard` con guard `exitStarted`
+   **compartido ratón+teclado** — también arregla el doble-click del ratón durante
+   el tween de 150 ms) + `BankerOfferPanel.spec.ts` (**362 L**, NUEVO, **6 tests**) ·
+   `GameSceneController.ts` 662 → **716** (`isBankerOfferOpen` /
+   `keyboardAcceptOffer` / `keyboardRejectOffer`) · `GameScene.ts` 642 → **851** en
+   las fases 3+5 (ENTER = TRATO **interceptado antes** del guard `locked`, guard
+   overlay **primero**; ESC = NO TRATO — la colisión con UIScene quedó verificada
+   segura: los modales UIScene **pausan** GameScene).
+
+**Causa/decisión:** el juego corre en desktop (1280×720 fijo) y hasta ahora era solo
+ratón. **Phaser emite `keydown` en TODA escena RUNNING**, así que el peligro no era
+el teclado sino el teclado en la escena equivocada. Patrón aplicado en las 6 fases:
+**(a)** el foco **reutiliza el highlight del hover** (no hay segundo estilo visual);
+**(b)** los handlers invocan los **MISMOS callbacks/emits** que el ratón — **nunca
+`pointerup` sintético**, porque el `dragGuard` de `ShopScene` revienta con `pointer`
+undefined; **(c)** sonido **solo al ACTIVAR** vía `UiSfx.playUiClick` (punto único,
+ADR-015), mover el foco no suena; **(d)** hints **invisibles**: 0 claves i18n nuevas
+(decisión del usuario — ver Pendientes); **(e)** guards: `isForeground`
+(`getScenes(true)` — el `ScenePlugin` del repo no tiene `getScenes`), guard
+anti-modal propio, guard anti-overlay (escenas encima) y `event.repeat` (una acción
+por pulsación, mantener una flecha no flashea); **(f)** `addCapture`/`removeCapture`
+**simétricos por escena** (alta en create, baja en SHUTDOWN). El patrón es el mismo
+en las **5 fases de código** (la 6.ª es esta de docs).
+
+**Cómo se verificó (gates del cierre de código, 2026-10-13):**
+`npm run typecheck` **0** · `npm run lint` **0** · `npm test` **69 suites / 772
+tests** (todos verdes); **69 archivos `*.spec.ts`** (glob por capa: domain 20 ·
+application 16 · infrastructure 12 · shared 6 · presentation **15**) — 4 specs
+nuevos con **46 tests** (KeyboardNavigation 20 + CardView 13 + scrollOffsetToReveal
+7 + BankerOfferPanel 6). **Reviews por fase:** F1 **APROBADO** con fixes · F2
+**RECHAZADO**→fixes (blocker `isForeground`, `event.repeat`) · F3 **RECHAZADO**→fixes
+(B1 vistas destruidas en SHUTDOWN, M1 sonido apilado, M2 dueño único del highlight) ·
+F4 **RECHAZADO**→fixes (MAJOR orden SHUTDOWN vs `destroyScrollList`, coordenadas
+del contenedor reales) · F5 **CAMBIOS REQUERIDOS**→fixes (BLOCKER `kbActionTaken`,
+orden de guards, NITs de ads explícito/init redundante).
+
+**Docs (esta sesión):** `docs/LOG.md` (esta entrada) ·
+`docs/DECISIONS/ADR-018-controles-de-teclado-pc-foco-y-callbacks-directos.md`
+(**NUEVO** — foco por geometría, callbacks directos y guards anti-modal) + su fila en
+`docs/DECISIONS/README.md` · `docs/testing.md` (69/772, fila `presentation/` a 15
+specs, fila y doble de `BankerOfferPanel.spec`, **ítems 16-26 de §5: smoke de
+teclado PC — PENDIENTES**) · `docs/MAP.md` (censo: 205 archivos TS · 136 fuente +
+69 specs · **33.926 L** (wc -l); sección `input/` nueva; 16 filas de LOC actualizadas) ·
+`docs/PLAYBOOK.md` §1 (duplicación de `isForeground`/`hasActiveOverlayScene`).
+Esta sesión de docs **no tiene shell**: los gates citados son los del commit de
+código y los conteos salen de `glob`/`read` (LOC por oráculo de `read`, recount por
+deltas sobre el censo del 2026-10-12).
+
+**Pendientes (todos diferidos a fase posterior):**
+
+- **ConfirmDialog sin navegación de teclado** (hoy solo ESC lo cierra): candidato a
+  **"Fase 7"** — los diálogos montados sobre `UIScene` (modal de salida) ya usan
+  ↑↓+ENTER, pero el `ConfirmDialog` **genérico** no.
+- **`isForeground`/`hasActiveOverlayScene` duplicado en 5 escenas**
+  (`MainMenuScene`/`ShopScene`/`ResultScene` con `isForeground`; `UIScene`/
+  `GameScene` con `hasActiveOverlayScene`) — misma semántica, patrón idéntico con
+  `getScenes(true)`: extraer a `src/presentation/input/` **si aparece una 6.ª
+  escena** (registrado en `PLAYBOOK.md` §1).
+- **`removeCapture` global sin refcount** (NIT conocido, comentado en el código):
+  dos escenas que capturen la misma tecla en paralelo se pisan.
+- **Hover de ratón y foco de teclado comparten el highlight** (mismo tween): pasar
+  el ratón por un botón con foco apaga el glow del foco temporalmente — cosmético,
+  cubierto en el smoke.
+- **ESC en partida sin panel = no-op** (decisión consciente): no se inventa una
+  salida a menú con ESC.
+- **Sin hints de teclas en pantalla** (decisión del usuario — 0 claves i18n nuevas
+  en las 5 fases): si en el futuro se quieren, son claves nuevas EN+ES.
+- **Smoke manual de teclado PC pendiente** — `testing.md` §5, ítems **16-26**.
+
 ## 2026-10-12 · Fix fullscreen en preview CrazyGames (retry de resize colgado de window.resize)
 
 **Qué se tocó (código: commit `2ec91a6`; docs: esta sesión):**

@@ -103,6 +103,26 @@ lista futura que quepa mal (p. ej. `BankerOfferPanel`) debe **reusarlo** antes d
 escribir su propio drag/rueda/máscara. El umbral vive en el componente: importar
 `DRAG_THRESHOLD_PX`, nunca re-declarar 8 px en la escena.
 
+### 🔁 `isForeground` / `hasActiveOverlayScene` duplicado en 5 escenas (ADR-018, 2026-10-13)
+Guard de "¿soy la escena en primer plano?" con **la misma semántica y el mismo patrón**
+(`this.scene.manager.getScenes(true)` — el `ScenePlugin` de Phaser **no** tiene
+`getScenes`) en: `MainMenuScene.isForeground` · `ShopScene.isForeground` ·
+`ResultScene.isForeground` (chequeo explícito de `AdOverlayScene`/`AdBlockerScene`) ·
+`UIScene.hasActiveOverlayScene` · `GameScene.hasActiveOverlayScene`. Hoy es consistente
+(cada una mira sus propios modales/overlays), pero **5 copias**.
+→ **Extraer a `src/presentation/input/` si aparece una 6.ª escena** que lo necesite —
+no copiar el patrón sexto a mano; hasta entonces queda aceptado (registrado por
+ADR-018, ver también su sección *Consecuencias*).
+
+### 🧱 `presentation/input/` — núcleo de teclado: reusar, no reimplementar (ADR-018)
+`KeyboardNavigation.ts` (**`nextFocusIndex`** euclídeo + **`firstEnabledIndex`**) y
+`KeyBindings.ts` (**`bindKeys`** con handlers de referencia única) son la fuente única
+de la navegación por foco: una escena nueva con teclado usa estos helpers **y callbacks
+directos** (nunca `pointerup` sintético — el `dragGuard` de `ShopScene` revienta con
+`pointer` undefined). El foco **reutiliza** el highlight del hover (`CardView.setKeyboardFocus`
+o closures compartidas): no crear un segundo estilo de foco. Ver ADR-018 antes de tocar
+cualquier handler de teclado.
+
 ### 🧱 Geometría de la tienda: `ShopLayout` es la fuente única (ADR-017)
 `presentation/layout/ShopLayout.ts` — helper **puro sin Phaser** `resolveShopLayout()`
 resuelve panel, grillas, offsets, fuentes y botones según el **piso de fuentes**
