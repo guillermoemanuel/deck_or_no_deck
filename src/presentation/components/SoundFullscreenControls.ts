@@ -97,10 +97,10 @@ export class SoundFullscreenControls {
       0,
       0,
       initialMuted ? 'hud-soundoff' : 'hud-soundon',
-      () => {
-        this.audioService.toggleMuted();
-        this.refreshMuteButton();
-      },
+      // Delega en el método público toggleMuted() (punto único del toggle:
+      // el teclado del menú principal, Fase 2, usa exactamente el mismo
+      // camino que este botón).
+      () => this.toggleMuted(),
       { size: BUTTON_SIZE, label: languageManager.getText(initialMuted ? 'HUD_SOUND_OFF' : 'HUD_SOUND_ON') },
       this.audioService
     );
@@ -137,6 +137,18 @@ export class SoundFullscreenControls {
     // DeckSelectionScene que lo instancian), las etiquetas se refrescan
     // sin recrear el componente.
     this.unsubscribeLanguageChanged = languageManager.onLanguageChanged(this.handleLanguageChanged);
+  }
+
+  /**
+   * Alterna el silencio vía la capa de servicio (IAudioService) y refresca
+   * ícono/etiqueta/posición del botón de Sonido. Es el camino ÚNICO del
+   * toggle: el propio botón (callback del constructor) y el teclado PC del
+   * menú principal (tecla S, Fase 2) delegan acá — mismo comportamiento
+   * garantizado para ratón/táctil y teclado.
+   */
+  toggleMuted(): void {
+    this.audioService.toggleMuted();
+    this.refreshMuteButton();
   }
 
   /**

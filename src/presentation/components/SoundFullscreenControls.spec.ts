@@ -17,7 +17,13 @@ jest.mock('phaser', () => ({
 jest.mock('./HudIconButton', () => {
   class HudIconButton {
     static instances: unknown[] = [];
-    constructor(..._args: unknown[]) {
+    // Guarda los args del ctor: el 5to (índice 4) es el callback onClick —
+    // necesario para verificar que el botón delega en toggleMuted().
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctorArgs: any[];
+    constructor(...args: unknown[]) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.ctorArgs = args as any[];
       HudIconButton.instances.push(this);
     }
     setPosition(): void {}
@@ -102,6 +108,54 @@ describe('SoundFullscreenControls', () => {
     const controls = new SoundFullscreenControls(fakeScene(true), audioService, false);
 
     expect(HudIconButtonMock.instances).toHaveLength(1);
+    controls.destroy();
+  });
+
+  // Teclado PC (Fase 2): la tecla S del menú principal alterna el mute sin
+  // pasar por el botón — el método público delega en el MISMO camino que el
+  // callback del HudIconButton (toggleMuted del servicio + refresh del botón).
+  it('toggleMuted() alterna el audio y refresca el botón de sonido', () => {
+    let muted = false;
+    const toggleMuted = jest.fn(() => {
+      muted = !muted;
+    });
+    const controls = new SoundFullscreenControls(
+      fakeScene(true),
+      { isMuted: () => muted, toggleMuted } as unknown as FakeAudio
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const muteButton: any = HudIconButtonMock.instances[0];
+    const setIconTexture = jest.spyOn(muteButton, 'setIconTexture');
+    const setLabel = jest.spyOn(muteButton, 'setLabel');
+
+    controls.toggleMuted();
+
+    expect(toggleMuted).toHaveBeenCalledTimes(1);
+    // El refresh del botón = ícono + etiqueta según el nuevo estado:
+    // son 'hud-soundoff' y 'HUD_SOUND_OFF' porque acabamos de silenciar.
+    expect(setIconTexture).toHaveBeenCalledWith('hud-soundoff');
+    expect(setLabel).toHaveBeenCalledTimes(1);
+    controls.destroy();
+  });
+
+  // Regresión del refactoring (review NIT): si el callback del HudIconButton
+  // volviera a ser un inline que NO delega en toggleMuted(), este test falla.
+  it('el callback del botón de sonido delega en toggleMuted()', () => {
+    let muted = false;
+    const toggleMuted = jest.fn(() => {
+      muted = !muted;
+    });
+    const controls = new SoundFullscreenControls(
+      fakeScene(true),
+      { isMuted: () => muted, toggleMuted } as unknown as FakeAudio
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const muteButton: any = HudIconButtonMock.instances[0];
+    const buttonOnClick = muteButton.ctorArgs[4] as () => void;
+
+    buttonOnClick();
+
+    expect(toggleMuted).toHaveBeenCalledTimes(1);
     controls.destroy();
   });
 });

@@ -8,7 +8,9 @@ import { DailyChallengeBanner } from '../components/DailyChallengeBanner';
 import { getNewGameWarning } from '../../shared/utils/NewGameConfirmation';
 import { clearPendingGameMode } from '../GameMode';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
+import { FocusDirection, FocusItem, nextFocusIndex } from '../input/KeyboardNavigation';
 
 /** Paleta "Casino de Lujo" — reutiliza tonos ya presentes en CardView/ResultScene
  * (oro, cian, rojo rubí, verde esmeralda) para mantener cohesión visual con
@@ -30,6 +32,20 @@ interface CasinoButtonConfig {
   labelKey: TranslationKey;
   accentColor: number;
   onClick: () => void;
+}
+
+/**
+ * Registro de foco de teclado (Fase 2) de un botón del menú: extiende
+ * `FocusItem` (geometría para `nextFocusIndex`) con lo mínimo para aplicar
+ * el MISMO efecto que el hover del ratón y para activar la acción SIN
+ * pointer (el dragGuard de otros contextos revienta con `pointer` undefined,
+ * así que ENTER invoca el callback tal cual).
+ */
+interface MenuFocusEntry extends FocusItem {
+  readonly container: Phaser.GameObjects.Container;
+  readonly glow: Phaser.GameObjects.Graphics;
+  readonly onClick: () => void;
+  readonly highlight: (on: boolean) => void;
 }
 
 /** Silueta decorativa de carta usada de fondo, para poder animarla levemente en update(). */
@@ -73,6 +89,22 @@ export class MainMenuScene extends Phaser.Scene {
   // audio también desde el menú principal, con coherencia total.
   private hudControls!: SoundFullscreenControls;
 
+  // --- Teclado PC (Fase 2) ------------------------------------------------
+  // Items de foco de las flechas ↑/↓, en el MISMO orden/coords que los
+  // botones casino: createCasinoButton los registra con la geometría REAL
+  // de cada botón (x del caller + y de la config) — sin coordenadas
+  // hardcodeadas fuera del array `buttons` de create().
+  private focusEntries: MenuFocusEntry[] = [];
+  // -1 = nada enfocado hasta la primera pulsación de flecha (decisión de UX).
+  private focusIndex = -1;
+  // Desuscripción de bindKeys — se resuelve en el SHUTDOWN de create(),
+  // con la MISMA referencia (AGENTS §5).
+  private unsubscribeKeys: (() => void) | null = null;
+  // true mientras el ConfirmDialog de "Nuevo Juego" está abierto: mientras
+  // tanto, TODAS las teclas de esta escena se ignoran (el diálogo ya maneja
+  // su propio ESC). Se limpia en cancel/confirm del diálogo y en SHUTDOWN.
+  private newGameDialogOpen = false;
+
   constructor() {
     super({ key: 'MainMenuScene' });
   }
@@ -88,6 +120,11 @@ export class MainMenuScene extends Phaser.Scene {
 
     this.decorativeCards = [];
     this.elapsedMs = 0;
+    // Estado del teclado PC (Fase 2): la escena se reconstruye entera en
+    // cada create(), así que el foco vuelve a "nada enfocado".
+    this.focusEntries = [];
+    this.focusIndex = -1;
+    this.newGameDialogOpen = false;
 
     this.drawAtmosphere(width, height);
     this.drawDecorativeCardSilhouettes(width, height);
@@ -196,7 +233,37 @@ export class MainMenuScene extends Phaser.Scene {
     // GameScene (ver UIScene.ts). Se limpia en el SHUTDOWN ya existente
     // de esta escena (el mismo que usa el selector de idioma).
     this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
+
+    // --- Teclado PC (Fase 2) ----------------------------------------------
+    // Las flechas se capturan para que no scrolleen la página del browser
+    // (el menú es un canvas fijo 1280×720, no hay scroll propio que perder).
+    this.input.keyboard?.addCapture(['UP', 'DOWN']);
+    // Los handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de
+    // verdad (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      UP: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'up'),
+      DOWN: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'down'),
+      ENTER: (event?: KeyboardEvent) => this.activateFocusedItem(event),
+      N: (event?: KeyboardEvent) => this.chooseLanguageFromKeyboard('en', event),
+      M: (event?: KeyboardEvent) => this.chooseLanguageFromKeyboard('es', event),
+      S: (event?: KeyboardEvent) => this.toggleMuteFromKeyboard(event)
+    });
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // Teclado PC (Fase 2): desuscripción con la MISMA referencia + quita
+      // de la captura de flechas (`?.` guarda contra un plugin que ya no
+      // existe, mismo criterio que los `off` de ConfirmDialog).
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      // Nota: `removeCapture` es GLOBAL a nivel juego (documentado en
+      // KeyboardManager de Phaser) — si una fase posterior captura ↑/↓ en
+      // otra escena, este SHUTDOWN se las bajaría. Hoy solo este menú
+      // captura (verificado con grep), pero vale el detalle.
+      this.input.keyboard?.removeCapture(['UP', 'DOWN']);
+      this.focusEntries = [];
+      this.focusIndex = -1;
+      this.newGameDialogOpen = false;
       this.hudControls.destroy();
       this.newGameDialog?.destroy();
       this.newGameDialog = null;
@@ -446,8 +513,20 @@ export class MainMenuScene extends Phaser.Scene {
       cancelKey: 'NEW_GAME_CONFIRM_CANCEL',
       confirmKey: 'NEW_GAME_CONFIRM_ACCEPT',
       confirmColor: 0xff4d6d,
-      onConfirm: () => this.startFreshGame()
+      onConfirm: () => {
+        this.newGameDialogOpen = false;
+        this.startFreshGame();
+      },
+      // Teclado PC (Fase 2): cancelar (botón Cancelar O ESC del diálogo)
+      // reactiva las teclas del menú — ConfirmDialog invoca onCancel en
+      // ambos caminos de cierre.
+      onCancel: () => {
+        this.newGameDialogOpen = false;
+      }
     }, getServices(this).audioService);
+    // Teclado PC (Fase 2): con el diálogo abierto, TODAS las teclas de esta
+    // escena se ignoran para no acciones debajo del modal.
+    this.newGameDialogOpen = true;
   }
 
   private startFreshGame(): void {
@@ -461,6 +540,87 @@ export class MainMenuScene extends Phaser.Scene {
     clearPendingGameMode(this.registry);
     this.scene.start('GameScene');
     this.scene.launch('UIScene');
+  }
+
+  /**
+   * Teclado PC (Fase 2): solo la escena de PRIMER PLANO maneja teclas.
+   * Phaser emite `keydown-<KEY>` en TODA escena RUNNING (no filtra la que
+   * está arriba) y ShopScene se abre con `scene.launch()` ENCIMA de este
+   * menú sin pausarlo (ShopScene.ts:123-125) — sin esta guarda, ↑/↓/ENTER
+   * actuarían sobre botones ocultos detrás del modal (p. ej. ENTER sobre
+   * "JUGAR" lanzaría una partida con la tienda todavía abierta).
+   */
+  private isForeground(): boolean {
+    // `this.scene.manager` (SceneManager) en vez de `this.scene.getScenes`:
+    // la versión de Phaser del repo no expone getScenes en ScenePlugin.
+    const active = this.scene.manager.getScenes(true);
+    return active[active.length - 1] === this;
+  }
+
+  /**
+   * Teclado PC (Fase 2): navega el foco con ↑/↓ sobre los botones del menú
+   * con el núcleo puro de KeyboardNavigation (sin sonido al mover).
+   *
+   * El auto-repeat del sistema operativo re-emite `keydown` cada ~30 ms
+   * con una tecla mantenida — sin ignorar `repeat` el foco saltaría en
+   * tromba y acumularía tweens; solo se navega en la pulsación inicial.
+   */
+  private handleFocusArrow(event: KeyboardEvent | undefined, direction: FocusDirection): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.newGameDialogOpen) return;
+
+    const previousIndex = this.focusIndex;
+    this.focusIndex = nextFocusIndex(this.focusEntries, this.focusIndex, direction);
+    // Sin cambio de índice (borde de la lista, o sin items habilitados):
+    // no se toca ningún resaltado.
+    if (this.focusIndex === previousIndex) return;
+    if (previousIndex >= 0) this.focusEntries[previousIndex]?.highlight(false);
+    this.focusEntries[this.focusIndex]?.highlight(true);
+  }
+
+  /**
+   * Teclado PC (Fase 2): ENTER activa el botón enfocado. Se invoca el
+   * callback TAL CUAL como hace el tween onComplete del click del ratón —
+   * NO se emite un pointerup sintético, porque el dragGuard de otros
+   * contextos revienta con `pointer` undefined. El sonido va por
+   * `playUiClick` (punto único ADR-015, mismo SFX.CLICK que bindUiClick).
+   */
+  private activateFocusedItem(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.newGameDialogOpen) return;
+    if (this.focusIndex < 0) return; // nada enfocado → ENTER inerte
+    const entry = this.focusEntries[this.focusIndex];
+    if (!entry) return;
+    playUiClick(getServices(this).audioService);
+    entry.onClick();
+  }
+
+  /**
+   * Teclado PC (Fase 2): N = inglés, M = español — mismo sonido que los
+   * botones del selector ES|EN (bindUiClick). Si el idioma pedido ya es el
+   * vigente, `setLanguage` es no-op (lo valida el propio LanguageManager).
+   */
+  private chooseLanguageFromKeyboard(langCode: SupportedLanguage, event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.newGameDialogOpen) return;
+    languageManager.setLanguage(langCode);
+    playUiClick(getServices(this).audioService);
+  }
+
+  /**
+   * Teclado PC (Fase 2): S silencia/activa el audio vía el MISMO camino que
+   * el botón HUD de Sonido — `SoundFullscreenControls.toggleMuted()` es el
+   * punto único del toggle (refresca ícono/etiqueta del botón también).
+   */
+  private toggleMuteFromKeyboard(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.newGameDialogOpen) return;
+    this.hudControls.toggleMuted();
+    playUiClick(getServices(this).audioService);
   }
 
   private createCasinoButton(x: number, config: CasinoButtonConfig): Phaser.GameObjects.Container {
@@ -501,15 +661,16 @@ export class MainMenuScene extends Phaser.Scene {
     // botones principales del menú.
     bindUiClick(hitZone, getServices(this).audioService);
 
-    hitZone.on('pointerover', () => {
-      this.tweens.add({ targets: container, scale: 1.05, duration: 150, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 1, duration: 150, ease: 'Cubic.easeOut' });
-    });
+    // Efecto de resaltado ÚNICO compartido entre el hover del ratón y el
+    // foco de teclado (Fase 2): mismos tweens, misma duración — el teclado
+    // se ve idéntico a pasar el cursor.
+    const highlight = (on: boolean): void => {
+      this.tweens.add({ targets: container, scale: on ? 1.05 : 1, duration: 150, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: glow, alpha: on ? 1 : 0, duration: 150, ease: 'Cubic.easeOut' });
+    };
 
-    hitZone.on('pointerout', () => {
-      this.tweens.add({ targets: container, scale: 1, duration: 150, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 0, duration: 150, ease: 'Cubic.easeOut' });
-    });
+    hitZone.on('pointerover', () => highlight(true));
+    hitZone.on('pointerout', () => highlight(false));
 
     hitZone.on('pointerup', () => {
       // Pequeño "pop" táctil antes de disparar la acción.
@@ -522,6 +683,12 @@ export class MainMenuScene extends Phaser.Scene {
         onComplete: onClick
       });
     });
+
+    // Teclado PC (Fase 2): registro como item de foco con la geometría REAL
+    // del botón (x del caller + y de la config) — el orden de foco sigue
+    // naciendo del array `buttons` de create(), sin coords nuevas. Los 4
+    // botones están siempre habilitados.
+    this.focusEntries.push({ x, y, enabled: true, container, glow, onClick, highlight });
 
     return container;
   }

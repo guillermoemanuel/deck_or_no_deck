@@ -19,9 +19,32 @@ export interface ClickTarget {
 }
 
 /**
+ * Punto único de reproducción del click genérico de UI (ADR-015 — manifiesto
+ * de audio único): reproduce `SFX.CLICK` best-effort con el MISMO try/catch
+ * silencioso que históricamente usaba `bindUiClick` — un fallo de audio nunca
+ * rompe la interacción. Acepta `null`/`undefined` para que el caller pueda
+ * pasar el servicio tal cual, sin condicionales.
+ *
+ * Existe porque el teclado PC (Fase 2, MainMenuScene: ENTER/N/M/S) necesita
+ * el sonido del click SIN pointer — `bindUiClick` solo suena en `pointerup`.
+ * Su camino de reproducción delega acá: un solo lugar que decide cómo suena
+ * el click de UI.
+ */
+export function playUiClick(audio: IAudioService | null | undefined): void {
+  if (!audio) return;
+  try {
+    audio.play(SFX.CLICK);
+  } catch {
+    // Audio best-effort: nunca propaga al handler de interacción.
+  }
+}
+
+/**
  * Punto único del click genérico de UI: registra un `pointerup` en el
  * target que reproduce `SFX.CLICK` (best-effort, mismo patrón silencioso
  * que CardView — un fallo de audio nunca rompe la interacción).
+ * La reproducción en sí vive en `playUiClick` (punto único ADR-015), que
+ * también usa el teclado PC directamente.
  *
  * Sin `audio` no se registra NADA (target queda como estaba).
  *
@@ -46,10 +69,6 @@ export function bindUiClick(
     if (shouldPlay && pointer && !shouldPlay(pointer)) {
       return;
     }
-    try {
-      audio.play(SFX.CLICK);
-    } catch {
-      // Audio best-effort: nunca propaga al handler de interacción.
-    }
+    playUiClick(audio);
   });
 }

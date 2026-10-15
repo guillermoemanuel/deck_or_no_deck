@@ -1,6 +1,6 @@
 import { SFX } from '../../shared/audio/AudioData';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import { bindUiClick, ClickPointerLike, ClickTarget } from './UiSfx';
+import { bindUiClick, ClickPointerLike, ClickTarget, playUiClick } from './UiSfx';
 
 describe('bindUiClick', () => {
   function createTarget(): { target: ClickTarget; on: jest.Mock; fire: (pointer?: ClickPointerLike) => void } {
@@ -98,5 +98,37 @@ describe('bindUiClick', () => {
     fire();
     expect(shouldPlay).not.toHaveBeenCalled();
     expect(play).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Teclado PC (Fase 2): ENTER/N/M/S del menú principal necesitan el MISMO
+// sonido de click que el pointerup, pero SIN pointer — por eso la
+// reproducción se expone como función independiente (punto único ADR-015).
+describe('playUiClick', () => {
+  it('reproduce SFX.CLICK una vez', () => {
+    const play = jest.fn();
+    const audio = { play } as unknown as IAudioService;
+
+    playUiClick(audio);
+
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith(SFX.CLICK);
+  });
+
+  it('sin audio (null/undefined) → no-op sin lanzar', () => {
+    // El JSDoc documenta el parámetro como opcional/null-safe: la tecla
+    // S puede correr con un services.audioService aún no resuelto.
+    expect(() => playUiClick(null)).not.toThrow();
+    expect(() => playUiClick(undefined)).not.toThrow();
+  });
+
+  it('si play lanza excepción, no propaga', () => {
+    const audio = {
+      play: () => {
+        throw new Error('boom');
+      }
+    } as unknown as IAudioService;
+
+    expect(() => playUiClick(audio)).not.toThrow();
   });
 });
