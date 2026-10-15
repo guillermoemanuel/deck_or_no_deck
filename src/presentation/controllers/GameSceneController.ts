@@ -666,6 +666,35 @@ export class GameSceneController {
     return this.activeSwapModal !== null;
   }
 
+  /**
+   * Fase 5 (teclado PC): ¿la oferta del banquero está en pantalla esperando
+   * TRATO / NO TRATO? Se consulta el panel activo y NO areCardsLocked como
+   * proxy: ese flag también es true durante el delay de 1800 ms previo al
+   * panel (BankerOfferMade) y en EnergyDepleted sin oferta — acá se necesita
+   * la existencia REAL del panel para que el teclado solo actúe con él visible.
+   */
+  isBankerOfferOpen(): boolean {
+    return this.activeOfferPanel !== null;
+  }
+
+  /**
+   * Fase 5 (teclado PC): ENTER = TRATO — delega estrictamente en el panel
+   * activo (misma cadena que el click de ratón sobre DEAL); sin oferta en
+   * pantalla es no-op seguro.
+   */
+  keyboardAcceptOffer(): void {
+    this.activeOfferPanel?.acceptFromKeyboard();
+  }
+
+  /**
+   * Fase 5 (teclado PC): ESC = NO TRATO — delega estrictamente en el panel
+   * activo (misma cadena que el click de ratón sobre NO DEAL); sin oferta en
+   * pantalla es no-op seguro.
+   */
+  keyboardRejectOffer(): void {
+    this.activeOfferPanel?.rejectFromKeyboard();
+  }
+
   getCardView(cardId: string): CardView | undefined {
     return this.cardViews.get(cardId);
   }

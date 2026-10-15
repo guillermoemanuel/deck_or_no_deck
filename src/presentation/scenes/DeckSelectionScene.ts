@@ -6,7 +6,8 @@ import { LocalizedText } from '../components/LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts — mismos valores hex,
  * para que ambas escenas se sientan parte del mismo producto. */
@@ -51,6 +52,12 @@ export class DeckSelectionScene extends Phaser.Scene {
   // que UIScene/GameScene/MainMenuScene/HowToPlayScene, ver
   // SoundFullscreenControls.ts).
   private hudControls!: SoundFullscreenControls;
+  // Teclado PC (Fase 5): desuscripción de bindKeys — se llama con la MISMA
+  // referencia en el SHUTDOWN de create() (AGENTS §5) — e índice de la fila
+  // que recorre ←/→, siempre sincronizado con la vista previa (ver
+  // applyPreviewFocus()).
+  private unsubscribeKeys: (() => void) | null = null;
+  private kbDeckIndex = -1;
 
   // BUGFIX (superposición grilla/botón "Aceptar"): antes `baseY` se
   // calculaba por separado en renderDeckGrid() y en applyPreviewFocus()
@@ -167,7 +174,43 @@ export class DeckSelectionScene extends Phaser.Scene {
     // botón "Aceptar" queda centrado (width/2, height-30), así que no
     // compite con esta esquina.
     this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hudControls.destroy());
+
+    // --- Teclado PC (Fase 5 — selección de mazo) ---------------------------
+    // Sin isForeground: esta escena es EXCLUSIVA — se entra con scene.start
+    // (la escena anterior muere antes de que ésta cree) y nada se superpone
+    // debajo, así que no hace falta la guarda de MainMenuScene.
+    // LEFT/RIGHT se capturan para que no scrolleen la página del browser
+    // (ENTER/S no scrollean, no hace falta capturarlos).
+    this.input.keyboard?.addCapture(['LEFT', 'RIGHT']);
+    // El índice kbDeckIndex ya quedó anclado a previewDeckId por el
+    // applyPreviewFocus() del arranque (L170) — no hace falta recalcularlo.
+    // Los handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de
+    // verdad (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      LEFT: (event?: KeyboardEvent) => this.handleDeckArrowKey(event, -1),
+      RIGHT: (event?: KeyboardEvent) => this.handleDeckArrowKey(event, 1),
+      ENTER: (event?: KeyboardEvent) => this.handleAcceptKey(event),
+      // S: sonido "donde haya botón" — vía el MISMO toggle del botón HUD.
+      S: (event?: KeyboardEvent) => this.handleMuteKey(event)
+      // ESC queda SIN registrar a propósito: la escena no tiene salida
+      // "atrás" y no se inventa comportamiento nuevo para la tecla.
+    });
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // Teclado PC (Fase 5): desuscripción con la MISMA referencia (`?.`
+      // guarda contra un plugin de teclado que ya no existe) + quita de la
+      // captura. Seguro: nadie más captura LEFT/RIGHT mientras esta escena
+      // vive (se entra con scene.start, la escena anterior muere antes) y el
+      // stop de ÉSTA escena se cola ANTES del start de la siguiente
+      // (SceneManager encola ops en orden), así que la captura de la nueva
+      // escena se agrega después de bajar ésta.
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      this.input.keyboard?.removeCapture(['LEFT', 'RIGHT']);
+      this.kbDeckIndex = -1;
+      this.hudControls.destroy();
+    });
   }
 
   /**
@@ -329,6 +372,10 @@ export class DeckSelectionScene extends Phaser.Scene {
    */
   private applyPreviewFocus(deckId: DeckSetupId, immediate: boolean): void {
     this.previewDeckId = deckId;
+    // Teclado PC (Fase 5): el índice de ←/→ siempre sigue a la vista
+    // previa — así un click del ratón sobre otro thumb (o el arranque de la
+    // escena) no deja al teclado anclado en una posición vieja de la fila.
+    this.kbDeckIndex = this.ownedDeckIds.indexOf(deckId);
     const setup = getDeckSetup(deckId);
     const baseY = this.getDeckGridBaseY();
 
@@ -409,14 +456,80 @@ export class DeckSelectionScene extends Phaser.Scene {
     // Mismo lenguaje visual que los botones de MainMenuScene: panel oscuro
     // con borde de acento dorado, filo interior fino, halo que se enciende
     // en hover, y elevación de escala 1.05x — ver createCasinoButton().
-    this.createCasinoButton(width / 2, height - 30, 220, 52, 'DECK_SELECTION_ACCEPT_BUTTON', 0x2ea043, () => {
-      services.progressionManager.selectDeck(this.previewDeckId);
-      // Se relanza PreloadScene para cargar las texturas GENÉRICAS
-      // ('card-back'/'card-front'/'backdrop') del mazo recién elegido —
-      // ver el comentario en PreloadScene.preload() sobre por qué hace
-      // falta repetir la precarga acá y no ir directo a GameScene.
-      this.scene.start('PreloadScene', { nextScene: 'GameScene' } satisfies PreloadSceneData);
-    }, services.audioService);
+    this.createCasinoButton(
+      width / 2,
+      height - 30,
+      220,
+      52,
+      'DECK_SELECTION_ACCEPT_BUTTON',
+      0x2ea043,
+      () => this.acceptDeckSelection(),
+      services.audioService
+    );
+  }
+
+  /**
+   * Punto único de la confirmación de selección (Teclado PC, Fase 5): lo
+   * usan TANTO el botón "Aceptar" COMO la tecla ENTER, así el cierre de la
+   * escena no queda duplicado en dos closures que podrían desviarse.
+   */
+  private acceptDeckSelection(): void {
+    const services = getServices(this);
+    services.progressionManager.selectDeck(this.previewDeckId);
+    // Se relanza PreloadScene para cargar las texturas GENÉRICAS
+    // ('card-back'/'card-front'/'backdrop') del mazo recién elegido —
+    // ver el comentario en PreloadScene.preload() sobre por qué hace
+    // falta repetir la precarga acá y no ir directo a GameScene.
+    this.scene.start('PreloadScene', { nextScene: 'GameScene' } satisfies PreloadSceneData);
+  }
+
+  // ------------------------------------------------------------------
+  // Teclado PC (Fase 5 — selección de mazo)
+  // ------------------------------------------------------------------
+
+  /**
+   * ←/→ recorren la fila de mazos poseídos con WRAP CIRCULAR — excepción
+   * deliberada al "sin wrap en los bordes" del núcleo KeyboardNavigation:
+   * la fila es corta (pocos mazos) y trabar en el extremo se siente peor
+   * que dar la vuelta. Sin playUiClick al mover: los thumbs no tienen
+   * bindUiClick (paridad con el ratón, que al hacer click solo repinta con
+   * applyPreviewFocus) — el foco delega en el MISMO camino del pointerup.
+   * `kbDeckIndex` lo mantiene applyPreviewFocus() (único dueño), por eso
+   * acá solo se calcula el destino.
+   */
+  private handleDeckArrowKey(event: KeyboardEvent | undefined, delta: 1 | -1): void {
+    if (event?.repeat) return;
+    const count = this.ownedDeckIds.length;
+    if (count === 0) return;
+    // delta solo toma ±1, sumar `count` una vez evita el -1 del módulo JS.
+    const nextIndex = (this.kbDeckIndex + delta + count) % count;
+    if (nextIndex === this.kbDeckIndex) return;
+    this.applyPreviewFocus(this.ownedDeckIds[nextIndex], false);
+  }
+
+  /**
+   * ENTER confirma — MISMO callback que el botón "Aceptar"
+   * (acceptDeckSelection), invocado DIRECTO y no con un pointerup sintético
+   * (mismo criterio que MainMenuScene.activateFocusedItem: el dragGuard de
+   * otros contextos revienta con `pointer` undefined). playUiClick va ANTES
+   * (punto único ADR-015, mismo SFX.CLICK que bindUiClick del casino
+   * button) — el botón Aceptar suena igual, ENTER no queda mudo.
+   */
+  private handleAcceptKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    playUiClick(getServices(this).audioService);
+    this.acceptDeckSelection();
+  }
+
+  /**
+   * S silencia/activa el audio vía el MISMO camino que el botón HUD de
+   * Sonido — SoundFullscreenControls.toggleMuted() es el punto único del
+   * toggle (refresca ícono/etiqueta también), igual que en MainMenuScene.
+   */
+  private handleMuteKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    this.hudControls.toggleMuted();
+    playUiClick(getServices(this).audioService);
   }
 
   /**

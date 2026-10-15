@@ -35,6 +35,10 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
   // Clean Architecture: solo se conoce el puerto IAudioService, nunca la
   // clase concreta de infraestructura.
   private readonly audioService?: IAudioService;
+  // Fase 5 (teclado PC): true en cuanto arranca el tween de salida (150 ms)
+  // — por ratón O teclado — para que cualquier segundo intento durante esa
+  // ventana sea no-op (ver onDealAccepted/onDealRejected).
+  private exitStarted = false;
 
   constructor(scene: Phaser.Scene, offer: BankerOffer, audioService?: IAudioService, cappedRemainingGames: number | null = null) {
     const cx = scene.cameras.main.centerX;
@@ -194,11 +198,45 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
   }
 
   private onDealAccepted(): void {
+    // Fase 5 (teclado PC): guarda de salida única compartida por ratón y
+    // teclado — el ratón HOY puede doble-click (o clickear DEAL y NO DEAL
+    // alternados) durante los 150 ms del tween de salida, mientras el panel
+    // sigue interactivo; el teclado no debe empeorarlo, así que el flag se
+    // setea en AMBOS handlers (accept/reject) y el segundo intento es no-op.
+    if (this.exitStarted) return;
+    this.exitStarted = true;
     this.animateExit(() => this.emit('deal-accepted'));
   }
 
   private onDealRejected(): void {
+    // Misma guarda de salida única que onDealAccepted: cubre también el
+    // rechazo para que ni ratón ni teclado puedan iniciar una segunda salida
+    // (ni emitir 'deal-rejected' tras un 'deal-accepted' ya en curso).
+    if (this.exitStarted) return;
+    this.exitStarted = true;
     this.animateExit(() => this.emit('deal-rejected'));
+  }
+
+  /**
+   * Fase 5 (teclado PC): ENTER = TRATO — MISMA cadena que el click de ratón
+   * sobre DEAL (onDealAccepted → animateExit 150 ms → emit 'deal-accepted'
+   * que recibe el `.once` del GameSceneController sin cambios).
+   *
+   * SILENCIOSO por paridad con el ratón: los botones NO tienen bindUiClick
+   * (el sfx de este modal es el propio SFX.OFFER/BANKER_ANNOYED), así que el
+   * teclado no agrega ningún sonido nuevo.
+   */
+  acceptFromKeyboard(): void {
+    this.onDealAccepted();
+  }
+
+  /**
+   * Fase 5 (teclado PC): ESC = NO TRATO — idéntico a acceptFromKeyboard
+   * pero por la cadena de rechazo (onDealRejected → emit 'deal-rejected').
+   * También silencioso: ver acceptFromKeyboard.
+   */
+  rejectFromKeyboard(): void {
+    this.onDealRejected();
   }
 
   private animateExit(onComplete: () => void): void {

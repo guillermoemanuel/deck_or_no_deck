@@ -227,7 +227,12 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       DOWN: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'down'),
       LEFT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'left'),
       RIGHT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'right'),
-      ENTER: (event?: KeyboardEvent) => this.activateFocusedCard(event)
+      ENTER: (event?: KeyboardEvent) => this.activateFocusedCard(event),
+      // Fase 5 (teclado PC): ESC = NO TRATO cuando la oferta del banquero
+      // está en pantalla (sin oferta es no-op, ver handleOfferEscapeKey).
+      // Baja del teclado: NO hace falta nada extra — el unsubscribeKeys de
+      // SHUTDOWN recorre TODO este objeto literal con las mismas referencias.
+      ESC: (event?: KeyboardEvent) => this.handleOfferEscapeKey(event)
     });
 
     // BUGFIX (bug_fix_audio_lifecycle) — requisito (a): red de seguridad a
@@ -601,14 +606,53 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
    */
   private activateFocusedCard(event?: KeyboardEvent): void {
     if (event?.repeat) return;
-    if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;
+    // Fase 5 (teclado PC): con ResultScene/ads/tienda encima NADA de la
+    // partida responde al teclado — ni cartas ni el TRATO del banquero.
+    // El guard de overlay va PRIMERO como defensa en profundidad: hoy el
+    // panel no coexiste con un overlay (se destruye al aceptar/rechazar y
+    // la tienda/anuncios pausan GameScene), pero el orden no debe depender
+    // de que eso siga siendo cierto.
     if (this.hasActiveOverlayScene()) return;
+    // Mientras el panel del banquero está en pantalla ENTER significa
+    // TRATO — se intercepta ANTES del guard de swap/locked porque durante
+    // la oferta areCardsLocked es true (lockAllCards de BankerOfferMade) y
+    // ENTER caería siendo inerte. Durante el delay de 1800 ms previo al
+    // panel el panel todavía no existe (isBankerOfferOpen false) → cae al
+    // guard normal de locked → inerte, que es el comportamiento correcto.
+    if (this.controller?.isBankerOfferOpen()) {
+      this.controller.keyboardAcceptOffer();
+      return;
+    }
+    if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;
     if (this.kbFocusIndex < 0) return; // nada enfocado → ENTER inerte
     const view = this.kbFocusViews[this.kbFocusIndex];
     // Carta revelada o bloqueada: ENTER no debe reabrirla ni colarse por
     // encima de un estado que el puntero ni siquiera podría clickear.
     if (!view || view.isCardOpen() || view.isLocked()) return;
     view.emit('card-clicked', view.getCardId());
+  }
+
+  /**
+   * Fase 5 (teclado PC): ESC = NO TRATO — rechaza la oferta del banquero
+   * con la MISMA cadena que el click de ratón sobre NO DEAL, pero SOLO si
+   * el panel está en pantalla; sin oferta, ESC en la partida es no-op (no
+   * se inventa una salida a menú ni un menú nuevo).
+   *
+   * Colisión con UIScene verificada como SEGURO (causa raíz): todo modal que
+   * UIScene cierra con ESC (modal de salida / bono periódico) o la tienda
+   * PAUSA GameScene — con la escena pausada su plugin de teclado no emite
+   * keydown (KeyboardPlugin.isActive exige scene.sys.canInput()) — y con
+   * solo el panel del banquero abierto UIScene cae en su propio no-op de
+   * ESC. ResultScene/ads se cubren con hasActiveOverlayScene, igual que el
+   * resto de los handlers de este teclado. Sin sfx: paridad silenciosa con
+   * el ratón (ver BankerOfferPanel.acceptFromKeyboard).
+   */
+  private handleOfferEscapeKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (this.hasActiveOverlayScene()) return;
+    if (this.controller?.isBankerOfferOpen()) {
+      this.controller.keyboardRejectOffer();
+    }
   }
 
   /**

@@ -11,7 +11,9 @@ import { IAudioService } from '../../domain/ports/IAudioService';
 import { CardPositionSource, getGameObjectGlobalPosition } from '../effects/deck-celebrations/DeckCelebrationEffect';
 import languageManager from '../../shared/i18n/LanguageManager';
 import { SFX } from '../../shared/audio/AudioData';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
+import { FocusDirection, FocusItem, nextFocusIndex } from '../input/KeyboardNavigation';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts — mismos valores hex, para que la pantalla final se
@@ -27,6 +29,29 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
 /** Motivos de fallo de `ReviveResult` — el caso `revived: true` se resuelve
  * antes (la escena ya la detuvo GameSceneController) y nunca llega acá. */
 type ReviveFailureReason = Extract<ReviveResult, { revived: false }>['reason'];
+
+/**
+ * Registro de foco de teclado (Fase 5) de un botón de resultado: extiende
+ * `FocusItem` (geometría real del container para `nextFocusIndex`) con lo
+ * mínimo para aplicar el MISMO efecto que el hover del ratón y para
+ * activar la acción SIN pointer (ENTER invoca el callback tal cual, como
+ * MainMenuScene.activateFocusedItem).
+ *
+ * `enabled` es mutable a propósito: `disableActionButton` es el punto
+ * único de apagado de botones y también marca la entry para que las
+ * flechas la salten y ENTER quede inerte.
+ */
+interface KbFocusEntry extends FocusItem {
+  readonly container: Phaser.GameObjects.Container;
+  readonly glow: Phaser.GameObjects.Graphics;
+  // `void | Promise<void>`: los closures de Duplicar/Triplicar/Revivir son
+  // async (el ad está en vuelo) — el flag de reentrada del teclado atad a
+  // esta promesa en vez de durar "para siempre" (ver activateFocusedItem).
+  readonly onClick: () => void | Promise<void>;
+  readonly highlight: (on: boolean) => void;
+  // Sin readonly: se apaga en disableActionButton (punto único).
+  enabled: boolean;
+}
 
 /**
  * ResultScene: Pantalla modal de Victoria / Derrota, estilo "Casino de
@@ -47,6 +72,27 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   // audioService (singleton a nivel Game) desde GameServices — ver
   // AudioService.ts para el detalle completo del fix.
   private audioService!: IAudioService;
+
+  // --- Teclado PC (Fase 5) ------------------------------------------------
+  // Items de foco de las flechas sobre los botones de resultado, con la
+  // geometría REAL de cada container — se reconstruyen DESDE CERO en cada
+  // build de acciones (buildWonActions / buildLostActions).
+  private kbFocusEntries: KbFocusEntry[] = [];
+  // -1 = nada enfocado hasta la primera pulsación de flecha (UX del menú).
+  private kbFocusIndex = -1;
+  // Desuscripción de bindKeys — se resuelve en el SHUTDOWN de create(),
+  // con la MISMA referencia (AGENTS §5).
+  private unsubscribeKeys: (() => void) | null = null;
+  // Reentrada de ENTER: el flag se mantiene mientras la acción del botón
+  // está EN VUELO (los closures devuelven `void | Promise<void>` — el ad
+  // de multiply/revive/restart es la promesa) y se libera apenas asienta.
+  // Antes era one-shot "por render" y dejaba ENTER muerto para TODOS los
+  // botones tras una acción que no navega (multiply con ads_cooldown,
+  // revive reintenable — ADR-006): el jugador de teclado quedaba trabado.
+  // Doble pulsación síncrona: el reset es en microtask, así que un segundo
+  // ENTER del mismo tick queda bloqueado — paridad con el pop de 50 ms del
+  // ratón. Acciones que navegan: la escena muere y create() resetea igual.
+  private kbActionTaken = false;
 
   constructor() {
     super({ key: 'ResultScene' });
@@ -71,6 +117,10 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     // para que stopAll()/stopMusic() de acá abajo realmente afecten a la
     // música que GameScene inició.
     this.audioService = this.services.audioService;
+    // Teclado PC (Fase 5): estado de foco fresco en cada create() — los
+    // entries se reconstruyen recién en buildWonActions/buildLostActions.
+    this.kbFocusIndex = -1;
+    this.kbActionTaken = false;
     this.particleManager = new ParticleManager(this);
     const { width, height } = this.cameras.main;
 
@@ -164,6 +214,36 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
       duration: 250,
       ease: 'Back.easeOut'
     });
+
+    // --- Teclado PC (Fase 5) ----------------------------------------------
+    // Sin addCapture: ResultScene se lanza sobre GameScene + UIScene todavía
+    // RUNNING, y GameScene ya capturó ↑/↓/←/→ en su create() — las
+    // capturas de Phaser son globales y persisten mientras esa escena siga
+    // viva, bajarlas acá le robaría las flechas a la partida debajo
+    // (mismo criterio que ShopScene). NO se registra ESC: no hay nada que
+    // cerrar (el modal es el final de la partida).
+    // Los handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de
+    // verdad (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      UP: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'up'),
+      DOWN: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'down'),
+      LEFT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'left'),
+      RIGHT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'right'),
+      ENTER: (event?: KeyboardEvent) => this.activateFocusedItem(event)
+    });
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // Desuscripción con la MISMA referencia (AGENTS §5). Phaser emite
+      // SHUTDOWN tanto en stop() como en restart() — "Jugar de nuevo" hace
+      // scene.stop('ResultScene'), así que el camino queda cubierto en
+      // cualquiera de las salidas de la escena.
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      this.kbFocusEntries = [];
+      this.kbFocusIndex = -1;
+      this.kbActionTaken = false;
+    });
   }
 
   private titleFor(outcome: ResultOutcome): TranslationKey {
@@ -241,6 +321,10 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   }
 
   private buildWonActions(data: ResultSceneData): void {
+    // Teclado PC (Fase 5): el registro de foco se reconstruye DESDE CERO en
+    // cada build — createActionButton empuja cada botón nuevo con su
+    // geometría REAL y su closure onClick.
+    this.kbFocusEntries = [];
     const { width, height } = this.cameras.main;
     const baseAmount = data.amount ?? 0;
     // El flag `refunded` (invariante reembolso XOR efecto) vive en ESTA
@@ -300,6 +384,10 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
   }
 
   private buildLostActions(data: ResultSceneData): void {
+    // Teclado PC (Fase 5): el registro de foco se reconstruye DESDE CERO en
+    // cada build — createActionButton empuja cada botón nuevo con su
+    // geometría REAL y su closure onClick.
+    this.kbFocusEntries = [];
     const { width, height } = this.cameras.main;
 
     // Upgrade "Revivir": solo se ofrece si se compró en esta partida.
@@ -420,6 +508,105 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     if (btn) {
       btn.setAlpha(0.4);
       btn.list.forEach(child => child.disableInteractive?.());
+      // Teclado PC (Fase 5): el MISMO punto único de apagado marca la entry
+      // de foco — así las flechas lo saltan y el ENTER queda inerte y
+      // silencioso (paridad con el hitZone disableInteractive del ratón).
+      // Buscado por identidad de container (la única referencia compartida).
+      const entry = this.kbFocusEntries.find(candidate => candidate.container === btn);
+      if (entry) {
+        entry.enabled = false;
+        // Si el botón apagado era justamente el que tenía el foco, se apaga
+        // también su resaltado: sin esto el glow quedaría encendido sobre un
+        // botón muerto.
+        if (this.kbFocusEntries[this.kbFocusIndex] === entry) {
+          entry.highlight(false);
+        }
+      }
+    }
+  }
+
+  /**
+   * Teclado PC (Fase 5): ResultScene se lanza con `scene.launch()` ENCIMA
+   * de GameScene + UIScene sin pausarlas, y Phaser emite `keydown-<KEY>` en
+   * TODA escena RUNNING (no filtra la que está arriba) — sin esta guarda,
+   * las flechas/ENTER actuarían sobre los botones de la partida de atrás.
+   * Mismo fix que MainMenuScene.isForeground.
+   */
+  private isForeground(): boolean {
+    // `this.scene.manager` (SceneManager) en vez de `this.scene.getScenes`:
+    // la versión de Phaser del repo no expone getScenes en ScenePlugin.
+    // Chequeo EXPLÍCITO de ads (mismo patrón que GameScene.
+    // hasActiveOverlayScene / UIScene): no depender del orden de creación
+    // — si algún día se lanzara un overlay antes que ResultScene, el último
+    // de getScenes(true) no sería ésta y el foco quedaría muerto (NIT del
+    // review de la Fase 5).
+    if (this.scene.isActive('AdOverlayScene') || this.scene.isActive('AdBlockerScene')) {
+      return false;
+    }
+    const active = this.scene.manager.getScenes(true);
+    return active[active.length - 1] === this;
+  }
+
+  /**
+   * Teclado PC (Fase 5): navega el foco con ↑/↓/←/→ sobre los botones de
+   * resultado con el núcleo puro KeyboardNavigation (candidato HABILITADO
+   * más cercano del lado pedido, sobre las posiciones REALES de los
+   * containers). SIN sonido al mover — mismo criterio que MainMenuScene y
+   * ShopScene.
+   *
+   * El auto-repeat del SO re-emite `keydown` cada ~30 ms con la tecla
+   * mantenida — sin ignorar `repeat` el foco saltaría en tromba y
+   * acumularía tweens; solo se navega en la pulsación inicial.
+   */
+  private handleFocusArrow(event: KeyboardEvent | undefined, direction: FocusDirection): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+
+    const previousIndex = this.kbFocusIndex;
+    this.kbFocusIndex = nextFocusIndex(this.kbFocusEntries, this.kbFocusIndex, direction);
+    // Sin cambio de índice (borde de la lista, o sin items habilitados):
+    // no se toca ningún resaltado.
+    if (this.kbFocusIndex === previousIndex) return;
+    if (previousIndex >= 0) this.kbFocusEntries[previousIndex]?.highlight(false);
+    this.kbFocusEntries[this.kbFocusIndex]?.highlight(true);
+  }
+
+  /**
+   * Teclado PC (Fase 5): ENTER activa el botón enfocado invocando el MISMO
+   * closure onClick que el pointerup del ratón — NO se emite un pointer
+   * sintético (mismo motivo que MainMenuScene/ShopScene). El sonido va por
+   * `playUiClick` (punto único ADR-015).
+   *
+   * `kbActionTaken` protege la REENTRADA mientras la acción está en vuelo:
+   * si el closure devuelve una promesa (ads de multiply/revive/restart), el
+   * flag se libera en el `finally` apenas asienta — así las acciones que NO
+   * navegan (multiply con ads_cooldown, revive reintenable — ADR-006)
+   * devuelven el control al teclado en vez de dejar ENTER muerto para el
+   * resto de botones hasta recrear la escena. Un botón apagado
+   * (entry.enabled=false) es inerte y SILENCIOSO, paridad exacta con el
+   * hitZone disableInteractive del ratón.
+   */
+  private activateFocusedItem(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.kbActionTaken) return;
+    if (this.kbFocusIndex < 0) return; // nada enfocado → ENTER inerte
+    const entry = this.kbFocusEntries[this.kbFocusIndex];
+    if (!entry) return;
+    if (!entry.enabled) return;
+    playUiClick(this.audioService);
+    this.kbActionTaken = true;
+    try {
+      // Promise.resolve cubre ambos mundos: closures sync (void) liberan el
+      // flag en la microtask siguiente (bloquea el doble ENTER del mismo
+      // tick) y los async lo liberan cuando el ad termina.
+      void Promise.resolve(entry.onClick()).finally(() => {
+        this.kbActionTaken = false;
+      });
+    } catch (error) {
+      // Si el closure lanza sincrónicamente, el flag no debe quedarse clavado.
+      this.kbActionTaken = false;
+      throw error;
     }
   }
 
@@ -430,8 +617,10 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
    * CrazyGames (ver `runMidgameAdThen`, que documenta el contrato de
    * "garantía de navegación" completo).
    */
-  private restartGame(): void {
-    void this.runMidgameAdThen(() => {
+  private restartGame(): Promise<void> {
+    // Devuelve la promesa (no `void ...`): el flag de reentrada de ENTER
+    // se libera recién cuando el midgame ad termina y corre la navegación.
+    return this.runMidgameAdThen(() => {
       this.scene.stop('ResultScene');
       this.scene.get('GameScene')?.scene.restart();
     });
@@ -443,10 +632,12 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
    * También dispara el Midgame Ad ANTES de transicionar a MainMenuScene
    * (segundo punto de transición entre partidas exigido por CrazyGames).
    */
-  private exitToMainMenu(): void {
+  private exitToMainMenu(): Promise<void> {
     // REQ: Redirigir al usuario a MainMenuScene SIN limpiar la caché.
     // Se elimina this.services.progressionManager.resetAllProgress();
-    void this.runMidgameAdThen(() => {
+    // Devuelve la promesa: el flag de reentrada de ENTER cubre el vuelo
+    // del midgame ad (mismo motivo que restartGame).
+    return this.runMidgameAdThen(() => {
       // BUGFIX (bug_fix_audio_lifecycle) — requisito (b): se invoca el
       // método de detención GLOBAL del servicio de audio ANTES de la
       // transición de escena. A diferencia de la versión anterior
@@ -504,7 +695,12 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     translationKey: TranslationKey,
     primaryColor: number,
     hoverGlowColor: number,
-    onClick: () => void
+    // `void | Promise<void>`: los closures de Duplicar/Triplicar/Revivir y
+    // ahora también restart/exit devuelven la promesa del ad — el flag de
+    // reentrada del teclado la espera antes de liberarse (ver
+    // activateFocusedItem). El pointerup del ratón la ignora (Phaser no
+    // espera el return de onComplete), así que el ratón no cambia.
+    onClick: () => void | Promise<void>
   ): Phaser.GameObjects.Container {
     const width = 200;
     const height = 48;
@@ -540,15 +736,17 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
 
-    hitZone.on('pointerover', () => {
-      this.tweens.add({ targets: container, scale: 1.05, duration: 120, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 1, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    // Efecto de resaltado ÚNICO compartido entre el hover del ratón y el
+    // foco de teclado (Fase 5): mismos tweens y misma duración que el hover
+    // — el teclado se ve idéntico a pasar el cursor (mismo patrón que
+    // MainMenuScene.createCasinoButton).
+    const highlight = (on: boolean): void => {
+      this.tweens.add({ targets: container, scale: on ? 1.05 : 1, duration: 120, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: glow, alpha: on ? 1 : 0, duration: 120, ease: 'Cubic.easeOut' });
+    };
 
-    hitZone.on('pointerout', () => {
-      this.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 0, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    hitZone.on('pointerover', () => highlight(true));
+    hitZone.on('pointerout', () => highlight(false));
     // Click genérico de UI (punto único: UiSfx.bindUiClick).
     bindUiClick(hitZone, this.audioService);
 
@@ -561,6 +759,13 @@ export class ResultScene extends Phaser.Scene implements CardPositionSource {
         onComplete: onClick
       });
     });
+
+    // Teclado PC (Fase 5): registro como item de foco con la geometría REAL
+    // del container y el MISMO closure onClick que recibe el pointerup del
+    // ratón — ENTER lo invoca directo, NO un pointer sintético. Todos nacen
+    // habilitados; el único apagado posible (disableActionButton) marca la
+    // entry en el mismo punto único donde apaga el botón.
+    this.kbFocusEntries.push({ x: container.x, y: container.y, enabled: true, container, glow, onClick, highlight });
 
     return container;
   }

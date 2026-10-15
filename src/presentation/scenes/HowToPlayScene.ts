@@ -5,7 +5,8 @@ import { getServices } from '../GameServices';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { SFX } from '../../shared/audio/AudioData';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
 
 /**
  * Configuración de un paso del tutorial. Se usa un array de datos en vez
@@ -492,6 +493,9 @@ export class HowToPlayScene extends Phaser.Scene {
   // Controles persistentes de Sonido/Pantalla Completa (mismo componente
   // que UIScene/GameScene/MainMenuScene, ver SoundFullscreenControls.ts).
   private hudControls!: SoundFullscreenControls;
+  // Teclado PC (Fase 5): desuscripción de bindKeys — se llama con la MISMA
+  // referencia en el SHUTDOWN de create() (AGENTS §5).
+  private unsubscribeKeys: (() => void) | null = null;
 
   constructor() {
     super({ key: 'HowToPlayScene' });
@@ -627,6 +631,32 @@ export class HowToPlayScene extends Phaser.Scene {
     // el tutorial.
     this.hudControls = new SoundFullscreenControls(this, services.audioService, services.fullscreenEnabled);
 
+    // --- Teclado PC (Fase 5 — tutorial) -----------------------------------
+    // Sin isForeground: esta escena es EXCLUSIVA — se entra con
+    // scene.start desde MainMenuScene (que muere al iniciarla, SceneManager
+    // encola stop antes que start) y nada se superpone debajo; a diferencia
+    // del menú, que sí necesita la guarda porque ShopScene se lanza ENCIMA
+    // con scene.launch sin pausarlo (ver MainMenuScene.handleFocusArrow).
+    // Las teclas se capturan para que no scrolleen la página del browser
+    // (el canvas es fijo 1280×720, no hay scroll propio que perder — mismo
+    // criterio que la captura de ↑/↓ de MainMenuScene).
+    this.input.keyboard?.addCapture(['LEFT', 'RIGHT', 'SPACE']);
+    // Los handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de
+    // verdad (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      LEFT: (event?: KeyboardEvent) => this.handlePrevKey(event),
+      RIGHT: (event?: KeyboardEvent) => this.handleNextKey(event),
+      // ENTER: atajo del botón "Siguiente"/"Comenzar" — mismo camino.
+      ENTER: (event?: KeyboardEvent) => this.handleNextKey(event),
+      // SPACE: petición explícita de "volver al menú con barra espaciadora";
+      // ESC: política ya acordada de "ESC = atrás/cerrar" — mismo destino.
+      SPACE: (event?: KeyboardEvent) => this.handleExitKey(event),
+      ESC: (event?: KeyboardEvent) => this.handleExitKey(event),
+      // S: sonido "donde haya botón" — vía el MISMO toggle del botón HUD.
+      S: (event?: KeyboardEvent) => this.handleMuteKey(event)
+    });
+
     // Limpieza al apagar la escena: además de `hudControls` (sus propios
     // listeners del ScaleManager viven a nivel Game, ver
     // SoundFullscreenControls.destroy()), se detiene cualquier tween en
@@ -640,6 +670,17 @@ export class HowToPlayScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.tweens.killTweensOf(this.modalContainer);
       this.tweens.killTweensOf(this.contentContainer);
+      // Teclado PC (Fase 5): desuscripción con la MISMA referencia (`?.`
+      // guarda contra un plugin de teclado que ya no existe, mismo criterio
+      // que el resto de la limpieza de esta escena) + quita de la captura.
+      // Seguro: nadie más captura LEFT/RIGHT/SPACE mientras esta escena
+      // vive (MainMenuScene murió con el scene.start que la creó y
+      // GameScene no está en pie), y el stop de ESTA escena se cola ANTES
+      // del start de la siguiente (SceneManager encola ops en orden), así
+      // que la captura de la nueva escena se agrega después de bajar ésta.
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      this.input.keyboard?.removeCapture(['LEFT', 'RIGHT', 'SPACE']);
       this.hudControls.destroy();
     });
   }
@@ -889,6 +930,60 @@ export class HowToPlayScene extends Phaser.Scene {
     bindUiClick(bg, audio);
 
     return this.add.container(0, y, [bg, icon, text]);
+  }
+
+  // ------------------------------------------------------------------
+  // Teclado PC (Fase 5 — tutorial)
+  // ------------------------------------------------------------------
+
+  /**
+   * ← retrocede un paso — MISMO camino que el botón "Anterior": goToStep
+   * ya pone sus propios guards de rango, de paso idéntico y de transición
+   * en vuelo. El sonido va por playUiClick (punto único ADR-015, mismo
+   * SFX.CLICK que bindUiClick de los botones) — el WHOOSH que suena dentro
+   * de exitToMainMenu es el sonido de la TRANSICIÓN, no el del click, por
+   * eso no lo duplica acá.
+   */
+  private handlePrevKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    playUiClick(getServices(this).audioService);
+    this.goToStep(this.currentStep - 1);
+  }
+
+  /**
+   * → y ENTER avanzan — MISMO camino que el botón "Siguiente"/"Comenzar"
+   * (handleNextPressed: en el último paso sale al menú, idéntico al botón).
+   * playUiClick antes de la acción, por paridad con bindUiClick.
+   */
+  private handleNextKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    playUiClick(getServices(this).audioService);
+    this.handleNextPressed();
+  }
+
+  /**
+   * SPACE y ESC vuelven al menú — MISMO camino que el botón "Volver al
+   * Menú" y la "✕" (petición del usuario: barra espaciadora; ESC por la
+   * política ya acordada de "ESC = atrás/cerrar"). El sonido va ANTES de
+   * invocar exitToMainMenu con la misma semántica que bindUiClick del
+   * botón: suena incluso si el guard de transición de la salida bloquea la
+   * acción (un click del ratón en el botón durante la salida también suena).
+   */
+  private handleExitKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    playUiClick(getServices(this).audioService);
+    this.exitToMainMenu();
+  }
+
+  /**
+   * S silencia/activa el audio vía el MISMO camino que el botón HUD de
+   * Sonido — SoundFullscreenControls.toggleMuted() es el punto único del
+   * toggle (refresca ícono/etiqueta también), igual que en MainMenuScene.
+   */
+  private handleMuteKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    this.hudControls.toggleMuted();
+    playUiClick(getServices(this).audioService);
   }
 
   // ------------------------------------------------------------------
