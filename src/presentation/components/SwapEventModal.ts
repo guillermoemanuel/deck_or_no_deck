@@ -189,6 +189,8 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
       ease: 'Quad.easeIn',
       onComplete
     });
+
+    // Limpiamos los listeners de teclado al destruir el modal.
   }
 
   /**
