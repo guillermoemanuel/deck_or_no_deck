@@ -35,6 +35,8 @@ export interface ConfirmDialogConfig {
 export class ConfirmDialog {
   private container: Phaser.GameObjects.Container | null = null;
   private readonly onEscape = (): void => this.cancel();
+  // Teclado PC (Fase 7): índice de botón enfocado (0 = Cancelar, 1 = Confirmar).
+  private focusedButtonIndex = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -52,6 +54,28 @@ export class ConfirmDialog {
     this.scene.input.keyboard?.off('keydown-ESC', this.onEscape);
     this.container?.destroy();
     this.container = null;
+  }
+
+  /**
+   * Teclado PC (Fase 7): mueve el foco de botón una posición a la izqda
+   * o drcha. Se detiene en el borde (índice 0 ó 1); no hay enrollamiento.
+   */
+  moveFocus(dir: 'left' | 'right'): void {
+    if (dir === 'left') {
+      if (this.focusedButtonIndex > 0) this.focusedButtonIndex--;
+    } else {
+      if (this.focusedButtonIndex < 1) this.focusedButtonIndex++;
+    }
+  }
+
+  /**
+   * Teclado PC (Fase 7): activa el botón enfocado — ENTER delega en
+   * cancelar o confirmar según el botón activo. ESC siempre cancela y ya
+   * está gestionado por `this.onEscape` (build).
+   */
+  activateFocusedButton(): void {
+    if (this.focusedButtonIndex === 0) this.cancel();
+    else this.confirm();
   }
 
   private cancel(): void {
@@ -99,6 +123,13 @@ export class ConfirmDialog {
       },
       this.config.bodyParams
     ).setOrigin(0.5, 0);
+
+    // Teclado PC (Fase 7): flechas/ENTER sobre el diálogo de confirmación.
+    // El ESC ya está bindado en la línea 128; las flechas mueven el foco
+    // entre los botones y ENTER activa la acción asociada.
+    this.scene.input.keyboard?.on('keydown-Left', () => this.moveFocus('left'));
+    this.scene.input.keyboard?.on('keydown-Right', () => this.moveFocus('right'));
+    this.scene.input.keyboard?.on('keydown-Enter', () => this.activateFocusedButton());
 
     const buttonY = cy + 90;
     const cancelBtn = this.createButton(cx - 130, buttonY, this.config.cancelKey, COLOR_NEUTRAL, () => this.cancel());
