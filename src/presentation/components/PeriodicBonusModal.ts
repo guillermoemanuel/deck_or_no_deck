@@ -51,6 +51,10 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
   // requestClose() delegue en callbacks.onClose — el MISMO camino de
   // cierre que el botón "Cerrar" interno, sin duplicar la lógica.
   private readonly callbacks: PeriodicBonusModalCallbacks;
+  // Teclado PC (Fase 7): índice de la carta actualmente enfocada
+  // (0 = primera carta, 5 = última). Se actualiza con flechas ←/→ y
+  // se activa con ENTER — el mismo camino que el pointerup del ratón.
+  private focusedCardIndex = 0;
   // Teclado PC (Fase 3): reveal pendiente de la carta elegida (el
   // delayedCall de handleCardPicked) — se cancela si el jugador cierra
   // con ESC dentro de la ventana de animación, o showResult() crearía el
@@ -212,6 +216,59 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
       this.pendingRevealTimer = null;
     }
     this.callbacks.onClose();
+  }
+
+  /**
+   * Teclado PC (Fase 7): mueve el foco de carta una posición a la izqda
+   * o drcha. Se detiene en el borde (índice 0 ó 5); no hay enrollamiento.
+   * El resaltado usa el mismo glow que el hover del ratón, así el efecto
+   * visual es idéntico tanto con puntero como con flechas.
+   */
+  moveFocus(dir: 'left' | 'right'): void {
+    if (this.resolved) return; // modal ya resuelto → no mover foco
+    if (dir === 'left') {
+      if (this.focusedCardIndex > 0) this.focusedCardIndex--;
+    } else {
+      if (this.focusedCardIndex < this.slots.length - 1) this.focusedCardIndex++;
+    }
+    this.highlightFocusedCard();
+  }
+
+  /**
+   * Teclado PC (Fase 7): activa la carta enfocada — idéntico efecto que
+   * el `pointerup` del ratón: accredita el premio YA (mismo instante),
+   * revela la carta, suena SFX.BONUS_CLAIM y muestra el resultado.
+   * El foco se queda sobre la carta seleccionada (resolved=true) hasta
+   * que el modal se cierre con ESC.
+   */
+  activateFocusedCard(): void {
+    if (this.resolved) return; // ya se resolvió una vez
+    const index = this.focusedCardIndex;
+    const value = this.slots[index].valueText.text;
+    // El texto del valor viene formateado como "+$5.000"; extraemos el número.
+    const amount = parseInt(value.replace('$', '').replace(',', ''), 10);
+    // La carta se "elige": mismo camino que pointerup → handleCardPicked.
+    // Pasamos el índice y el valor numérico puro.
+    this.handleCardPicked(this.scene, index, amount, this.callbacks);
+    // Sonido: el ratón no suena al clickear una carta en el bono, pero el
+    // teclado sí para paridad: SFX.BONUS_CLAIM (mismo que el banner del menú).
+    try {
+      this.scene.sound.play('sfx-bonus-claim');
+    } catch {
+      // Audio best-effort.
+    }
+  }
+
+  private highlightFocusedCard(): void {
+    // Apaga el glow de todas las slots primero.
+    this.slots.forEach((slot) => {
+      slot.glow.setAlpha(0);
+    });
+    // Enciende el glow de la carta enfocada.
+    const focusedSlot = this.slots[this.focusedCardIndex];
+    if (focusedSlot) {
+      focusedSlot.glow.setAlpha(0.35);
+    }
   }
 
   private flipCard(scene: Phaser.Scene, slot: CardSlot): void {

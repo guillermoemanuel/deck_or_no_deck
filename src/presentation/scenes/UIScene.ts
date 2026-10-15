@@ -426,10 +426,27 @@ export class UIScene extends Phaser.Scene {
    * (setEnabled(false) → disableInteractive), mientras la tecla Z suena y
    * no hace nada; se eligió mantener el feedback de pulsación en el
    * teclado (N3 del review de la Fase 3).
+   *
+   * Cuando el modal del bono ya está abierto, las flechas ←/→ y ENTER
+   * se rutean a PeriodicBonusModal para navegar y seleccionar cartas.
    */
   private handleBonusKey(event?: KeyboardEvent): void {
+    if (!event) return; // guard nil
     if (event?.repeat) return; // Anti auto-repeat del SO (misma defensa que MainMenuScene)
-    if (this.exitModal || this.bonusModal) return;
+    if (this.exitModal || this.bonusModal) {
+      // Si el modal del bono ya está abierto, ruteamos flechas/ENTER al modal;
+      // las demás teclas (Z,X,C,S) quedan inertes (mismo criterio que el
+      // return temprano de antes, para evitar doble acción).
+      if (this.bonusModal) {
+        if (event.key === 'ArrowLeft') this.bonusModal.moveFocus('left');
+        else if (event.key === 'ArrowRight') this.bonusModal.moveFocus('right');
+        else if (event.key === 'Enter') this.bonusModal.activateFocusedCard();
+        // ESC ya está manejado en handleEscapeKey (más abajo), así que no lo
+        // manejamos acá para que no haya conflicto.
+        return;
+      }
+      return;
+    }
     if (this.hasActiveOverlayScene()) return;
     const services = getServices(this);
     playUiClick(services.audioService);
