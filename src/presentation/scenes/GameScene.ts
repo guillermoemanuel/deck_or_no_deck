@@ -38,6 +38,8 @@ import {
   hasCardPositionSource,
   getGameObjectGlobalPosition
 } from '../effects/deck-celebrations/DeckCelebrationEffect';
+import { bindKeys } from '../input/KeyBindings';
+import { FocusDirection, FocusItem, nextFocusIndex } from '../input/KeyboardNavigation';
 
 /**
  * GameScene: Escena principal del juego.
@@ -67,6 +69,15 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
   // consumeGameMode) y de ahí se deriva tanto el tablero como si esta
   // partida queda exenta de la penalización por derrota/abandono.
   private dailyDateKey: string | null = null;
+
+  // --- Teclado PC (Fase 3 — partida) ---------------------------------------
+  // Cartas navegables con flechas en la fase actual: primero las 13 de la
+  // selección de carta secreta, y tras elegir, las 12 del tablero en orden
+  // row-major. Fuera de esas fases queda vacío y el foco es inerte.
+  private kbFocusViews: CardView[] = [];
+  private kbFocusIndex = -1;
+  // Desuscripción de bindKeys — se resuelve en el SHUTDOWN de create().
+  private unsubscribeKeys: (() => void) | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -187,11 +198,37 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     //Color GlowBorder Selección de Carta
     const glowBorderSelect = getDeckSetup(services.progressionManager.getSelectedDeckId()).glowBorder;
 
+    // Teclado PC (Fase 3): Phaser REUSA la MISMA instancia de la escena en
+    // cada restart/start (SceneManager.start → sys.shutdown + sys.start
+    // sobre el mismo objeto), de modo que `controller` seguía apuntando a la
+    // partida ANTERIOR con su estado `cardsLocked = true` de fin de partida
+    // — sin anularlo, los guards de flechas/Enter del teclado (areCardsLocked
+    // / isSwapModalOpen) bloquearían la selección de la carta secreta apenas
+    // se reinicia. En la Fase 1 todavía no existe controller: este reset
+    // devuelve la escena al mismo estado que la primera partida.
+    this.controller = null;
+
     // Iniciar Fase 1: Selección de carta secreta por el jugador
     this.startSecretCardSelectionPhase(values, pedestalX, pedestalY, energyBar, numberColor, glowBorderSelect);
 
     //Musica de fondo
     this.playMusic('music_gameplay');
+
+    // --- Teclado PC (Fase 3 — partida) -------------------------------------
+    // Las 4 flechas se capturan para que no scrolleen la página del browser
+    // (el canvas es fijo 1280×720 y no hay scroll propio que perder — mismo
+    // criterio que la captura de ↑/↓ de MainMenuScene).
+    this.input.keyboard?.addCapture(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+    // Los handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de verdad
+    // (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      UP: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'up'),
+      DOWN: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'down'),
+      LEFT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'left'),
+      RIGHT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'right'),
+      ENTER: (event?: KeyboardEvent) => this.activateFocusedCard(event)
+    });
 
     // BUGFIX (bug_fix_audio_lifecycle) — requisito (a): red de seguridad a
     // nivel de ciclo de vida de Phaser. Sin importar la vía por la que esta
@@ -204,6 +241,28 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // solo ocurre si la escena se remueve del Scene Manager por completo,
     // lo cual no pasa en este juego.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // Teclado PC (Fase 3): desuscripción con la MISMA referencia (`?.`
+      // guarda contra un plugin de teclado que ya no existe, mismo criterio
+      // que los `off` del resto de la escena) + quita de la captura de
+      // flechas.
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      // `removeCapture` es GLOBAL a nivel juego (documentado en el
+      // KeyboardManager de Phaser): bajar ↑/↓/←/→ acá también le afecta al
+      // menú, pero MainMenuScene re-agrega SU captura de ↑/↓ al recrearse y,
+      // en todas las salidas a menú, el stop de GameScene se cola ANTES del
+      // start de MainMenuScene (ver UIScene.exitToMainMenu y
+      // ResultScene.exitToMainMenu), así que nunca se pierde.
+      this.input.keyboard?.removeCapture(['UP', 'DOWN', 'LEFT', 'RIGHT']);
+      // B1 (review): NO clearKbFocus() acá — el DisplayList destruye los
+      // game objects ANTES que este handler (se registra en el START), y
+      // setKeyboardFocus(false) sobre una CardView destruida toca
+      // this.scene === undefined → TypeError que ABORTA el resto de la
+      // limpieza de SHUTDOWN (música, puente de sesión, guard de abandono).
+      // El glow muere con los objetos: basta resetear el estado (igual que
+      // MainMenuScene limpia focusEntries sin resaltar nada).
+      this.kbFocusViews = [];
+      this.kbFocusIndex = -1;
       this.audioService.stopMusic(0);
       // Cierre simétrico de reportGameplayStart() (ver arriba) — se
       // dispara sin importar POR QUÉ se cierra esta escena (reinicio de
@@ -273,6 +332,13 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
         this.onSecretCardChosen(index, initialViews, values, pedestalX, pedestalY, energyBar);
       });
     });
+
+    // Teclado PC (Fase 3): mientras dura la elección, ↑/↓/←/→ navegan estas
+    // 13 cartas. `initialViews` es local a este método — el estado de foco
+    // guarda su propia COPIA para no depender del alcance de la closure. El
+    // índice arranca en -1 (ENTER queda inerte hasta la primera flecha);
+    // clearKbFocus() del SHUTDOWN garantiza el -1 en cada reingreso.
+    this.kbFocusViews = [...initialViews];
   }
 
   private onSecretCardChosen(
@@ -433,6 +499,15 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       boardIndex++;
     });
 
+    // Teclado PC (Fase 3): la elección terminó — el foco sale de la grilla
+    // de selección (apaga cualquier highlight encendido y deja el índice en
+    // -1) y pasa a las 12 cartas del tablero. La copia de `boardCardViews`
+    // (que además es local a este método) preserva el orden de inserción,
+    // es decir el orden row-major recién armado; la carta secreta del
+    // pedestal queda FUERA del foco porque es locked y no es navegable.
+    this.clearKbFocus();
+    this.kbFocusViews = [...boardCardViews.values()];
+
     // Panel lateral "Valores en juego": ayuda de memoria con los 13 montos
     // posibles en orden descendente, que se van marcando a medida que se
     // revelan (abrir carta, intercambio de mitad de juego, o carta secreta
@@ -488,6 +563,95 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       unsubscribeOnboarding();
       unsubscribeOutcomeRecording();
     });
+  }
+
+  /**
+   * Teclado PC (Fase 3): navega el foco con ↑/↓/←/→ sobre las cartas de la
+   * fase actual usando el núcleo puro de KeyboardNavigation (sin sonido al
+   * mover). La geometría sale de las MISMAS vistas (v.x/v.y), así que la
+   * grilla de selección y el tablero 4x3 navegan sin layout propio.
+   *
+   * El auto-repeat del sistema operativo re-emite `keydown` cada ~30 ms con
+   * una tecla mantenida — sin ignorar `repeat` el foco saltaría en tromba y
+   * acumularía tweens; solo se navega en la pulsación inicial.
+   */
+  private handleFocusArrow(event: KeyboardEvent | undefined, direction: FocusDirection): void {
+    if (event?.repeat) return;
+    // Modal de intercambio abierto o ventana del banquero/endurecimiento en
+    // pantalla: el tablero está fuera de servicio y el modal maneja sus
+    // propios controles. Sin controller (fase de selección de la carta
+    // secreta) no aplica: ahí todavía no existe tablero que bloquear.
+    if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;
+    if (this.hasActiveOverlayScene()) return;
+
+    const previousIndex = this.kbFocusIndex;
+    this.kbFocusIndex = nextFocusIndex(this.kbFocusItems(), this.kbFocusIndex, direction);
+    // Sin cambio de índice (borde del tablero, o sin cartas habilitadas):
+    // no se toca ningún resaltado.
+    if (this.kbFocusIndex === previousIndex) return;
+    if (previousIndex >= 0) this.kbFocusViews[previousIndex]?.setKeyboardFocus(false);
+    this.kbFocusViews[this.kbFocusIndex]?.setKeyboardFocus(true);
+  }
+
+  /**
+   * Teclado PC (Fase 3): ENTER activa la carta enfocada emitiendo el MISMO
+   * 'card-clicked' del pointerup de CardView — así el handler del controller
+   * (bindCardClicks) decide la rama (apertura o selección de swap) y el
+   * listener `once` de la fase de selección recibe el emit sin cambios.
+   */
+  private activateFocusedCard(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;
+    if (this.hasActiveOverlayScene()) return;
+    if (this.kbFocusIndex < 0) return; // nada enfocado → ENTER inerte
+    const view = this.kbFocusViews[this.kbFocusIndex];
+    // Carta revelada o bloqueada: ENTER no debe reabrirla ni colarse por
+    // encima de un estado que el puntero ni siquiera podría clickear.
+    if (!view || view.isCardOpen() || view.isLocked()) return;
+    view.emit('card-clicked', view.getCardId());
+  }
+
+  /**
+   * Teclado PC (Fase 3): items de foco armados al vuelo para
+   * KeyboardNavigation — la posición la pone la vista (la geometría vive en
+   * las vistas, no en la escena) y una carta revelada o bloqueada no es
+   * candidata de movimiento.
+   */
+  private kbFocusItems(): FocusItem[] {
+    return this.kbFocusViews.map(view => ({
+      x: view.x,
+      y: view.y,
+      enabled: !view.isCardOpen() && !view.isLocked()
+    }));
+  }
+
+  /**
+   * Teclado PC (Fase 3): apaga el highlight de cualquier carta enfocada y
+   * deja el índice en -1 (flechas/ENTER inertes hasta que una fase vuelva a
+   * poblar kbFocusViews). setKeyboardFocus(false) sobre una carta ya
+   * revelada es no-op — lo maneja el propio CardView.
+   */
+  private clearKbFocus(): void {
+    this.kbFocusViews.forEach(view => view.setKeyboardFocus(false));
+    this.kbFocusIndex = -1;
+  }
+
+  /**
+   * Teclado PC (Fase 3): ¿hay un overlay de OTRA escena encima de la
+   * partida? Mismo criterio que UIScene.hasActiveOverlayScene. Defensivo:
+   * los overlays que pausan GameScene (ShopScene, los de anuncio) ya no
+   * emiten keydown — KeyboardPlugin.isActive() exige scene.sys.canInput() —
+   * pero el chequeo es barato y cubre los que se superponen SIN pausar, como
+   * ResultScene, que se abre con scene.launch sobre la partida todavía
+   * RUNNING.
+   */
+  private hasActiveOverlayScene(): boolean {
+    return (
+      this.scene.isActive('ShopScene') ||
+      this.scene.isActive('ResultScene') ||
+      this.scene.isActive('AdOverlayScene') ||
+      this.scene.isActive('AdBlockerScene')
+    );
   }
 
   /**

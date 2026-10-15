@@ -257,9 +257,12 @@ export class MainMenuScene extends Phaser.Scene {
       this.unsubscribeKeys?.();
       this.unsubscribeKeys = null;
       // Nota: `removeCapture` es GLOBAL a nivel juego (documentado en
-      // KeyboardManager de Phaser) — si una fase posterior captura ↑/↓ en
-      // otra escena, este SHUTDOWN se las bajaría. Hoy solo este menú
-      // captura (verificado con grep), pero vale el detalle.
+      // KeyboardManager de Phaser). Hoy lo usan este menú (↑/↓) y
+      // GameScene (↑/↓/←/→) — el orden de alta/baja está garantizado porque
+      // el stop de la escena vieja se cola ANTES del start de la nueva
+      // (SceneManager encola ops en orden), así que la captura de la nueva
+      // escena se agrega después de que la vieja la baje. Verificado en
+      // ScenePlugin.queueOp ( Phaser 3 ).
       this.input.keyboard?.removeCapture(['UP', 'DOWN']);
       this.focusEntries = [];
       this.focusIndex = -1;

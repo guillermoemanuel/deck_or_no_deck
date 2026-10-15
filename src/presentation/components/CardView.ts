@@ -19,6 +19,19 @@ export class CardView extends Phaser.GameObjects.Container {
   private readonly valueText: Phaser.GameObjects.Text;
   private readonly positionLabel: Phaser.GameObjects.Text;
   private isRevealed = false;
+  // Fase 3 (teclado PC): estado de bloqueo persistido por setLocked(). El
+  // efecto sobre la interactividad del sprite no basta: hay que poder
+  // CONSULTARLO (isLocked) para los guards de navegación del teclado.
+  private locked = false;
+  // Fase 3 (teclado PC): true mientras el foco de teclado está puesto en
+  // esta carta. Hace que setKeyboardFocus(true) repetido sea idempotente y
+  // que setKeyboardFocus(false) sin foco previo sea un no-op con cero tweens.
+  private keyboardFocused = false;
+  // M2 (review): segundo dueño del highlight — true mientras el puntero
+  // está sobre la carta. La señal visual es UNA y se deriva de
+  // `pointerHovered || keyboardFocused`: así un pointerout no apaga el
+  // glow de una carta que sigue enfocada por teclado (y viceversa).
+  private pointerHovered = false;
 
   // BUGFIX (bug_card_focus): escala "de reposo" real de la carta en su
   // posición actual del layout (0.82 en la grilla de selección, 0.88 en el
@@ -111,8 +124,46 @@ export class CardView extends Phaser.GameObjects.Container {
   }
 
   private setupInteractivity(): void {
+    // Fase 3 (teclado PC): pointerover/pointerout y setKeyboardFocus()
+    // comparten refreshHighlight() — UNA señal derivada de los dos dueños
+    // (puntero y teclado) hacia applyFocusHighlight(), el punto único del
+    // efecto (mismo glow, misma escala objetivo y duración). El puntero no
+    // cambia de comportamiento: resalta por hover y apaga al salir, salvo
+    // que la carta siga enfocada por teclado (M2 del review de la Fase 3).
     this.cardSprite.on('pointerover', () => {
-      if (this.isRevealed) return;
+      this.pointerHovered = true;
+      this.refreshHighlight();
+    });
+    this.cardSprite.on('pointerout', () => {
+      this.pointerHovered = false;
+      this.refreshHighlight();
+    });
+
+    this.cardSprite.on('pointerup', () => {
+      this.emit('card-clicked', this.cardId);
+    });
+  }
+
+  /**
+   * Fase 3 (teclado PC): computa el highlight final desde los dos dueños
+   * (hover de puntero y foco de teclado) y lo delega al punto único
+   * applyFocusHighlight. El guard de isRevealed vive en el punto único.
+   */
+  private refreshHighlight(): void {
+    this.applyFocusHighlight(this.pointerHovered || this.keyboardFocused);
+  }
+
+  /**
+   * Punto ÚNICO del highlight de foco (hover de puntero Y foco de teclado
+   * PC): enciende o apaga el glow del borde y tweenea la escala hacia
+   * base×1.06 o de vuelta a la escala de reposo, 120 ms Cubic.easeOut.
+   *
+   * El guard de isRevealed vive acá adentro: una carta ya resuelta no se
+   * resalta, ni con puntero ni con teclado.
+   */
+  private applyFocusHighlight(on: boolean): void {
+    if (this.isRevealed) return;
+    if (on) {
       this.glowBorder.setStrokeStyle(3, this.glowBorderSelect, 0.9);
       this.scene.tweens.add({
         targets: this,
@@ -123,25 +174,41 @@ export class CardView extends Phaser.GameObjects.Container {
         duration: 120,
         ease: 'Cubic.easeOut'
       });
+      return;
+    }
+    this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
+    this.scene.tweens.add({
+      targets: this,
+      // BUGFIX (bug_card_focus): vuelve exactamente a la escala base
+      // guardada — antes volvía siempre a 1.0, mayor que la escala real
+      // de reposo (0.82/0.88/0.9), dejando la carta agrandada para siempre.
+      scale: this.initialScale,
+      duration: 120,
+      ease: 'Cubic.easeOut'
     });
+  }
 
-    this.cardSprite.on('pointerout', () => {
-      if (this.isRevealed) return;
-      this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
-      this.scene.tweens.add({
-        targets: this,
-        // BUGFIX (bug_card_focus): vuelve exactamente a la escala base
-        // guardada — antes volvía siempre a 1.0, mayor que la escala real
-        // de reposo (0.82/0.88/0.9), dejando la carta agrandada para siempre.
-        scale: this.initialScale,
-        duration: 120,
-        ease: 'Cubic.easeOut'
-      });
-    });
-
-    this.cardSprite.on('pointerup', () => {
-      this.emit('card-clicked', this.cardId);
-    });
+  /**
+   * Fase 3 (teclado PC): highlight del foco de la carta apuntada por
+   * flechas/Enter. Replica el MISMO efecto visual del hover (ver
+   * applyFocusHighlight) pero SIN depender de la interactividad del sprite:
+   * la carta secreta del pedestal está locked con disableInteractive y aun
+   * así debe poder resaltarse.
+   */
+  setKeyboardFocus(on: boolean): void {
+    // B1 (review): vista ya destruida (el DisplayList destruye los game
+    // objects antes que los listeners de SHUTDOWN de la escena) — tocar
+    // this.scene undefined reventaría el resto de la limpieza. No-op.
+    if (!this.scene) return;
+    // Paridad con el hover: una carta resuelta no se resalta, y el flag NO
+    // se muta para que una carta que vuelva a boca abajo (resetAsFaceDown)
+    // pueda enfocarse de nuevo después.
+    if (this.isRevealed) return;
+    // Idempotente / no-op seguro: sin cambio de estado no se pide ningún
+    // tween — setKeyboardFocus(false) sin foco previo deja todo intacto.
+    if (on === this.keyboardFocused) return;
+    this.keyboardFocused = on;
+    this.refreshHighlight();
   }
 
   setParticleManager(pm: ParticleManager): void {
@@ -285,15 +352,39 @@ export class CardView extends Phaser.GameObjects.Container {
     this.valueText.setVisible(false);
     this.positionLabel.setVisible(this.displayNumber !== null);
     this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
+    // Fase 3 (teclado PC): los DOS dueños del highlight quedan apagados —
+    // si siguiera alguno en true, un refreshHighlight posterior sería
+    // no-op y la carta se quedaría sin resaltar.
+    this.keyboardFocused = false;
+    this.pointerHovered = false;
     this.cardSprite.setInteractive({ useHandCursor: true });
   }
 
   setLocked(locked: boolean): void {
+    this.locked = locked;
     if (locked) {
       this.cardSprite.disableInteractive();
       this.glowBorder.setStrokeStyle(3, 0x00e5ff, 0);
+      // M2 (review): bloquear la carta apaga también el FOCO de teclado y
+      // su residuo de escala (initialScale × 1.06). Sin esto, durante la
+      // ventana del banquero la carta enfocada quedaba sin glow pero
+      // agrandada (el bug_card_focus que setBaseScale vino a eliminar) y
+      // tras el unlock el foco seguía "activo" invisible. setKeyboardFocus
+      // posterior sobre una carta locked sigue funcionando (es el caso del
+      // pedestal); acá solo se limpia el estado al bloquear.
+      this.keyboardFocused = false;
+      this.setScale(this.initialScale);
     } else if (!this.isRevealed) {
       this.cardSprite.setInteractive({ useHandCursor: true });
     }
+  }
+
+  /**
+   * Fase 3 (teclado PC): expone el estado persistido por setLocked() —
+   * antes el bloqueo solo actuaba sobre la interactividad del sprite y
+   * nada podía preguntar "¿esta carta está bloqueada?".
+   */
+  isLocked(): boolean {
+    return this.locked;
   }
 }

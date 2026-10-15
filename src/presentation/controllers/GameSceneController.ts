@@ -44,6 +44,10 @@ export class GameSceneController {
   private activeOfferPanel: BankerOfferPanel | null = null;
   private activeSwapModal: SwapEventModal | null = null;
   private isAwaitingSwapSelection = false;
+  // Fase 3 (teclado PC): último estado aplicado por lockAllCards(), que
+  // expone areCardsLocked() como guard de la navegación por teclado — la
+  // lógica de bloqueo en sí no cambia, solo se vuelve consultable.
+  private cardsLocked = false;
   private swapPromptBanner: Phaser.GameObjects.Container | null = null;
   // Sonidos de la partida: traduce cada GameEvent a sfx (latido, deal,
   // derrota, etc.) — delegado puro, sin duplicar sonidos en el switch.
@@ -639,7 +643,27 @@ export class GameSceneController {
   }
 
   private lockAllCards(locked: boolean): void {
+    // Fase 3 (teclado PC): reflejar el último lock aplicado para que
+    // areCardsLocked() pueda usarse como guard de navegación del teclado.
+    this.cardsLocked = locked;
     this.cardViews.forEach(view => view.setLocked(locked));
+  }
+
+  /**
+   * Fase 3 (teclado PC): ¿el tablero está bloqueado ahora mismo? Refleja el
+   * último lockAllCards() llamado. El teclado lo usa como guard antes de
+   * mover el foco entre cartas (solo lectura — no altera el bloqueo).
+   */
+  areCardsLocked(): boolean {
+    return this.cardsLocked;
+  }
+
+  /**
+   * Fase 3 (teclado PC): ¿hay un modal de intercambio abierto? Mientras sea
+   * true, el teclado deja el tablero inerte y el modal maneja sus controles.
+   */
+  isSwapModalOpen(): boolean {
+    return this.activeSwapModal !== null;
   }
 
   getCardView(cardId: string): CardView | undefined {

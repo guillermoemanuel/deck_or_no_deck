@@ -47,11 +47,23 @@ export interface PeriodicBonusModalCallbacks {
 export class PeriodicBonusModal extends Phaser.GameObjects.Container {
   private readonly slots: CardSlot[] = [];
   private resolved = false;
+  // Teclado PC (Fase 3): callbacks guardados como campo para que
+  // requestClose() delegue en callbacks.onClose — el MISMO camino de
+  // cierre que el botón "Cerrar" interno, sin duplicar la lógica.
+  private readonly callbacks: PeriodicBonusModalCallbacks;
+  // Teclado PC (Fase 3): reveal pendiente de la carta elegida (el
+  // delayedCall de handleCardPicked) — se cancela si el jugador cierra
+  // con ESC dentro de la ventana de animación, o showResult() crearía el
+  // texto de resultado y el botón "Cerrar" sobre un contenedor ya
+  // destruido (UIScene lo destruye vía callbacks.onClose), filtrándolos
+  // en la escena para siempre.
+  private pendingRevealTimer: Phaser.Time.TimerEvent | null = null;
 
   constructor(scene: Phaser.Scene, values: readonly number[], callbacks: PeriodicBonusModalCallbacks) {
     const cx = scene.cameras.main.centerX;
     const cy = scene.cameras.main.centerY;
     super(scene, cx, cy);
+    this.callbacks = callbacks;
 
     const backdrop = scene.add.rectangle(0, 0, scene.cameras.main.width * 2, scene.cameras.main.height * 2, 0x000000, 0.78).setInteractive();
 
@@ -180,7 +192,26 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
     // más abajo solo cierra el modal, no condiciona si el premio se otorga.
     callbacks.onCardChosen(value);
 
-    scene.time.delayedCall(420, () => this.showResult(scene, value, callbacks.onClose));
+    this.pendingRevealTimer = scene.time.delayedCall(420, () => {
+      this.pendingRevealTimer = null;
+      this.showResult(scene, value, callbacks.onClose);
+    });
+  }
+
+  /**
+   * Teclado PC (Fase 3): cierre vía teclado (ESC en UIScene) — delega en
+   * `callbacks.onClose`, el MISMO camino que su botón "Cerrar" interno
+   * (resume GameScene + destroy, orquestado por UIScene), sin duplicar
+   * lógica. Sin sonido: cerrar es cancelar, no confirmar. También cancela
+   * el reveal pendiente si el jugador cierra dentro de la ventana de
+   * animación de 420 ms (ver pendingRevealTimer).
+   */
+  requestClose(): void {
+    if (this.pendingRevealTimer) {
+      this.pendingRevealTimer.destroy();
+      this.pendingRevealTimer = null;
+    }
+    this.callbacks.onClose();
   }
 
   private flipCard(scene: Phaser.Scene, slot: CardSlot): void {

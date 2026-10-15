@@ -11,6 +11,8 @@ import { PeriodicBonusStatus } from '../../domain/value-objects/PeriodicBonus';
 import { HudIconButton } from '../components/HudIconButton';
 import { SoundFullscreenControls } from '../components/SoundFullscreenControls';
 import { SFX } from '../../shared/audio/AudioData';
+import { playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / BankerOfferPanel.ts /
  * ResultScene.ts / SwapEventModal.ts — mismos valores hex, para que el
@@ -24,6 +26,20 @@ const COLOR_NEUTRAL_GLOW = 0xd8d8de;
 const COLOR_PANEL_BG = 0x0a0e17;
 const COLOR_WHITE_HEX = '#ffffff';
 const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
+
+/**
+ * Botón navegable del modal de salida (Fase 3): lo mínimo para que ↑/↓
+ * resalten con el MISMO efecto que el hover del ratón y ENTER active SIN
+ * pointer — mismo estilo que `MenuFocusEntry` de MainMenuScene, sin
+ * geometría propia (los 2 botones del modal están fijos lado a lado en la
+ * misma Y, la navegación alterna simple entre ambos, ver
+ * handleExitModalArrow()).
+ */
+interface ExitModalButtonEntry {
+  readonly container: Phaser.GameObjects.Container;
+  readonly highlight: (on: boolean) => void;
+  readonly onClick: () => void;
+}
 
 /** Layout del renglón superior de botones-ícono del HUD (Bono / Tienda /
  * Salir): mismo tamaño cuadrado, mismo espaciado, misma Y — anclado al
@@ -52,8 +68,24 @@ export class UIScene extends Phaser.Scene {
   private coinsText!: Phaser.GameObjects.Text;
   private unsubscribe: (() => void) | null = null;
   private exitModal: Phaser.GameObjects.Container | null = null;
-  private bonusModal: Phaser.GameObjects.Container | null = null;
+  // Tipo concreto (no Container): el teclado (ESC, Fase 3) necesita
+  // requestClose() — el delegado al MISMO camino de cierre que su botón
+  // "Cerrar" interno, ver PeriodicBonusModal.requestClose().
+  private bonusModal: PeriodicBonusModal | null = null;
   private bonusRefreshTimer: Phaser.Time.TimerEvent | null = null;
+
+  // --- Teclado PC (Fase 3 — partida) --------------------------------------
+  // Desuscripción de bindKeys — se resuelve en el SHUTDOWN de create()
+  // con la MISMA referencia (AGENTS §5), igual que en MainMenuScene.
+  private unsubscribeKeys: (() => void) | null = null;
+  // Botones navegables del modal de salida en orden [Cancelar, Confirmar]
+  // — createModalButton() los registra (mismo patrón que `focusEntries` de
+  // MainMenuScene) para que ↑/↓ resalten y ENTER active SIN pointer.
+  private exitModalButtons: ExitModalButtonEntry[] = [];
+  // -1 = nada enfocado hasta la primera pulsación de flecha (mismo
+  // criterio que `focusIndex` de MainMenuScene): ENTER es inerte hasta
+  // que el jugador mueve el foco.
+  private exitModalFocusIndex = -1;
 
   // Botones-ícono del renglón superior (Bono / Tienda / Salir) — se
   // necesitan guardados como referencias, no solo creados al vuelo, para
@@ -179,7 +211,33 @@ export class UIScene extends Phaser.Scene {
       this.refreshBonusButton(services);
     });
 
+    // --- Teclado PC (Fase 3 — partida) -------------------------------------
+    // Sin addCapture: a diferencia de ↑/↓ en MainMenuScene (que sí se
+    // capturan para que no scrolleen la página del browser), ninguna de
+    // estas teclas scrollea — no hay nada que capturar acá. Los handlers
+    // van como MISMA referencia (el objeto literal se crea una sola vez
+    // acá) para que el unsubscribe de SHUTDOWN desenganche de verdad
+    // (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      Z: (event?: KeyboardEvent) => this.handleBonusKey(event),
+      X: (event?: KeyboardEvent) => this.handleShopKey(event),
+      C: (event?: KeyboardEvent) => this.handleExitKey(event),
+      S: (event?: KeyboardEvent) => this.handleSoundKey(event),
+      ESC: (event?: KeyboardEvent) => this.handleEscapeKey(event),
+      // ↑/↓ y ENTER SOLO actúan sobre el modal de salida — fuera de él son
+      // no-op: la partida no tiene elementos navegables por teclado.
+      UP: (event?: KeyboardEvent) => this.handleExitModalArrow(event),
+      DOWN: (event?: KeyboardEvent) => this.handleExitModalArrow(event),
+      ENTER: (event?: KeyboardEvent) => this.activateExitModalButton(event)
+    });
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // Teclado PC (Fase 3): desuscripción con la MISMA referencia (AGENTS
+      // §5) + limpieza del estado de foco del modal de salida.
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
+      this.exitModalButtons = [];
+      this.exitModalFocusIndex = -1;
       this.unsubscribe?.();
       this.unsubscribe = null;
       this.unsubscribeLanguage?.();
@@ -335,6 +393,164 @@ export class UIScene extends Phaser.Scene {
     return `💰 ${amount.toLocaleString()}`;
   }
 
+  // --- Teclado PC (Fase 3 — partida) ----------------------------------------
+  // Phaser emite `keydown-<KEY>` en TODA escena RUNNING (no filtra la que
+  // está arriba) y UIScene NO se pausa con ShopScene/ResultScene (solo
+  // GameScene pausa) — sin los guards de abajo, Z/X/C/S actuarían con un
+  // overlay encima (el mismo bug que la Fase 2 corrigió en el menú vía
+  // MainMenuScene.isForeground). Con un modal propio abierto tampoco se
+  // actúa debajo (la exclusión mutua ya existía en tryOpenBonusModal /
+  // showExitConfirmationModal); la ÚNICA excepción es navegar/activar/
+  // cerrar el propio modal de salida (ESC y ↑/↓/ENTER, más abajo).
+
+  /**
+   * ¿Hay un overlay de OTRA escena encima de la partida? Los overlays de
+   * anuncio pausan GameScene, pero esta escena sigue RUNNING y también
+   * debe quedarse muda (ver AdOverlayScene / AdBlockerScene).
+   */
+  private hasActiveOverlayScene(): boolean {
+    return (
+      this.scene.isActive('ShopScene') ||
+      this.scene.isActive('ResultScene') ||
+      this.scene.isActive('AdOverlayScene') ||
+      this.scene.isActive('AdBlockerScene')
+    );
+  }
+
+  /**
+   * Z → Bono Periódico. Delega en tryOpenBonusModal(), que ya trae sus
+   * propios guards internos (estado 'available', exclusión mutua) y pausa
+   * GameScene. El sonido se reproduce aunque ese guard interno rechace —
+   * mismo criterio que ENTER en el menú. DIVERGENCIA CONSCIENTE con el
+   * ratón: el botón HUD con estado 'locked' es inerte y silencioso
+   * (setEnabled(false) → disableInteractive), mientras la tecla Z suena y
+   * no hace nada; se eligió mantener el feedback de pulsación en el
+   * teclado (N3 del review de la Fase 3).
+   */
+  private handleBonusKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return; // Anti auto-repeat del SO (misma defensa que MainMenuScene)
+    if (this.exitModal || this.bonusModal) return;
+    if (this.hasActiveOverlayScene()) return;
+    const services = getServices(this);
+    playUiClick(services.audioService);
+    this.tryOpenBonusModal(services);
+  }
+
+  /**
+   * X → Tienda. Mismo camino que el botón HUD "Tienda" (scene.launch):
+   * ShopScene pausa GameScene y su SHUTDOWN reanuda al cerrarse.
+   */
+  private handleShopKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (this.exitModal || this.bonusModal) return;
+    if (this.hasActiveOverlayScene()) return;
+    playUiClick(getServices(this).audioService);
+    this.scene.launch('ShopScene');
+  }
+
+  /**
+   * C → Salir al Menú. SIEMPRE vía el modal de confirmación — nunca
+   * confirmExitToMainMenu() directo: la penalización de abandono depende
+   * de que el jugador la confirme (ver GameAbandonGuard).
+   */
+  private handleExitKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (this.exitModal || this.bonusModal) return;
+    if (this.hasActiveOverlayScene()) return;
+    playUiClick(getServices(this).audioService);
+    this.showExitConfirmationModal();
+  }
+
+  /**
+   * S → Sonido. toggleMuted() es el punto único del toggle (refresca
+   * ícono/etiqueta del botón HUD también) — idéntico a
+   * MainMenuScene.toggleMuteFromKeyboard.
+   */
+  private handleSoundKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (this.exitModal || this.bonusModal) return;
+    if (this.hasActiveOverlayScene()) return;
+    this.hudControls.toggleMuted();
+    playUiClick(getServices(this).audioService);
+  }
+
+  /**
+   * ESC solo CIERRA — nunca abre el modal de salida (esa política vive en
+   * C), y siempre SIN sonido: cerrar/cancelar no es confirmar. Cada punto
+   * delega en el MISMO camino que el control apuntante correspondiente,
+   * sin duplicar lógica.
+   */
+  private handleEscapeKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    // 1. Modal de salida: MISMA acción que su botón Cancelar (reanuda
+    // GameScene + destroyExitModal, que además limpia el foco del modal).
+    if (this.exitModal) {
+      this.scene.resume('GameScene');
+      this.destroyExitModal();
+      return;
+    }
+    // 2. Modal de bono: requestClose() delega en callbacks.onClose (resume
+    // GameScene + destroy) — el MISMO camino que su botón "Cerrar" interno.
+    if (this.bonusModal) {
+      this.bonusModal.requestClose();
+      return;
+    }
+    // 3. Tienda: mismo camino que su ✕ (ShopScene.ts:561 hace scene.stop()
+    // de sí misma); su SHUTDOWN reanuda GameScene.
+    if (this.scene.isActive('ShopScene')) {
+      this.scene.stop('ShopScene');
+      return;
+    }
+    // 4. Sin nada abierto: no-op deliberado — ESC no abre nada.
+  }
+
+  /**
+   * ↑/↓ navegan el foco SOLO dentro del modal de salida; fuera de él son
+   * no-op (la partida no tiene elementos navegables). Los 2 botones del
+   * modal están lado a lado en la misma Y, así que la dirección es
+   * ambigua: ambas flechas simplemente alternan entre Cancelar (0) y
+   * Confirmar (1). Recién abierto (-1) la primera flecha enfoca Cancelar.
+   */
+  private handleExitModalArrow(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.exitModal) return;
+    this.setExitModalFocus(this.exitModalFocusIndex === 0 ? 1 : 0);
+  }
+
+  /**
+   * ENTER activa el botón enfocado del modal de salida invocando su
+   * callback TAL CUAL (el mismo que recibió createModalButton) — NO se
+   * emite un pointerup sintético, por el mismo motivo que en
+   * MainMenuScene (el dragGuard de otros contextos revienta con `pointer`
+   * undefined). Sin sonido: los botones del modal no lo tienen en su
+   * camino de ratón (createModalButton no usa bindUiClick), y teclado y
+   * ratón deben verse idénticos. Focus -1 = recién abierto → inerte hasta
+   * que el jugador mueva el foco.
+   */
+  private activateExitModalButton(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.exitModal) return;
+    if (this.exitModalFocusIndex < 0) return;
+    const entry = this.exitModalButtons[this.exitModalFocusIndex];
+    if (!entry) return;
+    entry.onClick();
+  }
+
+  /**
+   * Aplica el foco de teclado del modal de salida con el MISMO efecto que
+   * el hover del ratón (highlight compartido en createModalButton). Se
+   * limpia a -1 directo en destroyExitModal()/SHUTDOWN sin pasar por acá:
+   * los botones ya se están por destruir y un tween más sería ruido sobre
+   * objetivos muertos.
+   */
+  private setExitModalFocus(index: number): void {
+    const previous = this.exitModalFocusIndex;
+    if (previous === index) return;
+    if (previous >= 0) this.exitModalButtons[previous]?.highlight(false);
+    this.exitModalFocusIndex = index;
+    if (index >= 0) this.exitModalButtons[index]?.highlight(true);
+  }
+
   /**
  
    * Modal de confirmación "Salir al Menú" — estética "Casino de Lujo"
@@ -348,6 +564,11 @@ export class UIScene extends Phaser.Scene {
    */
   private showExitConfirmationModal(): void {
     if (this.exitModal || this.bonusModal) return; // Ya hay un modal abierto — evita apilar dos
+    // Teclado PC (Fase 3): el foco arranca en -1 (ENTER inerte hasta la
+    // primera flecha) y los botones se (re)registran en createModalButton
+    // más abajo, en orden [Cancelar, Confirmar].
+    this.exitModalButtons = [];
+    this.exitModalFocusIndex = -1;
     this.scene.pause('GameScene');
     const { width, height } = this.cameras.main;
     const cx = width / 2;
@@ -420,6 +641,11 @@ export class UIScene extends Phaser.Scene {
   private destroyExitModal(): void {
     this.exitModal?.destroy();
     this.exitModal = null;
+    // Teclado PC (Fase 3): los botones referenciados acá ya murieron con
+    // el container destruido — se limpia el foco sin pasar por
+    // setExitModalFocus (un tween sobre objetivos muertos es ruido).
+    this.exitModalButtons = [];
+    this.exitModalFocusIndex = -1;
   }
   /**
    * "Ir al Menú" confirmado: aplica la penalización (SOLO si
@@ -493,14 +719,16 @@ export class UIScene extends Phaser.Scene {
     container.add([glow, bg, text]);
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     container.add(hitZone);
-    hitZone.on('pointerover', () => {
-      this.tweens.add({ targets: container, scale: 1.05, duration: 120, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 1, duration: 120, ease: 'Cubic.easeOut' });
-    });
-    hitZone.on('pointerout', () => {
-      this.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Cubic.easeOut' });
-      this.tweens.add({ targets: glow, alpha: 0, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    // Efecto de resaltado ÚNICO compartido entre el hover del ratón y el
+    // foco de teclado (Fase 3): mismos tweens, misma duración — el foco
+    // del modal se ve idéntico a pasar el cursor (mismo patrón que
+    // MainMenuScene.createCasinoButton).
+    const highlight = (on: boolean): void => {
+      this.tweens.add({ targets: container, scale: on ? 1.05 : 1, duration: 120, ease: 'Cubic.easeOut' });
+      this.tweens.add({ targets: glow, alpha: on ? 1 : 0, duration: 120, ease: 'Cubic.easeOut' });
+    };
+    hitZone.on('pointerover', () => highlight(true));
+    hitZone.on('pointerout', () => highlight(false));
     hitZone.on('pointerup', () => {
       this.tweens.add({
         targets: container,
@@ -510,6 +738,14 @@ export class UIScene extends Phaser.Scene {
         onComplete: onClick
       });
     });
+    // Teclado PC (Fase 3): registro como botón navegable del modal de
+    // salida. createModalButton() es privado de esta escena y SOLO lo usa
+    // showExitConfirmationModal (Cancelar primero, Confirmar después), así
+    // el push mantiene el orden del array [Cancelar, Confirmar] sin
+    // índices ni coordenadas nuevos (mismo patrón que `focusEntries` de
+    // MainMenuScene).
+    this.exitModalButtons.push({ container, highlight, onClick });
+
     return container;
   }
 }
