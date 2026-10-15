@@ -42,10 +42,16 @@ interface CasinoButtonConfig {
  * así que ENTER invoca el callback tal cual).
  */
 interface MenuFocusEntry extends FocusItem {
-  readonly container: Phaser.GameObjects.Container;
-  readonly glow: Phaser.GameObjects.Graphics;
   readonly onClick: () => void;
   readonly highlight: (on: boolean) => void;
+  /**
+   * Fase 7: si el ítem reproduce su propio sonido al activarse, ENTER NO
+   * suma `playUiClick` (así se evita el doble sonido). true en el banner
+   * del Desafío Diario, que suena SFX.BONUS_CLAIM igual que el click del
+   * ratón (ver DailyChallengeBanner.activate). Ausente/false en los
+   * botones casino, que ya usan bindUiClick en su hitZone.
+   */
+  readonly playsOwnSound?: boolean;
 }
 
 /** Silueta decorativa de carta usada de fondo, para poder animarla levemente en update(). */
@@ -155,15 +161,39 @@ export class MainMenuScene extends Phaser.Scene {
     // Recompensa/racha (o cuenta regresiva) y una línea de récords debajo.
     // Un solo clic empieza el desafío directo (sin pasar por selección de
     // mazo, que es solo cosmética) — ver DailyChallengeBanner.ts.
+    const dailyWidth = Math.min(420, width * 0.6);
+    const dailyHeight = 64;
+    const dailyX = width / 2;
+    const dailyY = height * 0.49;
     this.dailyChallengeBanner = new DailyChallengeBanner(this, {
-      x: width / 2,
-      y: height * 0.49,
-      width: Math.min(420, width * 0.6),
+      x: dailyX,
+      y: dailyY,
+      width: dailyWidth,
+      height: dailyHeight,
       onStart: () => {
         this.scene.start('GameScene');
         this.scene.launch('UIScene');
       }
     });
+
+    // Fase 7 (teclado PC): el banner del Desafío Diario entra en el anillo
+    // de foco de las flechas ↑↓ (Bug 1). Su resaltado es el que ya usa el
+    // hover del ratón (DailyChallengeBanner.highlight) y su activación la
+    // misma del pointerup (activate), que además suena SFX.BONUS_CLAIM —
+    // por eso playsOwnSound evita que ENTER sume también playUiClick.
+    // Solo se registra si el desafío de hoy está disponible (paridad con el
+    // ratón: sin hit zone no hay nada que activar con el foco).
+    if (this.dailyChallengeBanner.isAvailable()) {
+      const banner = this.dailyChallengeBanner;
+      this.focusEntries.push({
+        x: dailyX,
+        y: dailyY,
+        enabled: true,
+        onClick: () => banner.activate(),
+        highlight: (on) => banner.highlight(on),
+        playsOwnSound: true
+      });
+    }
 
     // --- Botonera principal ------------------------------------------------
     const buttonWidth = Math.min(280, width * 0.42);
@@ -596,7 +626,11 @@ export class MainMenuScene extends Phaser.Scene {
     if (this.focusIndex < 0) return; // nada enfocado → ENTER inerte
     const entry = this.focusEntries[this.focusIndex];
     if (!entry) return;
-    playUiClick(getServices(this).audioService);
+    // Sonido de activación: por defecto suma el click genérico de UI (ADR-015),
+    // salvo que el ítem traiga su propio sonido (playsOwnSound) — así el
+    // banner del Desafío Diario suena solo SFX.BONUS_CLAIM, igual que el
+    // click del ratón, sin doble sonido.
+    if (!entry.playsOwnSound) playUiClick(getServices(this).audioService);
     entry.onClick();
   }
 
@@ -691,7 +725,7 @@ export class MainMenuScene extends Phaser.Scene {
     // del botón (x del caller + y de la config) — el orden de foco sigue
     // naciendo del array `buttons` de create(), sin coords nuevas. Los 4
     // botones están siempre habilitados.
-    this.focusEntries.push({ x, y, enabled: true, container, glow, onClick, highlight });
+    this.focusEntries.push({ x, y, enabled: true, onClick, highlight });
 
     return container;
   }

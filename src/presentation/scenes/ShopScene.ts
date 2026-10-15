@@ -362,8 +362,8 @@ export class ShopScene extends Phaser.Scene {
     this.unsubscribeKeys = bindKeys(this.input.keyboard, {
       UP: (event?: KeyboardEvent) => this.moveShopFocus(event, 'up'),
       DOWN: (event?: KeyboardEvent) => this.moveShopFocus(event, 'down'),
-      LEFT: (event?: KeyboardEvent) => this.handleTabKey(event, 'upgrades'),
-      RIGHT: (event?: KeyboardEvent) => this.handleTabKey(event, 'decks'),
+      LEFT: (event?: KeyboardEvent) => this.moveShopFocusLeft(event),
+      RIGHT: (event?: KeyboardEvent) => this.moveShopFocusRight(event),
       ENTER: (event?: KeyboardEvent) => this.activateShopFocus(event),
       ESC: (event?: KeyboardEvent) => this.handleEscapeKey(event)
     });
@@ -848,6 +848,70 @@ export class ShopScene extends Phaser.Scene {
       this.setFocusedHighlight(rows.ids, nextIndex, true);
       this.revealFocusedRow(nextIndex, rows.ids);
     }
+  }
+
+  /**
+   * Teclado PC (Fase 7): ← navega espacialmente a la columna de la izqda
+   * dentro de la grilla actual (mismo criterio `nextFocusIndex` geométrico
+   * que usa ↑/↓). Si no hay candidato (borde izquierdo de la grilla), cae
+   * al cambio de pestaña al tab 'upgrades' — paridad con el comportamiento
+   * anterior pero preservando la navegación inter-columna primero.
+   */
+  private moveShopFocusLeft(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+
+    const previousIds = this.kbFocusRowIds;
+    const rows = this.buildShopFocusRows();
+    const previousIndex = this.kbFocusIndex;
+    // Intenta moverse espacialmente dentro de la grilla actual.
+    // nextFocusIndex devuelve el mismo índice si no hay candidato a la izqda.
+    const nextIndex = nextFocusIndex(rows.items, previousIndex, 'left');
+    if (nextIndex !== previousIndex) {
+      // Candidato encontrado: actualiza foco y revela fila.
+      this.setFocusedHighlight(previousIds, previousIndex, false);
+      this.kbFocusIndex = nextIndex;
+      this.kbFocusRowIds = rows.ids;
+      if (nextIndex >= 0) {
+        this.setFocusedHighlight(rows.ids, nextIndex, true);
+        this.revealFocusedRow(nextIndex, rows.ids);
+      }
+      return;
+    }
+    // Sin candidato a la izqda: cambio de pestaña al tab 'upgrades'.
+    this.handleTabKey(event, 'upgrades');
+  }
+
+  /**
+   * Teclado PC (Fase 7): → navega espacialmente a la columna de la drcha
+   * dentro de la grilla actual (mismo criterio `nextFocusIndex` geométrico
+   * que usa ↑/↓). Si no hay candidato (borde derecho de la grilla), cae
+   * al cambio de pestaña al tab 'decks' — paridad con el comportamiento
+   * anterior pero preservando la navegación inter-columna primero.
+   */
+  private moveShopFocusRight(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+
+    const previousIds = this.kbFocusRowIds;
+    const rows = this.buildShopFocusRows();
+    const previousIndex = this.kbFocusIndex;
+    // Intenta moverse espacialmente dentro de la grilla actual.
+    // nextFocusIndex devuelve el mismo índice si no hay candidato a la drcha.
+    const nextIndex = nextFocusIndex(rows.items, previousIndex, 'right');
+    if (nextIndex !== previousIndex) {
+      // Candidato encontrado: actualiza foco y revela fila.
+      this.setFocusedHighlight(previousIds, previousIndex, false);
+      this.kbFocusIndex = nextIndex;
+      this.kbFocusRowIds = rows.ids;
+      if (nextIndex >= 0) {
+        this.setFocusedHighlight(rows.ids, nextIndex, true);
+        this.revealFocusedRow(nextIndex, rows.ids);
+      }
+      return;
+    }
+    // Sin candidato a la drcha: cambio de pestaña al tab 'decks'.
+    this.handleTabKey(event, 'decks');
   }
 
   /**
