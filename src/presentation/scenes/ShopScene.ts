@@ -10,10 +10,12 @@ import languageManager from '../../shared/i18n/LanguageManager';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { LocalizedText } from '../components/LocalizedText';
 import { DRAG_THRESHOLD_PX, ScrollableList } from '../components/ScrollableList';
-import { resolveShopLayout, ShopButtonSpec, ShopLayout, ShopTabLayout, ShopTextSpec } from '../layout/ShopLayout';
+import { resolveShopLayout, scrollOffsetToReveal, ShopButtonSpec, ShopLayout, ShopTabLayout, ShopTextSpec } from '../layout/ShopLayout';
 import { getMinDesignFontPx } from '../../shared/utils/CompactScreen';
 import { SFX } from '../../shared/audio/AudioData';
-import { bindUiClick, ClickPointerLike } from '../audio/UiSfx';
+import { bindUiClick, ClickPointerLike, playUiClick } from '../audio/UiSfx';
+import { bindKeys } from '../input/KeyBindings';
+import { FocusDirection, FocusItem, nextFocusIndex } from '../input/KeyboardNavigation';
 
 /**
  * Paleta y "chrome" de botones — MISMA convención "Casino de Lujo" que el
@@ -98,6 +100,9 @@ interface DeckRowRefs {
 
 type ShopTab = 'upgrades' | 'decks';
 
+/** Id de fila navegable por teclado — Mejoras y Mazos comparten UN índice de foco (se reinicia al cambiar de pestaña). */
+type ShopFocusRowId = SessionUpgradeId | DeckSetupId;
+
 /**
  * ShopScene: tienda con dos pestañas independientes.
  *
@@ -135,6 +140,15 @@ export class ShopScene extends Phaser.Scene {
 
   private upgradeRowRefs = new Map<SessionUpgradeId, UpgradeRowRefs>();
   private deckRowRefs = new Map<DeckSetupId, DeckRowRefs>();
+
+  // --- Teclado PC (Fase 4): índice de foco sobre las filas del tab activo.
+  // Los refs se destruyen en cada renderActiveTab, así que el índice se
+  // reinicia ahí (punto único) y los ids de fila se reconstruyen por
+  // pulsación — ver buildShopFocusRows().
+  private kbFocusIndex = -1;
+  private kbFocusRowIds: ShopFocusRowId[] = [];
+  // Desuscripción de bindKeys — se resuelve en el SHUTDOWN de create().
+  private unsubscribeKeys: (() => void) | null = null;
 
   private sessionUpgrades: SessionUpgrades | null = null;
   private purchaseUpgradeUseCase: PurchaseSessionUpgradeUseCase | null = null;
@@ -336,6 +350,24 @@ export class ShopScene extends Phaser.Scene {
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, unsubscribe);
 
+    // --- Teclado PC (Fase 4 — tienda) -------------------------------------
+    // Sin addCapture/removeCapture: ↑/↓/←/→ ya están capturadas por la
+    // escena de atrás (MainMenuScene sigue RUNNING debajo del modal, y en
+    // partida la captura de GameScene persiste aunque su escena esté
+    // pausada — las capturas de Phaser son GLOBALES y no se tocan al
+    // pausar) — bajarlas acá le robaría las flechas a esa escena. Los
+    // handlers van como MISMA referencia (el objeto literal se crea una
+    // sola vez acá) para que el unsubscribe de SHUTDOWN desenganche de
+    // verdad (AGENTS §5 — bindKeys registra/`off` los pares exactos).
+    this.unsubscribeKeys = bindKeys(this.input.keyboard, {
+      UP: (event?: KeyboardEvent) => this.moveShopFocus(event, 'up'),
+      DOWN: (event?: KeyboardEvent) => this.moveShopFocus(event, 'down'),
+      LEFT: (event?: KeyboardEvent) => this.handleTabKey(event, 'upgrades'),
+      RIGHT: (event?: KeyboardEvent) => this.handleTabKey(event, 'decks'),
+      ENTER: (event?: KeyboardEvent) => this.activateShopFocus(event),
+      ESC: (event?: KeyboardEvent) => this.handleEscapeKey(event)
+    });
+
     // Resize del ScaleManager (pantalla chica → piso de fuente puede
     // cambiar y con él el modo desktop/compacto) — patrón de
     // UIScene.handleScaleResize: se desuscribe en SHUTDOWN porque los
@@ -343,9 +375,19 @@ export class ShopScene extends Phaser.Scene {
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleScaleResize);
+      // Teclado PC (Fase 4): apagar el resaltado ANTES de destruir el
+      // scroll list — en modo compacto las filas viven en
+      // scrollList.contentContainer y destroy() las mata con
+      // container.destroy(true) (mismo orden que respeta renderActiveTab
+      // y el patrón B1 de la Fase 3: no tocar objetos ya destruidos).
+      // `resetKeyboardFocus()` deja kbFocusIndex en -1.
+      this.resetKeyboardFocus();
       // El ScrollableList vive fuera de tabContainer (sus filas no pasan
       // por removeAll) — se destruye explícito también al apagar la escena.
       this.destroyScrollList();
+      // Desuscripción con la MISMA referencia (AGENTS §5).
+      this.unsubscribeKeys?.();
+      this.unsubscribeKeys = null;
     });
   }
 
@@ -626,6 +668,13 @@ export class ShopScene extends Phaser.Scene {
   }
 
   private renderActiveTab(): void {
+    // Teclado PC (Fase 4): el índice de foco apunta a refs que se destruyen
+    // abajo — se reinicia ANTES de destruir, así ninguna pulsación posterior
+    // resalta ni activa una fila vieja. Punto único de reset: cambiar de
+    // pestaña, resize (modo), cambio de idioma en compacto y la
+    // reconstrucción por revelado del mazo "?" pasan todos por acá.
+    this.resetKeyboardFocus();
+
     // Destruir el scrollList ANTES de vaciar tabContainer: sus filas viven dentro
     // del contenido scrolleable (fuera de tabContainer), así que no las
     // limpia el removeAll — se destruyen acá para no dejar GameObjects
@@ -657,6 +706,326 @@ export class ShopScene extends Phaser.Scene {
   private refreshAllRows(): void {
     this.upgradeRowRefs.forEach((_refs, id) => this.refreshUpgradeRow(id));
     this.deckRowRefs.forEach((_refs, id) => this.refreshDeckRow(id));
+  }
+
+  // ------------------------------------------------------------------
+  // Teclado PC (Fase 4 — tienda): ↑↓ navegan las filas del tab activo,
+  // ←/→ cambian de pestaña, ENTER activa la fila y ESC cierra. El núcleo
+  // geométrico es puro (`../input/KeyboardNavigation`, misma regla que
+  // MainMenuScene); acá solo vive el wiring y la resolución de refs.
+  // ------------------------------------------------------------------
+
+  /**
+   * ¿Es esta escena la de PRIMER PLANO? Phaser emite `keydown-<KEY>` en
+   * TODA escena RUNNING (no filtra la que está arriba) y la Tienda se abre
+   * con `scene.launch()` ENCIMA de MainMenuScene o de GameScene+UIScene sin
+   * pausarlas — sin esta guarda, las teclas actuarían sobre los botones
+   * ocultos detrás del modal (ENTER en el menú lanzaría una partida con la
+   * tienda todavía abierta). Mismo fix que MainMenuScene.isForeground.
+   */
+  private isForeground(): boolean {
+    // `this.scene.manager` (SceneManager) en vez de `this.scene.getScenes`:
+    // la versión de Phaser del repo no expone getScenes en ScenePlugin.
+    const active = this.scene.manager.getScenes(true);
+    return active[active.length - 1] === this;
+  }
+
+  /**
+   * Items de foco + ids de fila del tab ACTUAL, construidos AL VUELO por
+   * pulsación: `renderActiveTab` destruye y re-crea los refs en cada
+   * repintado, así que no se cachean (un índice viejo apuntaría a
+   * GameObjects muertos — por eso también se reinician en renderActiveTab).
+   *
+   * El orden replica EXACTAMENTE el del render (listAvailableUpgrades /
+   * deckEntries con su índice de cellPositionFor) y las coordenadas salen
+   * de la MISMA fórmula de renderUpgradeRow/renderDeckRow (centro del
+   * botón de acción: `dx + buttonXFor(label, column)` en X,
+   * `dy + rowOffsetY(row) + buttonOffsetY` en Y; dx/dy = 0 en compacto,
+   * centro de la cámara en escritorio) — así `nextFocusIndex` elige la
+   * celda VECINA real y no una posición inventada.
+   */
+  private buildShopFocusRows(): { items: FocusItem[]; ids: ShopFocusRowId[] } {
+    const items: FocusItem[] = [];
+    const ids: ShopFocusRowId[] = [];
+    const compact = this.layout.mode === 'compact';
+    const cx = this.cameras.main.centerX;
+    const cy = this.cameras.main.centerY;
+    const dx = compact ? 0 : cx;
+    const dy = compact ? 0 : cy;
+
+    if (this.activeTab === 'upgrades') {
+      const upgrades = this.sessionUpgrades;
+      // Sin partida activa el tab pinta solo el mensaje "sin sesión": 0 items
+      // ⇒ ↑↓/Enter quedan inertes solos (nextFocusIndex sobre lista vacía
+      // devuelve -1). ←/→ y ESC siguen funcionando (no dependen de los refs).
+      if (!upgrades) return { items, ids };
+      const tab = this.layout.upgrades;
+      getServices(this).listAvailableUpgrades.execute().forEach((definition, index) => {
+        const status = this.upgradeStatusFor(definition.id, upgrades);
+        const { column, row } = tab.cellPositionFor(index);
+        // Position REAL del botón cuando ya hay refs (misma fórmula en la
+        // práctica): refreshUpgradeRow solo cambia el texto sin reposicionar,
+        // así que tras una compra con el ratón la etiqueta crecida puede
+        // desfasar `buttonXFor(label actual)` del centro PINTADO (review
+        // Fase 4, MINOR-3). Sin refs (nunca renderizada) → fórmula del render.
+        const refs = this.resolveRowActionButton(definition.id);
+        items.push({
+          x: refs ? refs.container.x : dx + tab.buttonXFor(status.buttonLabel, column),
+          y: refs ? refs.container.y : dy + tab.rowOffsetY(row) + (tab.buttonOffsetY ?? 0),
+          enabled: !status.buttonDisabled
+        });
+        ids.push(definition.id);
+      });
+      return { items, ids };
+    }
+
+    const tab = this.layout.decks;
+    const ownedIds = getServices(this).progressionManager.getOwnedDeckIds();
+    this.deckEntries.forEach((entry, index) => {
+      const { column, row } = tab.cellPositionFor(index);
+      const anchorY = tab.rowOffsetY(row);
+      if (!entry.revealed) {
+        // Carta "?" — fila inerte POR CONSTRUCCIÓN (sin botón, ver
+        // renderMysteryDeckRow): deshabilitada para que el foco la salte,
+        // pero SÍ ocupa índice — así los ids quedan alineados con la grilla.
+        const thumb = tab.thumb!;
+        items.push({
+          x: dx + tab.columns[column].textX + thumb.width / 2,
+          y: dy + anchorY,
+          enabled: false
+        });
+        ids.push(entry.deckId);
+        return;
+      }
+      const owned = ownedIds.includes(entry.deckId);
+      const priceText = `$${getDeckSetup(entry.deckId).price.toLocaleString()}`;
+      const buttonLabel = owned
+        ? languageManager.getText('SHOP_OWNED_LABEL')
+        : languageManager.getText('SHOP_BUY_BUTTON', { price: priceText });
+      // Position REAL del botón cuando hay refs (ver upgrades): refleja el
+      // centro pintado aunque refreshDeckRow haya cambiado el label sin
+      // reposicionar.
+      const refs = this.resolveRowActionButton(entry.deckId);
+      items.push({
+        x: refs ? refs.container.x : dx + tab.buttonXFor(buttonLabel, column),
+        y: refs ? refs.container.y : dy + anchorY + (tab.buttonOffsetY ?? 0),
+        enabled: !owned
+      });
+      ids.push(entry.deckId);
+    });
+
+    return { items, ids };
+  }
+
+  /**
+   * Teclado PC (Fase 4): navega el foco entre las filas del tab activo con
+   * el núcleo puro `nextFocusIndex` (candidato HABILITADO más cercano del
+   * lado pedido). SIN sonido al mover — mismo criterio que MainMenuScene.
+   *
+   * El auto-repeat del SO re-emite `keydown` cada ~30 ms con la tecla
+   * mantenida — sin ignorar `repeat` el foco saltaría en tromba y
+   * acumularía tweens; solo se navega en la pulsación inicial.
+   */
+  private moveShopFocus(event: KeyboardEvent | undefined, direction: FocusDirection): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+
+    const previousIds = this.kbFocusRowIds;
+    const rows = this.buildShopFocusRows();
+    const previousIndex = this.kbFocusIndex;
+    const nextIndex = nextFocusIndex(rows.items, previousIndex, direction);
+    // Sin cambio de índice (borde de la grilla, o sin items habilitados):
+    // no se toca ningún resaltado.
+    if (nextIndex === previousIndex) return;
+
+    // Apagar el resaltado anterior con los ids de ESA misma lista: solo
+    // pueden pertenecer al tab activo, porque cambiar de pestaña resetea el
+    // índice (handleTabKey / renderActiveTab).
+    this.setFocusedHighlight(previousIds, previousIndex, false);
+    this.kbFocusIndex = nextIndex;
+    this.kbFocusRowIds = rows.ids;
+    if (nextIndex >= 0) {
+      this.setFocusedHighlight(rows.ids, nextIndex, true);
+      this.revealFocusedRow(nextIndex, rows.ids);
+    }
+  }
+
+  /**
+   * Teclado PC (Fase 4): ← = pestaña Mejoras, → = pestaña Mazos — MISMO
+   * camino que el click sobre la pestaña (sonido + switchTab, que ya es
+   * no-op si es la pestaña activa). El foco se reinicia acá también para el
+   * caso no-op: si la pestaña NO cambia, no hay renderActiveTab que lo haga
+   * y el resaltado de una fila seguiría encendido con índice huérfano.
+   */
+  private handleTabKey(event: KeyboardEvent | undefined, tab: ShopTab): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    playUiClick(getServices(this).audioService);
+    this.resetKeyboardFocus();
+    this.switchTab(tab);
+  }
+
+  /**
+   * Teclado PC (Fase 4): ENTER activa la fila enfocada invocando el MISMO
+   * método que el callback del click del ratón (attemptPurchaseUpgrade /
+   * attemptPurchaseDeck, que reciben id + el Text del botón — ver los
+   * closures de renderUpgradeRow/renderDeckRow). NO se emite un pointerup
+   * sintético: el dragGuard de los botones revienta con `pointer` undefined
+   * (mismo motivo que MainMenuScene.activateFocusedItem).
+   *
+   * La fila se re-resuelve contra el ESTADO ACTUAL (no contra un flag
+   * cacheado): una compra con el ratón puede haber deshabilitado la fila
+   * enfocada sin re-render, y en ese caso el botón es inerte y SILENCIOSO —
+   * paridad exacta con el click del ratón (hitZone disableInteractive).
+   */
+  private activateShopFocus(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    if (this.kbFocusIndex < 0) return; // nada enfocado → ENTER inerte
+    const rows = this.buildShopFocusRows();
+    const item: FocusItem | undefined = rows.items[this.kbFocusIndex];
+    const id: ShopFocusRowId | undefined = rows.ids[this.kbFocusIndex];
+    if (item === undefined || id === undefined) return;
+    if (!item.enabled) return;
+    // Paridad con el clip de scroll (review Fase 4): si la rueda/drag del
+    // ratón dejó la fila enfocada FUERA de la ventana, el ratón no podría
+    // clickearla (setVisible(false)) — ENTER tampoco. Al volver a mover
+    // ↑/↓, revealFocusedRow la trae de vuelta a la ventana.
+    if (!this.isFocusedRowInViewport(this.kbFocusIndex)) return;
+    const refs = this.resolveRowActionButton(id);
+    if (!refs) return;
+    playUiClick(getServices(this).audioService);
+    if (this.activeTab === 'upgrades') {
+      this.attemptPurchaseUpgrade(id as SessionUpgradeId, refs.text);
+    } else {
+      this.attemptPurchaseDeck(id as DeckSetupId, refs.text);
+    }
+  }
+
+  /**
+   * Teclado PC (Fase 4): ESC cierra la Tienda por el MISMO camino que el ✕
+   * (`this.scene.stop()`, createCloseButton). El sonido va ANTES con
+   * PARIDAD al ✕: el ✕ sí suena (bindUiClick en su zona), y acá ESC ES el
+   * botón de cierre de ESTA escena — el ESC de UIScene (que cierra la
+   * Tienda desde FUERA cuando el foco está en partida) sigue siendo
+   * silencioso. Si ambos handlers corren en la misma pulsación, la doble
+   * parada es un no-op: SceneManager.stop ignora una escena cuyo status ya
+   * es SHUTDOWN.
+   */
+  private handleEscapeKey(event?: KeyboardEvent): void {
+    if (event?.repeat) return;
+    if (!this.isForeground()) return;
+    playUiClick(getServices(this).audioService);
+    this.scene.stop();
+  }
+
+  /** Refs del botón de acción de la fila `id` según el tab activo — null si la fila no existe (p. ej. la carta "?"). */
+  private resolveRowActionButton(id: ShopFocusRowId): ActionButtonRefs | null {
+    if (this.activeTab === 'upgrades') {
+      return this.upgradeRowRefs.get(id as SessionUpgradeId)?.actionButton ?? null;
+    }
+    return this.deckRowRefs.get(id as DeckSetupId)?.actionButton ?? null;
+  }
+
+  /**
+   * Teclado PC (Fase 4): ¿la fila `index` cae dentro de la ventana de
+   * scroll (solo importa en modo compacto)? Paridad con el hit-test del
+   * ratón: `syncInputToWindow` deja `setVisible(false)` a las filas
+   * fuera de la ventana y el puntero no puede clickearlas — si el jugador
+   * scrollea con la rueda/drag DESPUÉS de enfocar, ENTER debe quedar
+   * inerte en vez de activar una fila que no se ve (review Fase 4,
+   * MINOR-2). Compara el CENTRO de la fila (rowOffsetY, mismo espacio de
+   * contenido que la ventana `scroll.top + offset`) — el ratón sí puede
+   * clickear lo poco que quede visible de una fila cortada por el borde.
+   * Sin scrollList (escritorio) → siempre visible.
+   */
+  private isFocusedRowInViewport(index: number): boolean {
+    const list = this.scrollList;
+    if (!list) return true;
+    const tab = this.activeTab === 'upgrades' ? this.layout.upgrades : this.layout.decks;
+    const { row } = tab.cellPositionFor(index);
+    const rowY = tab.rowOffsetY(row);
+    const windowTop = this.layout.scroll.top + list.getOffset();
+    const windowBottom = windowTop + this.layout.scroll.height;
+    return rowY >= windowTop && rowY <= windowBottom;
+  }
+
+  /**
+   * Resaltado del foco de teclado con el MISMO efecto visual que el hover
+   * del ratón (pointerover/pointerout de attachButtonInteractions: mismo
+   * tween de scale 1.05 + glow α1, misma duración) — el foco se ve idéntico
+   * a pasar el cursor.
+   */
+  private setRowButtonFocus(refs: ActionButtonRefs, on: boolean): void {
+    this.tweens.add({ targets: refs.container, scale: on ? HOVER_SCALE : 1, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+    this.tweens.add({ targets: refs.glow, alpha: on ? 1 : 0, duration: HOVER_TWEEN_MS, ease: 'Cubic.easeOut' });
+  }
+
+  /** Apaga el resaltado de la fila `index` si existe (los ids vacíos o el índice -1 son no-op). */
+  private setFocusedHighlight(ids: readonly ShopFocusRowId[], index: number, on: boolean): void {
+    const id: ShopFocusRowId | undefined = ids[index];
+    if (id === undefined) return;
+    const refs = this.resolveRowActionButton(id);
+    if (refs) this.setRowButtonFocus(refs, on);
+  }
+
+  /**
+   * Scroll-into-view (solo MODO COMPACTO — en escritorio no hay scrollList):
+   * si la fila enfocada queda fuera de la ventana, `syncInputToWindow` la
+   * deja `setVisible(false)` y el foco quedaría INVISIBLE. El offset se
+   * ajusta con la fuente única `scrollOffsetToReveal` (mueve lo mínimo y
+   * delega el rango en clampScrollOffset); setOffset re-clampa y re-valida
+   * el clip de input igual que tras una rueda/drag.
+   */
+  private revealFocusedRow(index: number, ids: readonly ShopFocusRowId[]): void {
+    const list = this.scrollList;
+    if (!list || index < 0 || index >= ids.length) return;
+    const tab = this.activeTab === 'upgrades' ? this.layout.upgrades : this.layout.decks;
+    const { row } = tab.cellPositionFor(index);
+    const rowY = tab.rowOffsetY(row);
+    // Semialtura de la celda derivada de la geometría REAL (sin constantes
+    // nuevas): rowSpacing cubre el contenido de la fila (centrado en
+    // rowOffsetY y acotado al alto de celda, garantía del peor caso del
+    // layout) MÁS el aire entre filas — con el paso completo la celda
+    // entera cae dentro de la ventana, sin duplicar el aire del layout.
+    const halfRow = tab.rowSpacing / 2;
+    const nextOffset = scrollOffsetToReveal(
+      list.getOffset(),
+      rowY,
+      halfRow,
+      this.layout.scroll,
+      tab.maxScrollFor(ids.length)
+    );
+    list.setOffset(nextOffset);
+  }
+
+  /**
+   * Reinicia el foco de teclado: apaga el resaltado si quedó encendido y
+   * deja el índice en -1 (los ids quedan vacíos). Punto único llamado por
+   * renderActiveTab (ANTES de destruir los refs), handleTabKey y el
+   * SHUTDOWN de create().
+   *
+   * No se agrega ningún tween nuevo (los objetivos pueden estar a punto de
+   * morir): se matan los pendientes y se normaliza scale/glow al reposo —
+   * así un tween de hover a medio camino no sigue escribiendo sobre el
+   * container destruido, y en el caso sin re-render (misma pestaña) el
+   * botón no queda clavado encendido.
+   */
+  private resetKeyboardFocus(): void {
+    if (this.kbFocusIndex >= 0) {
+      const id: ShopFocusRowId | undefined = this.kbFocusRowIds[this.kbFocusIndex];
+      if (id !== undefined) {
+        const refs = this.resolveRowActionButton(id);
+        if (refs) {
+          this.tweens.killTweensOf(refs.container);
+          this.tweens.killTweensOf(refs.glow);
+          refs.container.setScale(1);
+          refs.glow.setAlpha(0);
+        }
+      }
+    }
+    this.kbFocusIndex = -1;
+    this.kbFocusRowIds = [];
   }
 
   // ------------------------------------------------------------------

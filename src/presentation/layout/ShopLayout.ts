@@ -316,6 +316,43 @@ export function clampScrollOffset(offset: number, maxScroll: number): number {
   return Math.min(Math.max(offset, 0), max);
 }
 
+/**
+ * Offset que deja VISIBLE la fila centrada en `rowY` con semialtura
+ * `halfHeight`, partiendo del offset actual (scroll-into-view del foco de
+ * teclado — Fase 4). Aditivo: NO toca la geometría congelada.
+ *
+ * Motivo: `ScrollableList.syncInputToWindow` deja `setVisible(false)` a lo
+ * que queda FUERA de la ventana de scroll — sin esto, navegar filas con ↑↓
+ * podía enfocar una fila INVISIBLE (el foco no puede quedar oculto).
+ *
+ * Contrato: si la fila ya cabe (borde exacto contra el borde de la ventana
+ * = visible, comparación estricta igual que el clip) devuelve el offset
+ * actual SIN tocarlo; si no cabe, se mueve lo mínimo (el borde que
+ * recortaba queda a ras del borde de la ventana) y el resultado se acota
+ * al MISMO rango de toda la tienda delegando en `clampScrollOffset`
+ * (fuente única, seguro con maxScroll <= 0 y valores no finitos).
+ */
+export function scrollOffsetToReveal(
+  offset: number,
+  rowY: number,
+  halfHeight: number,
+  scroll: ScrollArea,
+  maxScroll: number
+): number {
+  const windowTop = scroll.top + offset;
+  const windowBottom = scroll.top + scroll.height + offset;
+  const rowTop = rowY - halfHeight;
+  const rowBottom = rowY + halfHeight;
+
+  if (rowTop >= windowTop && rowBottom <= windowBottom) {
+    return offset;
+  }
+
+  const target =
+    rowTop < windowTop ? rowTop - scroll.top : rowBottom - scroll.top - scroll.height;
+  return clampScrollOffset(target, maxScroll);
+}
+
 function makeLinesFor(measure: Measure) {
   return (text: string, spec: ShopTextSpec): number => {
     if (spec.wrapWidth <= 0) {
