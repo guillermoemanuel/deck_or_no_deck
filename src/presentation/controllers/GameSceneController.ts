@@ -715,6 +715,34 @@ export class GameSceneController {
     this.activeOfferPanel?.activateFocused();
   }
 
+  /**
+   * Fase 7g-2 (teclado PC): mueve el foco entre "Mantener" / "Cambiar" del
+   * modal de intercambio activo con las flechas — delega estrictamente en
+   * SwapEventModal.moveFocus; sin modal en pantalla es no-op seguro.
+   */
+  moveSwapModalFocus(dir: FocusDirection): void {
+    this.activeSwapModal?.moveFocus(dir);
+  }
+
+  /**
+   * Fase 7g-2 (teclado PC): ENTER activa el botón enfocado del modal de
+   * intercambio — delega estrictamente en SwapEventModal.activateFocusedButton
+   * (misma cadena que el click de ratón sobre el mismo botón, con su
+   * playUiClick); sin modal en pantalla es no-op seguro.
+   */
+  activateSwapModal(): void {
+    this.activeSwapModal?.activateFocusedButton();
+  }
+
+  /**
+   * Fase 7g-2 (teclado PC): ESC declina el intercambio en silencio
+   * (Mantener) — delega estrictamente en SwapEventModal.declineFromKeyboard;
+   * sin modal en pantalla es no-op seguro.
+   */
+  declineSwapFromKeyboard(): void {
+    this.activeSwapModal?.declineFromKeyboard();
+  }
+
   getCardView(cardId: string): CardView | undefined {
     return this.cardViews.get(cardId);
   }

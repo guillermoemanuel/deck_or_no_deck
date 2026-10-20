@@ -7,6 +7,84 @@
 
 ---
 
+## 2026-10-19 · Cierre Fase 7a-7e — teclado PC en banner, grilla de tienda, bono, swap y ConfirmDialog
+
+**Qué se tocó (código: 5 commits del 2026-10-15, en este orden; docs: esta sesión):**
+
+1. **`f8ef3f5` — Fase 7a, banner de Desafío Diario:** el banner responde al foco
+   de teclado (bug 1 de la revisión posterior a la Fase 6).
+2. **`8a65e51` — Fase 7b, grilla de la tienda:** ←/→ mueven el foco de celda con
+   **fallback a Tab** (si no hay celda en esa dirección, cambian de pestaña) —
+   `ShopScene`/`MainMenuScene`.
+3. **`adc889b` — Fase 7c, Bono Diario:** flechas (**solo ←/→**, sin wrap sobre las
+   6 cartas), ENTER elige la carta enfocada y ESC cierra — `PeriodicBonusModal` +
+   ruteo de teclado en `UIScene`.
+4. **`2fbe67d` + `50c007d` — Fase 7d, SwapEventModal:** métodos de teclado
+   (`moveFocus` / `activateFocusedButton` / `declineFromKeyboard`) con
+   flechas/ENTER/ESC.
+5. **`631eaef` — Fase 7e, ConfirmDialog:** flechas/ENTER/ESC sobre el diálogo
+   genérico (más una auditoría menor).
+
+**Cómo se verificó (gates del cierre):** `npm run typecheck` **0 errores** ·
+`npm run lint` **limpio** · `npm test` **780 tests verdes**.
+
+**Nota (revisión posterior — Fase 7g, entrada propia aparte):** 7d/7e dejaron
+teclas en **minúscula** — el `KeyMap` de Phaser emite `keydown-<KEY>` en
+MAYÚSCULA, así que eran listeners que **nunca disparaban** (en `ConfirmDialog`
+solo funcionaba ESC) — y **foco invisible** (el índice cambiaba sin resaltado
+visual). Ambos corregidos en la Fase 7g, con specs RED-first.
+
+**Docs (esta sesión):** `docs/LOG.md` (esta entrada y la de la auditoría
+CrazyGames) · `docs/testing.md` (§5: **ítems 27-31**, smokes de los modales con
+foco — PENDIENTES) · `docs/DECISIONS/ADR-018…` (sección nueva *"Fase 7g —
+modales con foco visible"*). Esta sesión de docs no corre gates: los citados son
+los del cierre de código.
+
+**Pendientes:** ejecutar los smokes `testing.md` §5 ítems 27-31; la entrada de
+LOG de la Fase 7g la agrega el orquestador al cerrarla (sus commits aún sin
+staging).
+
+## 2026-10-19 · Auditoría CrazyGames (CG-AUD-001..020) y plan de resubmit A–E
+
+**Contexto:** el QA de CrazyGames **rechazó** la publicación — *"The overall
+quality of the game does not yet meet the expectations of our platform"*
+(estado **rechazado**, no live).
+
+**Qué se hizo (read-only, sin código):**
+
+- Auditoría del subagente `crazygames-auditor` contra la documentación oficial
+  (`requirements` / `ads` / `game-covers` / `quality` / `basic-launch-metrics` /
+  `getting-to-the-first-frame`): **20 hallazgos `CG-AUD-001..020`** con
+  archivo:línea. **La auditoría NO vive en un archivo de `docs/`** (se reportó en
+  sesión) — si hace falta citarla más de una vez, publicarla primero y después
+  referenciarla.
+- Hallazgo clave **`CG-AUD-004`**: en **Basic Launch** los ads quedan
+  **deshabilitados** → los botones rewarded quedan **sin efecto** (criterio de QA
+  *"no rewarded buttons without effect"*): **causa probable directa** del
+  rechazo. El motivo `ads_disabled` ya se maneja desde ADR-009/ADR-006 (reembolso
+  y ocultado de filas); lo que falta es el **gate en `ResultScene`** de la fase B.
+
+**Plan de resubmit por fases (aprobado por el usuario):**
+
+- **A · metadata del portal (sin código):** quitar *"🚧 Indie game currently in
+  development"*, documentar controles, desmarcar PORTRAIT (el juego es solo
+  landscape) y atender las portadas <1920×1080.
+- **B · P0 de código:** gate de ads en `ResultScene` vía `rewardedAdStatus()`
+  (patrón ADR-012) · `gameplayStop` en los breaks · midgame fuera de botones ·
+  limpiar `dist/pasar`.
+- **C:** `loadingStart`/`loadingStop` · guard de teclado durante ads ·
+  `lang="en"` · `happytime` · audio en iOS.
+- **D:** hints de teclado · completion % · guardado de progreso APS ·
+  ESC-vs-fullscreen.
+- **E:** build · QA Tool · smoke · resubmit + docs.
+
+**Estado:** Fases A–E **NO iniciadas**; el trabajo de teclado 7f/7g es
+**independiente** de este plan. El **nombre del juego está bloqueado en el
+portal** (`can't update this field`); covers y videos ya subidos.
+
+**Docs (esta sesión):** `docs/LOG.md` (esta entrada). La auditoría completa
+(`CG-AUD-001..020`) **no está en `docs/`** — sus hallazgos se citaron en sesión.
+
 ## 2026-10-13 · Controles de teclado PC (6 fases — núcleo puro + wiring por escena)
 
 **Qué se tocó (código: 5 commits, en este orden; docs: esta sesión):**

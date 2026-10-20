@@ -1,6 +1,7 @@
 # ADR-018: Controles de teclado PC — foco por geometría, callbacks directos y guards anti-modal
 
-**Estado:** Aceptada · **Registrada:** 2026-10-13 · **Unidad:** controles de teclado PC
+**Estado:** Aceptada · **Registrada:** 2026-10-13 · **Extendida:** 2026-10-19
+(Fase 7g, ver al final) · **Unidad:** controles de teclado PC
 (5 commits: `b7093a3` núcleo puro · `b721163` menú · `d90d8a6` partida · `f42b926`
 tienda · `c150b87` tutoriales/resultado/banquero)
 
@@ -108,3 +109,100 @@ pointer. Tres restricciones condicionaron todo el diseño:
   debería revisarse dónde se muestran sin ensuciar el layout de 8 escenas.
 - **ESC en partida sin panel = no-op** (decisión consciente, no bug): no se inventa
   una salida a menú con ESC.
+
+---
+
+## Fase 7g — modales con foco visible (extensión 2026-10-19)
+
+Las fases 7a-7e (cierre en `LOG.md` 2026-10-19: banner `f8ef3f5` · grilla `8a65e51`
+· bono `adc889b` · swap `2fbe67d`+`50c007d` · `ConfirmDialog` `631eaef`) llevaron
+teclado a los 4 modales que faltaban; la revisión posterior — **Fase 7g** — encontró
+teclas muertas y foco invisible, y **unificó la semántica**. Esta sección **cierra**
+dos puntos de más arriba: la consecuencia *"ConfirmDialog genérico sigue sin
+navegación de teclado"* y el pendiente *"ConfirmDialog con ↑↓+ENTER"*.
+
+### Semántica unificada de flechas
+
+- **←/→ = posicionamiento absoluto sobre pares** (izquierda = primer botón,
+  derecha = segundo; **sin wrap**: en el borde no hacen nada).
+- **↑/↓ = alternancia** en los diálogos de 2 botones (eje ambiguo — mismo
+  precedente que el modal de salida de `UIScene`).
+- **Bono (6 cartas): solo ←/→**, recorrido sin wrap entre índice 0 y 5; ↑/↓ no
+  tienen acción.
+- El foco **reutiliza el highlight del hover** (decisión (b): ningún estilo nuevo);
+  en el bono además con **el mismo tween** que `pointerover/pointerout`.
+
+### Focos iniciales — siempre la acción segura
+
+| Modal | Foco al abrir | Por qué |
+|---|---|---|
+| Oferta del banquero | **NO TRATO** (índice 1) | ENTER sin mover rechaza |
+| Midgame Swap | **Mantener** (índice 0) | ENTER sin mover no cambia nada |
+| Bono Diario | **carta izquierda** (índice 0) | visible desde la apertura |
+| ConfirmDialog | **Cancelar** (índice 0) | ENTER sin mover cancela |
+
+### ENTER y ESC
+
+- **ENTER activa el botón/carta focado en los 4**, siempre por el mismo camino de
+  negocio que el ratón (decisión (c)). Caso particular del bono:
+  `handleEnterPressed()` **elige** la carta si no hay premio y **cierra**
+  (`requestClose`, mismo camino que "Cerrar") una vez entregado — ENTER y ESC
+  quedan intercambiables tras el reveal, y las flechas se vuelven inertes
+  (guard `resolved`).
+- **ESC conserva sus atajos preexistentes:** oferta = **NO TRATO** · swap =
+  declinar/cerrar **silencioso** (nuevo) · bono = **cerrar** (preexistente desde la
+  Fase 3) · diálogo = **cancelar**.
+- **Sonido por paridad con el ratón (ADR-015):**
+  - **Swap:** ENTER suena `playUiClick` **igual que su click**; ESC declina **sin**
+    sonido (cancelar no confirma, precedente `UIScene.handleEscapeKey`).
+  - **Oferta:** ENTER/ESC **silenciosos** — esos botones **no** tienen
+    `bindUiClick` (el sfx propio del modal es `SFX.OFFER`/`SFX.BANKER_ANNOYED`).
+  - **Bono:** el teclado **sí** suena `SFX.BONUS_CLAIM` al elegir la carta —
+    **decisión de la Fase 7c**, registrada tal cual en `PeriodicBonusModal`
+    (el ratón, que no suena al clickear una carta, quedó como estaba; el efecto
+    es el mismo que el del banner del menú).
+  - **Diálogo:** el click del ratón **sí** suena (`bindUiClick` en el hit de cada
+    botón) y la activación por teclado (ENTER/ESC) **no** reproduce sonido.
+
+### Guards
+
+- **`exitStarted` único compartido por ratón + teclado** en `BankerOfferPanel`
+  (Fase 5, decisión (h)) **y ahora también en `SwapEventModal`**: durante el tween
+  de salida de 150 ms un segundo intento (doble ENTER, ENTER+ESC, doble click) no
+  emite dos veces — sin este guard, `GameSceneController` (`.once` por evento)
+  dispararía **las dos ramas** del swap (`swap-declined` **y**
+  `swap-accepted-choose-card`) en la misma partida.
+- `moveFocus` queda inerte una vez decidido: tras `exitStarted` (oferta y swap) y
+  tras `resolved` (bono).
+
+### BUGFIXes registrados en la revisión
+
+- **(a) Claves de Phaser en MAYÚSCULAS (KeyMap):** la Fase 7e bindeaba
+  `keydown-Left`/`keydown-Right`/`keydown-Enter` en minúscula; el `KeyMap` de
+  Phaser emite `keydown-LEFT`/… y **una clave equivocada es un listener que nunca
+  dispara** (solo ESC, que estaba en mayúscula, funcionaba). Hoy los 4 modales
+  registran `LEFT/RIGHT/UP/DOWN/ENTER/ESC` en mayúscula, con handlers de
+  **referencia nombrada** para desengancharlos: `destroy()` antes solo soltaba
+  ESC y **cada apertura acumulaba listeners muertos** (fuga, AGENTS §5). La misma
+  revisión encontró **foco invisible** (el índice cambiaba sin resaltado en
+  `ConfirmDialog`), en el swap un `highlightFocusedButton` que apagaba `as any` a
+  **todos** los children del botón (fondo, texto e ícono: el botón desaparecía) y
+  en el bono un foco con `setAlpha` crudo que peleaba con el hover — los tres con
+  **dueño único del resaltado**.
+- **(b) El importe del bono viaja como NÚMERO:** `activateFocusedCard` toma
+  `CardSlot.value`; **nunca** se parsea el texto formateado — con locale es-*
+  `parseInt("5.000")` devolvía **5** y acreditaba 5 en vez de 5.000 (el ratón,
+  que pasaba el número, estaba bien; el texto es solo presentación i18n).
+
+### Mapa de teclas de los 4 modales
+
+| Modal | ←/→ | ↑/↓ | ENTER | ESC |
+|---|---|---|---|---|
+| Oferta del banquero | DEAL ↔ NO DEAL (abs., sin wrap) | alterna | activa enfocado (silencioso) | NO TRATO (silencioso) |
+| Midgame Swap | Mantener ↔ Cambiar (abs., sin wrap) | alterna | activa enfocado (`playUiClick`) | declinar / cerrar silencioso |
+| Bono Diario | recorrido de 6 cartas (sin wrap) | — | elige la carta enfocada / cierra tras el premio (`SFX.BONUS_CLAIM`) | cerrar |
+| ConfirmDialog | Cancelar ↔ Confirmar (abs., sin wrap) | alterna | activa enfocado (silencioso) | cancelar |
+
+Verificación: specs RED-first de `BankerOfferPanel`/`SwapEventModal`/
+`PeriodicBonusModal`/`ConfirmDialog` + smoke `testing.md` §5, **ítems 27-31**
+(PENDIENTES).

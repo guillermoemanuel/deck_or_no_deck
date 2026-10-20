@@ -214,7 +214,8 @@ export class UIScene extends Phaser.Scene {
     // --- Teclado PC (Fase 3 — partida) -------------------------------------
     // Sin addCapture: a diferencia de ↑/↓ en MainMenuScene (que sí se
     // capturan para que no scrolleen la página del browser), ninguna de
-    // estas teclas scrollea — no hay nada que capturar acá. Los handlers
+    // estas teclas scrollea — no hay nada que capturar acá (←/→ tampoco:
+    // el panel es un overlay centrado, sin scroll horizontal). Los handlers
     // van como MISMA referencia (el objeto literal se crea una sola vez
     // acá) para que el unsubscribe de SHUTDOWN desenganche de verdad
     // (AGENTS §5 — bindKeys registra/`off` los pares exactos).
@@ -224,11 +225,15 @@ export class UIScene extends Phaser.Scene {
       C: (event?: KeyboardEvent) => this.handleExitKey(event),
       S: (event?: KeyboardEvent) => this.handleSoundKey(event),
       ESC: (event?: KeyboardEvent) => this.handleEscapeKey(event),
-      // ↑/↓ y ENTER SOLO actúan sobre el modal de salida — fuera de él son
-      // no-op: la partida no tiene elementos navegables por teclado.
+      // ↑/↓ actúan SOLO sobre el modal de salida; ←/→ SOLO sobre el bono;
+      // ENTER (handleEnterKey) ramaa según cuál de los dos esté abierto
+      // (son mutuamente excluyentes) y fuera de ambos es no-op: la partida
+      // no tiene elementos navegables por teclado.
       UP: (event?: KeyboardEvent) => this.handleExitModalArrow(event),
       DOWN: (event?: KeyboardEvent) => this.handleExitModalArrow(event),
-      ENTER: (event?: KeyboardEvent) => this.activateExitModalButton(event)
+      LEFT: (event?: KeyboardEvent) => this.handleBonusArrowKey(event, 'left'),
+      RIGHT: (event?: KeyboardEvent) => this.handleBonusArrowKey(event, 'right'),
+      ENTER: (event?: KeyboardEvent) => this.handleEnterKey(event)
     });
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -401,7 +406,8 @@ export class UIScene extends Phaser.Scene {
   // MainMenuScene.isForeground). Con un modal propio abierto tampoco se
   // actúa debajo (la exclusión mutua ya existía en tryOpenBonusModal /
   // showExitConfirmationModal); la ÚNICA excepción es navegar/activar/
-  // cerrar el propio modal de salida (ESC y ↑/↓/ENTER, más abajo).
+  // cerrar el modal QUE ESTÁ ABIERTO: ESC y ↑/↓/ENTER en el de salida,
+  // ESC y ←/→/ENTER en el del bono (más abajo).
 
   /**
    * ¿Hay un overlay de OTRA escena encima de la partida? Los overlays de
@@ -427,30 +433,43 @@ export class UIScene extends Phaser.Scene {
    * no hace nada; se eligió mantener el feedback de pulsación en el
    * teclado (N3 del review de la Fase 3).
    *
-   * Cuando el modal del bono ya está abierto, las flechas ←/→ y ENTER
-   * se rutean a PeriodicBonusModal para navegar y seleccionar cartas.
+   * Con el modal del bono ya abierto esta tecla es INERTE (guard de abajo):
+   * navegarlo y activarlo es tarea de ←/→ y ENTER — ver handleBonusArrowKey
+   * y handleEnterKey.
    */
   private handleBonusKey(event?: KeyboardEvent): void {
     if (!event) return; // guard nil
     if (event?.repeat) return; // Anti auto-repeat del SO (misma defensa que MainMenuScene)
-    if (this.exitModal || this.bonusModal) {
-      // Si el modal del bono ya está abierto, ruteamos flechas/ENTER al modal;
-      // las demás teclas (Z,X,C,S) quedan inertes (mismo criterio que el
-      // return temprano de antes, para evitar doble acción).
-      if (this.bonusModal) {
-        if (event.key === 'ArrowLeft') this.bonusModal.moveFocus('left');
-        else if (event.key === 'ArrowRight') this.bonusModal.moveFocus('right');
-        else if (event.key === 'Enter') this.bonusModal.activateFocusedCard();
-        // ESC ya está manejado en handleEscapeKey (más abajo), así que no lo
-        // manejamos acá para que no haya conflicto.
-        return;
-      }
-      return;
-    }
+    // BUGFIX (Fase 7g-3): acá adentro vivía un ruteo de flechas/ENTER hacia
+    // PeriodicBonusModal (`event.key === 'ArrowLeft'/'ArrowRight'/'Enter'`),
+    // pero este handler SOLO se dispara al apretar Z — esas ramas eran
+    // CÓDIGO MUERTO: con Z el `key` es 'z', nunca 'ArrowLeft'/'Enter', así
+    // que las flechas jamás llegaban al modal. El ruteo real vive ahora en
+    // handleBonusArrowKey (←/→) y handleEnterKey (ENTER), bindeados
+    // directo en bindKeys; acá solo queda el guard de exclusión mutua.
+    if (this.exitModal || this.bonusModal) return;
     if (this.hasActiveOverlayScene()) return;
     const services = getServices(this);
     playUiClick(services.audioService);
     this.tryOpenBonusModal(services);
+  }
+
+  /**
+   * ←/→ navegan el foco de cartas SOLO dentro del modal del bono; fuera de
+   * él son no-op (la partida no tiene elementos navegables por teclado, y el
+   * modal de salida usa ↑/↓ con su propio handler). Mismo patrón de guard
+   * que handleExitModalArrow: los dos modales son mutuamente excluyentes,
+   * así que nunca hay dos rutas de flechas activas a la vez.
+   *
+   * Causa raíz (Fase 7g-3): el ruteo de flechas vivía DENTRO de
+   * handleBonusKey — el handler de Z — que solo se ejecuta al presionar Z,
+   * por lo que `event.key === 'ArrowLeft'/'ArrowRight'` nunca se cumplía y
+   * las flechas eran inertes con el bono abierto.
+   */
+  private handleBonusArrowKey(event: KeyboardEvent | undefined, dir: 'left' | 'right'): void {
+    if (event?.repeat) return; // Anti auto-repeat del SO: flecha mantenida = un paso
+    if (!this.bonusModal) return;
+    this.bonusModal.moveFocus(dir);
   }
 
   /**
@@ -535,17 +554,35 @@ export class UIScene extends Phaser.Scene {
   }
 
   /**
-   * ENTER activa el botón enfocado del modal de salida invocando su
-   * callback TAL CUAL (el mismo que recibió createModalButton) — NO se
-   * emite un pointerup sintético, por el mismo motivo que en
-   * MainMenuScene (el dragGuard de otros contextos revienta con `pointer`
-   * undefined). Sin sonido: los botones del modal no lo tienen en su
-   * camino de ratón (createModalButton no usa bindUiClick), y teclado y
-   * ratón deben verse idénticos. Focus -1 = recién abierto → inerte hasta
-   * que el jugador mueva el foco.
+   * ENTER ramea según el modal abierto (los dos modales son mutuamente
+   * excluyentes); sin ninguno, es inerte.
+   *
+   * 1. Modal del bono → PeriodicBonusModal.handleEnterPressed(): sin
+   *    resolver elige la carta enfocada (mismo camino que su pointerup);
+   *    con el premio ya entregado cierra por requestClose() — el MISMO
+   *    camino que su botón "Cerrar" (y que ESC).
+   *
+   * 2. Modal de salida → activa el botón enfocado invocando su callback TAL
+   *    CUAL (el mismo que recibió createModalButton) — NO se emite un
+   *    pointerup sintético, por el mismo motivo que en MainMenuScene (el
+   *    dragGuard de otros contextos revienta con `pointer`
+   *    undefined). Sin sonido: los botones del modal no lo tienen en su
+   *    camino de ratón (createModalButton no usa bindUiClick), y teclado y
+   *    ratón deben verse idénticos. Focus -1 = recién abierto → inerte hasta
+   *    que el jugador mueva el foco.
+   *
+   * ANTES de la Fase 7g-3 este handler era SOLO la rama 2 (se llamaba
+   * activateExitModalButton): con el bono abierto temprano-retornaba en
+   * `!this.exitModal` y ENTER quedaba inerte para el modal de 6 cartas.
    */
-  private activateExitModalButton(event?: KeyboardEvent): void {
+  private handleEnterKey(event?: KeyboardEvent): void {
     if (event?.repeat) return;
+    // 1. Modal del bono: elegir la carta enfocada o cerrar (post-entrega).
+    if (this.bonusModal) {
+      this.bonusModal.handleEnterPressed();
+      return;
+    }
+    // 2. Modal de salida: rama original, intacta debajo.
     if (!this.exitModal) return;
     if (this.exitModalFocusIndex < 0) return;
     const entry = this.exitModalButtons[this.exitModalFocusIndex];

@@ -30,7 +30,8 @@
 > **smoke visual del tab Mazos PENDIENTE** — §5, ítem 13; **smoke de la tienda en
 > móvil PENDIENTE** — §5, ítem 14; **smoke de fullscreen en el preview de
 > CrazyGames PENDIENTE** — §5, ítem 15; **smoke de teclado PC PENDIENTE** — §5,
-> **ítems 16-26**.
+> **ítems 16-31** (16-26: controles de teclado PC, ADR-018 · 27-31: modales con
+> foco visible, Fase 7g).
 > Cierre previo (2026-10-11, cierre **tienda móvil: modo compacto con scroll**, ADR-017):
 > **64 suites · 715 tests** — verdes en los 4 gates (typecheck 0 · lint 0 · `npm test`
 > OK) en los 2 commits (`6bd9b24` ShopLayout + spec · `788870f` ScrollableList +
@@ -194,7 +195,7 @@ sin spec** (ADR-017): su comportamiento de puntero (drag/rueda/wasDragging) solo
 el smoke del ítem 14. Con **ADR-018** (controles de teclado) el mismo criterio dejó el
 **wiring por escena sin test**: lo testeable se extrajo a `presentation/input/` (46 tests
 en specs nuevos: 20 + 13 + 7 + 6) y el resto lo cubre el **smoke de teclado PC, ítems
-16-26**.
+16-26** (más los **ítems 27-31**, modales con foco — Fase 7g).
 
 Ganancia de cobertura barata en cambio: **mover la lógica a `domain`/`application` y
 testearla ahí**. No queda ningún caso de ese tipo (lógica oculta en escenas sin test): el
@@ -365,6 +366,36 @@ puro, el **wiring por escena no tiene test** — esto es lo que lo verifica):
 26. **Transiciones** *(PENDIENTE)*: de menú a partida y viceversa las flechas
     **no scrollean la página** (captures `add`/`remove` simétricas).
 
+**Smoke de los modales con foco visible (Fase 7g) — ítems 27-31: PENDIENTES de
+ejecutar** (nuevo 2026-10-19; los specs de `BankerOfferPanel`/`SwapEventModal`/
+`PeriodicBonusModal`/`ConfirmDialog` cubren la lógica de foco, el **wiring por
+escena no tiene test** — esto es lo que lo verifica):
+
+27. **Oferta del banquero** *(PENDIENTE)*: el panel abre con **NO TRATO
+    resaltado**; ENTER **sin mover** rechaza; ←/→ posicionan (**sin wrap** — en
+    el borde no hacen nada); ↑/↓ alternan; ENTER sobre DEAL acepta; ESC sigue
+    rechazando; y durante la salida (150 ms) las flechas quedan **inertes**
+    (guard `exitStarted` compartido ratón+teclado).
+28. **Midgame Swap** *(PENDIENTE)*: **Mantener** resaltado desde la apertura;
+    ←/→/↑/↓ navegan; ENTER **suena** (`playUiClick`, paridad con el click del
+    ratón) y activa la opción focada; ESC cierra **SIN sonido** (declinar);
+    durante los 150 ms de cierre, ENTER/ESC repetidos **no disparan las dos
+    ramas** (un solo emit: `swap-declined` **o** `swap-accepted-choose-card`).
+29. **Bono Diario** *(PENDIENTE)*: carta 1 (índice 0) resaltada al abrir; ←/→
+    recorren las 6 cartas **sin wrap**; ENTER elige la enfocada — en locale
+    es-AR el importe acreditado es el **completo** (p. ej. 5.000, **nunca 5** —
+    regresión del BUGFIX de locale: `CardSlot.value` numérico, jamás parsear el
+    texto formateado) — y suena `sfx-bonus-claim`; tras el premio ENTER y ESC
+    cierran (mismo camino que "Cerrar") y las flechas quedan inertes; el **hover
+    del ratón no pisa el foco** de teclado (dueño único del glow).
+30. **Diálogo "Nueva partida"** *(PENDIENTE)*: **Cancelar** resaltado al abrir;
+    las 4 flechas mueven (←/→ absolutas, ↑/↓ alternan); ENTER **sin mover**
+    cancela, tras → confirma; ESC cancela; abrir/cerrar **5+ veces** y verificar
+    que las teclas del menú reaccionan **una sola vez** (sin listeners fantasma
+    — regresión de la fuga de listeners de la Fase 7e).
+31. **Regresión Fase 7a-7e** *(PENDIENTE)*: banner de Desafío Diario navegable
+    con foco; grilla de la tienda ←/→ con **fallback a Tab**; ESC cierra el bono.
+
 **Estado — smoke manual COMPLETO (última ejecución 2026-10-01 en
 `http://localhost:5174`):** último smoke general de ads: **2026-10-05** (ver la sección
 *Smoke general del Sprint B* más abajo). Los **11 ítems verificados en vivo** — ítems
@@ -373,7 +404,8 @@ el 2026-10-01 (detalle abajo) e ítems **5-7** el 2026-09-30 (idioma EN↔ES, ab
 penalidad −5000 que puede dejar saldo negativo, bono periódico forzado); ítem **12**
 (smoke de escucha) verificado 2026-10-10; ítem **13** (tab Mazos, ADR-016), ítem **14**
 (tienda en móvil / modo compacto, ADR-017), ítem **15** (fullscreen en el preview de
-CrazyGames, fix `2ec91a6`) e **ítems 16-26** (controles de teclado PC, ADR-018)
+CrazyGames, fix `2ec91a6`), **ítems 16-26** (controles de teclado PC, ADR-018) e
+**ítems 27-31** (modales con foco visible, Fase 7g)
 **pendientes de ejecutar**. Notas de esa
 última corrida que siguen vigentes: la tienda en local muestra
 Duplicar/Triplicar/Revivir porque en el modo default (`VITE_ADS=crazygames`) `main.ts`

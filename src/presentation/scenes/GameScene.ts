@@ -229,9 +229,11 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       RIGHT: (event?: KeyboardEvent) => this.handleFocusArrow(event, 'right'),
       ENTER: (event?: KeyboardEvent) => this.activateFocusedCard(event),
       // Fase 5 (teclado PC): ESC = NO TRATO cuando la oferta del banquero
-      // está en pantalla (sin oferta es no-op, ver handleOfferEscapeKey).
-      // Baja del teclado: NO hace falta nada extra — el unsubscribeKeys de
-      // SHUTDOWN recorre TODO este objeto literal con las mismas referencias.
+      // está en pantalla, o declinar el intercambio cuando SwapEventModal
+      // está abierto (Fase 7g-2); sin nada de eso es no-op, ver
+      // handleOfferEscapeKey. Baja del teclado: NO hace falta nada extra —
+      // el unsubscribeKeys de SHUTDOWN recorre TODO este objeto literal con
+      // las mismas referencias.
       ESC: (event?: KeyboardEvent) => this.handleOfferEscapeKey(event)
     });
 
@@ -592,6 +594,15 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       this.controller.moveBankerOfferFocus(direction);
       return;
     }
+    // Modal de intercambio abierto (Fase 7g-2): las flechas navegan
+    // Mantener / Cambiar DENTRO del propio modal — misma razón que la rama
+    // de oferta de arriba: se intercepta ANTES del guard de swap/locked
+    // porque ese guard es true justamente cuando ESTE modal está en pantalla
+    // (y con las cartas bloqueadas), y las flechas caerían inertes.
+    if (this.controller?.isSwapModalOpen()) {
+      this.controller.moveSwapModalFocus(direction);
+      return;
+    }
     // Modal de intercambio abierto o ventana del banquero/endurecimiento en
     // pantalla: el tablero está fuera de servicio y el modal maneja sus
     // propios controles. Sin controller (fase de selección de la carta
@@ -635,6 +646,15 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
       this.controller.activateBankerOfferFocus();
       return;
     }
+    // Modal de intercambio abierto (Fase 7g-2): ENTER activa el botón
+    // enfocado (foco inicial "Mantener"; con sonido de click, paridad con el
+    // ratón) — se intercepta ANTES del guard de swap/locked por la misma
+    // razón que las flechas: ese guard es true justamente con este modal en
+    // pantalla y ENTER caería inerte.
+    if (this.controller?.isSwapModalOpen()) {
+      this.controller.activateSwapModal();
+      return;
+    }
     if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;
     if (this.kbFocusIndex < 0) return; // nada enfocado → ENTER inerte
     const view = this.kbFocusViews[this.kbFocusIndex];
@@ -647,21 +667,37 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
   /**
    * Fase 5 (teclado PC): ESC = NO TRATO — rechaza la oferta del banquero
    * con la MISMA cadena que el click de ratón sobre NO DEAL, pero SOLO si
-   * el panel está en pantalla; sin oferta, ESC en la partida es no-op (no
-   * se inventa una salida a menú ni un menú nuevo).
+   * el panel está en pantalla.
+   *
+   * Fase 7g-2: con el modal de intercambio abierto, ESC declina el cambio
+   * (Mantener) por la MISMA cadena que su botón, también SIN sonido (la rama
+   * va ANTES del guard de oferta para que funcione aunque hoy no coexistan
+   * ambos modales). Sin oferta ni modal de intercambio, ESC en la partida es
+   * no-op (no se inventa una salida a menú ni un menú nuevo).
    *
    * Colisión con UIScene verificada como SEGURO (causa raíz): todo modal que
    * UIScene cierra con ESC (modal de salida / bono periódico) o la tienda
    * PAUSA GameScene — con la escena pausada su plugin de teclado no emite
    * keydown (KeyboardPlugin.isActive exige scene.sys.canInput()) — y con
    * solo el panel del banquero abierto UIScene cae en su propio no-op de
-   * ESC. ResultScene/ads se cubren con hasActiveOverlayScene, igual que el
-   * resto de los handlers de este teclado. Sin sfx: paridad silenciosa con
-   * el ratón (ver BankerOfferPanel.acceptFromKeyboard).
+   * ESC (ídem con el modal de intercambio: es un objeto de GameScene, no
+   * una escena overlay, así que UIScene sigue en su no-op 4 y este handler
+   * recibe el keydown igual). ResultScene/ads se cubren con
+   * hasActiveOverlayScene, igual que el resto de los handlers de este
+   * teclado. Sin sfx: paridad silenciosa con el ratón (ver
+   * BankerOfferPanel.acceptFromKeyboard y SwapEventModal.declineFromKeyboard).
    */
   private handleOfferEscapeKey(event?: KeyboardEvent): void {
     if (event?.repeat) return;
     if (this.hasActiveOverlayScene()) return;
+    // Modal de intercambio abierto (Fase 7g-2): ESC = declinar en silencio
+    // (Mantener) — MISMA cadena que el botón del propio modal, sin sonido.
+    // Va ANTES del guard de oferta para que funcione aunque hoy no exista
+    // ninguna oferta en pantalla.
+    if (this.controller?.isSwapModalOpen()) {
+      this.controller.declineSwapFromKeyboard();
+      return;
+    }
     if (this.controller?.isBankerOfferOpen()) {
       this.controller.keyboardRejectOffer();
     }

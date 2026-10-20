@@ -3,6 +3,7 @@ import { LocalizedText } from './LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { FocusDirection } from '../input/KeyboardNavigation';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts /
  * BankerOfferPanel.ts / ResultScene.ts — mismos valores hex, para que este
@@ -28,12 +29,30 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
  * ninguna textura de carta real (se instancia solo con `scene`, ver
  * GameSceneController) y por eso el "resaltado de las cartas" se resuelve
  * de forma simbólica en vez de sobre un sprite concreto.
+ *
+ * Navegación por teclado (Fase 7g-2): ←/→ posicionan el foco de forma
+ * absoluta (0 = Mantener, 1 = Cambiar), ↑/↓ alternan (eje ambiguo entre dos
+ * botones, mismo precedente que BankerOfferPanel), ENTER activa el botón
+ * enfocado con el sonido de click (paridad con el ratón) y ESC declina en
+ * silencio — el foco inicial visible es la opción segura "Mantener".
  */
 export class SwapEventModal extends Phaser.GameObjects.Container {
-  private readonly keepBtn: Phaser.GameObjects.Container;
-  private readonly swapBtn: Phaser.GameObjects.Container;
   // Teclado PC (Fase 7): índice de botón enfocado (0 = Mantener, 1 = Cambiar).
   private focusedButtonIndex = 0;
+  // Fase 7g: dueño único del efecto de encendido por botón — el MISMO
+  // closure sirve al hover del ratón y al foco de las flechas, así no hay
+  // dos lógicas compitiendo por el halo ni escalas/duraciones distintas
+  // (mismo patrón que BankerOfferPanel.buttonHighlights de la 7g-1). El
+  // orden del push es el índice de foco: 0 = Mantener (se crea primero),
+  // 1 = Cambiar.
+  private readonly buttonHighlights: Array<(on: boolean) => void> = [];
+  // Guard de salida única (patrón BUGFIX de BankerOfferPanel.spec): seteada
+  // en onDecline/onAcceptSwap ANTES de arrancar animateExit — sin ella, un
+  // doble ENTER (o Enter+ESC) durante los 150 ms de salida emitiría
+  // 'swap-declined' Y 'swap-accepted-choose-card' en la misma partida: el
+  // controller tiene `.once` POR evento, así que las DOS ramas se
+  // dispararían a la vez.
+  private exitStarted = false;
   constructor(scene: Phaser.Scene, private readonly audio?: IAudioService) {
     const cx = scene.cameras.main.centerX;
     const cy = scene.cameras.main.centerY;
@@ -105,9 +124,12 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     );
 
     this.add([backdrop, panelBg, innerFrame, glow, titleText, bodyText, keepBtn, swapBtn]);
-    this.keepBtn = keepBtn;
-    this.swapBtn = swapBtn;
     scene.add.existing(this);
+
+    // Foco inicial visible (Fase 7g-2): la opción segura "Mantener"
+    // (índice 0) arranca encendida desde que el modal se abre — mismo
+    // efecto que el pointerover del ratón (halo + scale 1.05, 120 ms).
+    this.buttonHighlights[0]?.(true);
 
     // Animación de entrada
     this.setScale(0.2);
@@ -122,27 +144,36 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
   }
 
   /**
-   * Teclado PC (Fase 7): mueve el foco de botón una posición a la izqda
-   * o drcha. Se detiene en el borde (índice 0 ó 1); no hay enrollamiento.
-   * El resaltado usa el mismo glow que el hover del ratón, así el efecto
-   * visual es idéntico tanto con puntero como con flechas.
+   * Fase 7g (teclado PC): mueve el foco entre "Mantener" (0) y "Cambiar" (1)
+   * con las flechas. Posicionamiento absoluto sin wrap en ←/→ (left = índice
+   * 0, right = índice 1: en el borde no hace nada) y alternancia en ↑/↓ (eje
+   * ambiguo entre dos botones, mismo precedente que BankerOfferPanel de la
+   * 7g-1). Si el índice resultante no cambia es no-op: no se re-apaga ni
+   * re-enciende nada. Una vez arrancada la salida (exitStarted) las flechas
+   * quedan inertes, igual que los clicks.
    */
-  moveFocus(dir: 'left' | 'right'): void {
-    if (dir === 'left') {
-      if (this.focusedButtonIndex > 0) this.focusedButtonIndex--;
-    } else {
-      if (this.focusedButtonIndex < 1) this.focusedButtonIndex++;
-    }
-    this.highlightFocusedButton();
+  moveFocus(dir: FocusDirection): void {
+    if (this.exitStarted) return;
+    let nextIndex: number;
+    if (dir === 'left') nextIndex = 0;
+    else if (dir === 'right') nextIndex = 1;
+    else nextIndex = this.focusedButtonIndex === 0 ? 1 : 0;
+    if (nextIndex === this.focusedButtonIndex) return;
+    this.buttonHighlights[this.focusedButtonIndex]?.(false);
+    this.buttonHighlights[nextIndex]?.(true);
+    this.focusedButtonIndex = nextIndex;
   }
 
   /**
-   * Teclado PC (Fase 7): activa el botón enfocado — idéntico efecto que
-   * el `pointerup` del ratón: emite el evento correspondiente ('swap-declined'
+   * Fase 7g (teclado PC): ENTER activa el botón enfocado — idéntico efecto
+   * que el `pointerup` del ratón: emite el evento correspondiente ('swap-declined'
    * o 'swap-accepted-choose-card') y cierra el modal. El sonido va por
-   * `playUiClick` (punto único ADR-015), paridad con el click del ratón.
+   * `playUiClick` (punto único ADR-015), paridad con el click del ratón
+   * (bindUiClick). El guard exitStarted va ANTES del playUiClick para que un
+   * segundo ENTER durante la salida tampoco suene dos veces.
    */
   activateFocusedButton(): void {
+    if (this.exitStarted) return;
     playUiClick(this.audio);
     if (this.focusedButtonIndex === 0) {
       this.onDecline();
@@ -151,32 +182,42 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     }
   }
 
-  private highlightFocusedButton(): void {
-    // Apaga el glow de ambos botones.
-    ;(this.keepBtn as any).children.forEach((child: any) => {
-      try { child.setAlpha(0); } catch {}
-    });
-    ;(this.swapBtn as any).children.forEach((child: any) => {
-      try { child.setAlpha(0); } catch {}
-    });
-    // Enciende el glow del botón enfocado.
-    const glowGfx = this.focusedButtonIndex === 0
-      ? (this.keepBtn as any).children.find(
-          (c: any) => 'setAlpha' in c
-        ) as Phaser.GameObjects.Graphics
-      : (this.swapBtn as any).children.find(
-          (c: any) => 'setAlpha' in c
-        ) as Phaser.GameObjects.Graphics;
-    if (glowGfx) {
-      glowGfx.setAlpha(0.4);
-    }
+  /**
+   * Fase 7g (teclado PC): ESC = declinar silencioso — MISMA cadena que el
+   * botón "Mantener" (onDecline → animateExit → emit 'swap-declined'), pero
+   * SIN `playUiClick`: cancelar no confirma (ADR-015; mismo precedente que
+   * UIScene.handleEscapeKey, que siempre cierra SIN sonido).
+   */
+  declineFromKeyboard(): void {
+    if (this.exitStarted) return;
+    this.onDecline();
+  }
+
+  /**
+   * Fase 7g (teclado PC): observabilidad del índice con foco (0 = Mantener,
+   * 1 = Cambiar) para specs y escenas — la lógica de decisión vive en
+   * moveFocus/activateFocusedButton, acá solo se lee el estado.
+   */
+  getFocusedButtonIndex(): number {
+    return this.focusedButtonIndex;
   }
 
   private onDecline(): void {
+    // Guard de salida única (patrón BUGFIX de BankerOfferPanel): cubre tanto
+    // el click del ratón como ENTER/ESC — durante los 150 ms del tween de
+    // salida el modal sigue vivo y un segundo intento no debe emitir
+    // 'swap-declined' ni iniciar una segunda salida.
+    if (this.exitStarted) return;
+    this.exitStarted = true;
     this.animateExit(() => this.emit('swap-declined'));
   }
 
   private onAcceptSwap(): void {
+    // Misma guarda de salida única que onDecline: también evita emitir
+    // 'swap-accepted-choose-card' cuando ya hay una salida en curso (en
+    // particular, una iniciada por 'swap-declined').
+    if (this.exitStarted) return;
+    this.exitStarted = true;
     this.animateExit(() => this.emit('swap-accepted-choose-card'));
   }
 
@@ -189,8 +230,6 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
       ease: 'Quad.easeIn',
       onComplete
     });
-
-    // Limpiamos los listeners de teclado al destruir el modal.
   }
 
   /**
@@ -201,6 +240,10 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
    * carta con resplandor propio en loop infinito, para que la decisión se
    * sienta anclada a "las dos cartas en juego" (la actual vs. la nueva)
    * aun cuando este modal no dibuja sprites de carta reales.
+   *
+   * El halo lo enciende y apaga UN único closure por botón (`highlight`),
+   * dueño compartido por el hover del ratón y el foco de las flechas
+   * (Fase 7g-2) — nunca se toca el alpha de los demás children.
    */
   private createButton(
     scene: Phaser.Scene,
@@ -280,15 +323,22 @@ export class SwapEventModal extends Phaser.GameObjects.Container {
     // Click genérico de UI (punto único: UiSfx.bindUiClick).
     bindUiClick(hitZone, this.audio);
 
-    hitZone.on('pointerover', () => {
-      scene.tweens.add({ targets: container, scale: 1.05, duration: 120, ease: 'Cubic.easeOut' });
-      scene.tweens.add({ targets: hoverGlow, alpha: 1, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    // Dueño único del efecto visual de encendido/apagado (Fase 7g-2): el
+    // MISMO closure sirve al hover del ratón y al foco de las flechas
+    // (buttonHighlights), así no hay dos lógicas compitiendo por el halo ni
+    // escalas/duraciones distintas. `on` true = encendido (scale 1.05 +
+    // halo alpha 1), false = reposo — duración 120 ms en ambos sentidos,
+    // idéntico a los pointerover/pointerout previos de este mismo modal.
+    const highlight = (on: boolean): void => {
+      scene.tweens.add({ targets: container, scale: on ? 1.05 : 1, duration: 120, ease: 'Cubic.easeOut' });
+      scene.tweens.add({ targets: hoverGlow, alpha: on ? 1 : 0, duration: 120, ease: 'Cubic.easeOut' });
+    };
+    // Orden de creación = índice de foco (ver buttonHighlights).
+    this.buttonHighlights.push(highlight);
 
-    hitZone.on('pointerout', () => {
-      scene.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Cubic.easeOut' });
-      scene.tweens.add({ targets: hoverGlow, alpha: 0, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    hitZone.on('pointerover', () => highlight(true));
+
+    hitZone.on('pointerout', () => highlight(false));
 
     hitZone.on('pointerup', () => {
       scene.tweens.add({

@@ -3,7 +3,8 @@ import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { TranslationParams } from '../../shared/i18n/LanguageManager';
 import { LocalizedText } from './LocalizedText';
 import { IAudioService } from '../../domain/ports/IAudioService';
-import { bindUiClick } from '../audio/UiSfx';
+import { bindUiClick, playUiClick } from '../audio/UiSfx';
+import { FocusDirection } from '../input/KeyboardNavigation';
 
 const COLOR_GOLD = 0xffd76a;
 const COLOR_GOLD_DIM = 0xd4af37;
@@ -31,12 +32,32 @@ export interface ConfirmDialogConfig {
  * juego. Bloquea todo lo que hay debajo (fondo interactivo a mayor depth), y
  * se cierra solo tras elegir. "Cancelar" es el botón por defecto: ESC también
  * cancela, nunca confirma.
+ *
+ * Navegación de teclado (Fase 7g-4): flechas para posicionarse entre
+ * Cancelar / Confirmar (← Cancelar, → Confirmar, ↑/↓ alternan) + ENTER para
+ * activar el enfocado + ESC para cancelar directo. El foco inicial es
+ * VISIBLE sobre Cancelar: sin mover las flechas, ENTER cancela (acción
+ * segura); para confirmar hay que mover a Confirmar con →.
  */
 export class ConfirmDialog {
   private container: Phaser.GameObjects.Container | null = null;
+  // Handlers de teclado con REFERENCIA NOMBRADA de clase (Fase 7g-4): los
+  // closures anónimos de la Fase 7e eran imposibles de desenganchar en
+  // destroy() — ver ahí el BUGFIX de la fuga de listeners.
   private readonly onEscape = (): void => this.cancel();
+  private readonly onFocusLeft = (): void => this.moveFocus('left');
+  private readonly onFocusRight = (): void => this.moveFocus('right');
+  private readonly onFocusUp = (): void => this.moveFocus('up');
+  private readonly onFocusDown = (): void => this.moveFocus('down');
+  private readonly onActivateFocused = (): void => this.activateFocusedButton();
   // Teclado PC (Fase 7): índice de botón enfocado (0 = Cancelar, 1 = Confirmar).
   private focusedButtonIndex = 0;
+  // Dueño único del efecto visual de encendido/apagado de cada botón (mismo
+  // closure que usa el hover del ratón), guardado en orden de creación:
+  // 0 = Cancelar, 1 = Confirmar. Así flechas y puntero comparten UN solo
+  // efecto (mismo glow, misma duración 150 ms) — patrón idéntico al de
+  // BankerOfferPanel.createArcadeButton (Fase 7g-1).
+  private readonly buttonHighlights: ((on: boolean) => void)[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -50,32 +71,76 @@ export class ConfirmDialog {
     return this.container !== null;
   }
 
+  /**
+   * Destruye el diálogo y desengancha TODOS sus listeners de teclado.
+   *
+   * BUGFIX (Fase 7g-4): antes solo se desenganchaba ESC y los handlers de
+   * flechas/ENTER eran closures anónimos imposibles de desenganchar — cada
+   * apertura del diálogo acumulaba 5 listeners muertos en el keyboard
+   * plugin (que sobrevive al ciclo de vida de los objetos de la escena).
+   * Ahora todos los handlers son referencias nombradas de clase y destroy()
+   * desengancha cada par EXACTO (tipo, misma referencia) que registró
+   * build() (AGENTS §5: pares exactos, sin anónimos).
+   */
   destroy(): void {
-    this.scene.input.keyboard?.off('keydown-ESC', this.onEscape);
+    const keyboard = this.scene.input.keyboard;
+    keyboard?.off('keydown-LEFT', this.onFocusLeft);
+    keyboard?.off('keydown-RIGHT', this.onFocusRight);
+    keyboard?.off('keydown-UP', this.onFocusUp);
+    keyboard?.off('keydown-DOWN', this.onFocusDown);
+    keyboard?.off('keydown-ENTER', this.onActivateFocused);
+    keyboard?.off('keydown-ESC', this.onEscape);
     this.container?.destroy();
     this.container = null;
   }
 
   /**
-   * Teclado PC (Fase 7): mueve el foco de botón una posición a la izqda
-   * o drcha. Se detiene en el borde (índice 0 ó 1); no hay enrollamiento.
+   * Fase 7g-4 (teclado PC): mueve el foco entre Cancelar / Confirmar con
+   * las flechas. Posicionamiento absoluto sin wrap en ←/→ (left = Cancelar
+   * 0, right = Confirmar 1: en el borde no hace nada) y alternancia en ↑/↓
+   * (eje ambiguo entre dos botones, mismo precedente que BankerOfferPanel
+   * y el modal de salida de UIScene). Si el índice resultante no cambia es
+   * no-op: no se re-apaga/re-enciende nada.
    */
-  moveFocus(dir: 'left' | 'right'): void {
-    if (dir === 'left') {
-      if (this.focusedButtonIndex > 0) this.focusedButtonIndex--;
-    } else {
-      if (this.focusedButtonIndex < 1) this.focusedButtonIndex++;
-    }
+  moveFocus(dir: FocusDirection): void {
+    let nextIndex: number;
+    if (dir === 'left') nextIndex = 0;
+    else if (dir === 'right') nextIndex = 1;
+    else nextIndex = this.focusedButtonIndex === 0 ? 1 : 0;
+    if (nextIndex === this.focusedButtonIndex) return;
+    this.buttonHighlights[this.focusedButtonIndex]?.(false);
+    this.buttonHighlights[nextIndex]?.(true);
+    this.focusedButtonIndex = nextIndex;
   }
 
   /**
-   * Teclado PC (Fase 7): activa el botón enfocado — ENTER delega en
-   * cancelar o confirmar según el botón activo. ESC siempre cancela y ya
+   * Fase 7g (teclado PC): activa el botón enfocado — ENTER delega en
+   * cancelar o confirmar según el botón activo (ambas con el guard de
+   * container: tras un destroy() es no-op). ESC siempre cancela y ya
    * está gestionado por `this.onEscape` (build).
+   *
+   * ADR-015 (paridad de audio): ENTER reproduce el MISMO click de UI que el
+   * `pointerup` del ratón (bindUiClick → playUiClick, punto único), mismo
+   * precedente que SwapEventModal.activateFocusedButton. ESC queda
+   * deliberadamente SILENCIOSO por ser cancelación (onEscape → cancel sin
+   * sonido) — mismo precedente que UIScene/SwapEventModal.declineFromKeyboard.
    */
   activateFocusedButton(): void {
+    // Guard temprano sobre el container: un ENTER sobre un diálogo ya
+    // destruido no debe ni sonar ni delegar (evita SFX fantasma).
+    if (!this.container) return;
+    playUiClick(this.audio);
     if (this.focusedButtonIndex === 0) this.cancel();
     else this.confirm();
+  }
+
+  /**
+   * Fase 7g-4 (teclado PC): observabilidad del índice con foco (0 = Cancelar,
+   * 1 = Confirmar) para specs y escenas — la lógica de decisión vive en
+   * moveFocus/activateFocusedButton, acá solo se lee el estado.
+   */
+  getFocusedButtonIndex(): number {
+    return this.focusedButtonIndex;
   }
 
   private cancel(): void {
@@ -124,18 +189,17 @@ export class ConfirmDialog {
       this.config.bodyParams
     ).setOrigin(0.5, 0);
 
-    // Teclado PC (Fase 7): flechas/ENTER sobre el diálogo de confirmación.
-    // El ESC ya está bindado en la línea 128; las flechas mueven el foco
-    // entre los botones y ENTER activa la acción asociada.
-    this.scene.input.keyboard?.on('keydown-Left', () => this.moveFocus('left'));
-    this.scene.input.keyboard?.on('keydown-Right', () => this.moveFocus('right'));
-    this.scene.input.keyboard?.on('keydown-Enter', () => this.activateFocusedButton());
-
     const buttonY = cy + 90;
     const cancelBtn = this.createButton(cx - 130, buttonY, this.config.cancelKey, COLOR_NEUTRAL, () => this.cancel());
     const confirmBtn = this.createButton(cx + 130, buttonY, this.config.confirmKey, this.config.confirmColor, () =>
       this.confirm()
     );
+
+    // Fase 7g-4: foco de teclado VISIBLE desde la apertura sobre Cancelar
+    // (índice 0) — ENTER sin mover las flechas cancela, que es la acción
+    // segura; para confirmar hay que mover con → y recién ahí ENTER. El
+    // encendido va por el MISMO closure highlight que el hover del ratón.
+    this.buttonHighlights[this.focusedButtonIndex]?.(true);
 
     const container = this.scene.add
       .container(0, 0, [backdrop, panelBg, innerFrame, title, body, cancelBtn, confirmBtn])
@@ -156,7 +220,22 @@ export class ConfirmDialog {
       ease: 'Back.easeOut'
     });
 
-    this.scene.input.keyboard?.on('keydown-ESC', this.onEscape);
+    // Teclado PC (Fase 7g-4): flechas/ENTER/ESC sobre el diálogo de
+    // confirmación. BUGFIX (Fase 7g-4): la Fase 7e bindeaba
+    // 'keydown-Left'/'keydown-Right'/'keydown-Enter' en MINÚSCULAS, pero el
+    // KeyMap de Phaser emite las teclas en MAYÚSCULA
+    // ('keydown-LEFT'/'keydown-RIGHT'/'keydown-ENTER') — una clave
+    // equivocada es un listener que NUNCA dispara, y por eso flechas y
+    // Enter no hacían nada en el diálogo (solo ESC, que estaba en mayúscula,
+    // funcionaba). Los handlers son referencias nombradas de clase para que
+    // destroy() desenganche cada par exacto (AGENTS §5).
+    const keyboard = this.scene.input.keyboard;
+    keyboard?.on('keydown-LEFT', this.onFocusLeft);
+    keyboard?.on('keydown-RIGHT', this.onFocusRight);
+    keyboard?.on('keydown-UP', this.onFocusUp);
+    keyboard?.on('keydown-DOWN', this.onFocusDown);
+    keyboard?.on('keydown-ENTER', this.onActivateFocused);
+    keyboard?.on('keydown-ESC', this.onEscape);
   }
 
   private createButton(
@@ -195,8 +274,19 @@ export class ConfirmDialog {
     // Click genérico de UI (punto único: UiSfx.bindUiClick).
     bindUiClick(hit, this.audio);
 
-    hit.on('pointerover', () => this.scene.tweens.add({ targets: glow, alpha: 1, duration: 150 }));
-    hit.on('pointerout', () => this.scene.tweens.add({ targets: glow, alpha: 0, duration: 150 }));
+    // Dueño único del efecto visual de encendido/apagado (Fase 7g-4): el
+    // MISMO closure sirve al hover del ratón y al foco de teclado
+    // (buttonHighlights), patrón idéntico a BankerOfferPanel.createArcadeButton
+    // — así flechas y puntero comparten UN solo efecto (mismo glow, misma
+    // duración 150 ms) en vez de dos lógicas compitiendo por el resaltado.
+    const highlight = (on: boolean): void => {
+      this.scene.tweens.add({ targets: glow, alpha: on ? 1 : 0, duration: 150 });
+    };
+    // Orden de creación = índice de foco: 0 = Cancelar, 1 = Confirmar.
+    this.buttonHighlights.push(highlight);
+
+    hit.on('pointerover', () => highlight(true));
+    hit.on('pointerout', () => highlight(false));
     hit.on('pointerup', onClick);
 
     return container;

@@ -18,6 +18,13 @@ interface CardSlot {
   readonly valueText: Phaser.GameObjects.Text;
   readonly glow: Phaser.GameObjects.Graphics;
   readonly hitZone: Phaser.GameObjects.Zone;
+  /**
+   * Valor NUMÉRICO original de la carta — fuente única de verdad para
+   * acreditar el premio. El texto formateado (valueText) es solo
+   * presentación (i18n) y JAMÁS debe re-parsearse para obtener el importe
+   * (ver BUGFIX en activateFocusedCard).
+   */
+  readonly value: number;
 }
 
 export interface PeriodicBonusModalCallbacks {
@@ -112,6 +119,13 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
       this.add(slot.container);
     });
 
+    // Foco inicial VISIBLE (Fase 7g-3): recién abierto ya hay una carta
+    // enfocada (índice 0) resaltada con el MISMO glow que el hover del
+    // ratón. Antes el foco existía en el estado pero solo se dibujaba
+    // después de la primera flecha — el jugador no veía por qué ENTER
+    // elegiría la carta 0.
+    this.highlightFocusedCard();
+
     scene.add.existing(this);
 
     // Animación de entrada, misma familia que el resto de los modales del juego.
@@ -167,13 +181,22 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
       if (this.resolved) return;
       scene.tweens.add({ targets: container, scale: 1, duration: 100, ease: 'Cubic.easeOut' });
       scene.tweens.add({ targets: glow, alpha: 0, duration: 100 });
+      // BUGFIX (Fase 7g-3): al salir el puntero se apagaba el glow sin más,
+      // incluso cuando ESA carta era la que tenía el foco de teclado — el
+      // hover y el foco eran dos dueños del glow y se pisaban (foco invisible
+      // apenas el mouse se movía). Se re-asserta el foco vigente tras el
+      // apagado: si la carta saliente ES la enfocada, su glow vuelve al
+      // estado de foco (0.7, mismo tween del hover); si no, queda en 0.
+      if (this.slots[this.focusedCardIndex]?.glow === glow) {
+        scene.tweens.add({ targets: glow, alpha: 0.7, duration: 100 });
+      }
     });
     hitZone.on('pointerup', () => {
       if (this.resolved) return;
       onPick();
     });
 
-    return { container, back, front, valueText, glow, hitZone };
+    return { container, back, front, valueText, glow, hitZone, value };
   }
 
   private handleCardPicked(scene: Phaser.Scene, chosenIndex: number, value: number, callbacks: PeriodicBonusModalCallbacks): void {
@@ -219,6 +242,15 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
   }
 
   /**
+   * Teclado PC (Fase 7g-3): índice de la carta actualmente enfocada
+   * (0..5) — getter de observación, para que el spec pueda fijar el
+   * contrato de foco sin tocar el estado interno.
+   */
+  getFocusedCardIndex(): number {
+    return this.focusedCardIndex;
+  }
+
+  /**
    * Teclado PC (Fase 7): mueve el foco de carta una posición a la izqda
    * o drcha. Se detiene en el borde (índice 0 ó 5); no hay enrollamiento.
    * El resaltado usa el mismo glow que el hover del ratón, así el efecto
@@ -244,12 +276,16 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
   activateFocusedCard(): void {
     if (this.resolved) return; // ya se resolvió una vez
     const index = this.focusedCardIndex;
-    const value = this.slots[index].valueText.text;
-    // El texto del valor viene formateado como "+$5.000"; extraemos el número.
-    const amount = parseInt(value.replace('$', '').replace(',', ''), 10);
+    // BUGFIX (Fase 7c — parseo del texto formateado): antes se re-parseaba
+    // valueText ("+$5.000") con parseInt quitando '$' y comas — con locale
+    // es-* el separador de miles es PUNTO, y parseInt("5.000") devolvía 5:
+    // el teclado acreditaba 5 en vez de 5000 (el ratón, que pasaba el número
+    // directo, estaba bien). El importe es el valor numérico original que ya
+    // vive en el slot; el texto es solo presentación (i18n) y no se toca.
+    const value = this.slots[index].value;
     // La carta se "elige": mismo camino que pointerup → handleCardPicked.
     // Pasamos el índice y el valor numérico puro.
-    this.handleCardPicked(this.scene, index, amount, this.callbacks);
+    this.handleCardPicked(this.scene, index, value, this.callbacks);
     // Sonido: el ratón no suena al clickear una carta en el bono, pero el
     // teclado sí para paridad: SFX.BONUS_CLAIM (mismo que el banner del menú).
     try {
@@ -259,16 +295,36 @@ export class PeriodicBonusModal extends Phaser.GameObjects.Container {
     }
   }
 
-  private highlightFocusedCard(): void {
-    // Apaga el glow de todas las slots primero.
-    this.slots.forEach((slot) => {
-      slot.glow.setAlpha(0);
-    });
-    // Enciende el glow de la carta enfocada.
-    const focusedSlot = this.slots[this.focusedCardIndex];
-    if (focusedSlot) {
-      focusedSlot.glow.setAlpha(0.35);
+  /**
+   * Teclado PC (Fase 7g-3): ENTER (ruteado por UIScene.handleEnterKey).
+   *
+   * - Sin resolver: elige la carta enfocada por el MISMO camino que su
+   *   `pointerup` (activateFocusedCard → handleCardPicked).
+   * - Ya entregado el premio: cierra por el MISMO camino que el botón
+   *   "Cerrar" (requestClose → callbacks.onClose) — igual que ESC, así
+   *   ENTER/ESC son intercambiables una vez revelado el premio.
+   * Las flechas quedan inertes tras la entrega (guard `resolved` de
+   * moveFocus): solo el premio se puede reclamar una vez.
+   */
+  handleEnterPressed(): void {
+    if (this.resolved) {
+      this.requestClose();
+      return;
     }
+    this.activateFocusedCard();
+  }
+
+  private highlightFocusedCard(): void {
+    // BUGFIX (Fase 7g-3): este highlight aplicaba setAlpha(0.35) crudo a la
+    // carta enfocada y setAlpha(0) a las demás, mientras el hover del ratón
+    // tween-eaba a 0.7/100 ms — dos dueños del glow con efectos divergentes:
+    // hover y foco solapados dejaban la carta en un alpha intermedio o
+    // apagada. Dueño único: el foco usa EXACTAMENTE el mismo tween del
+    // pointerover/pointerout (mismo alpha, duración y ausencia de ease).
+    this.slots.forEach((slot, index) => {
+      const isFocused = index === this.focusedCardIndex;
+      this.scene.tweens.add({ targets: slot.glow, alpha: isFocused ? 0.7 : 0, duration: 100 });
+    });
   }
 
   private flipCard(scene: Phaser.Scene, slot: CardSlot): void {
