@@ -582,6 +582,16 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
    */
   private handleFocusArrow(event: KeyboardEvent | undefined, direction: FocusDirection): void {
     if (event?.repeat) return;
+    // Fase 7g: con el panel del banquero en pantalla las flechas navegan
+    // DEAL / NO DEAL (posicionamiento absoluto con foco inicial NO TRATO) —
+    // se intercepta ANTES del guard de swap/locked porque durante la oferta
+    // areCardsLocked es true y las flechas caerían inertes. Durante el
+    // delay de 1800 ms previo al panel isBankerOfferOpen es false → cae al
+    // guard normal, que es el comportamiento correcto.
+    if (this.controller?.isBankerOfferOpen()) {
+      this.controller.moveBankerOfferFocus(direction);
+      return;
+    }
     // Modal de intercambio abierto o ventana del banquero/endurecimiento en
     // pantalla: el tablero está fuera de servicio y el modal maneja sus
     // propios controles. Sin controller (fase de selección de la carta
@@ -613,14 +623,16 @@ export class GameScene extends Phaser.Scene implements CardPositionSource {
     // la tienda/anuncios pausan GameScene), pero el orden no debe depender
     // de que eso siga siendo cierto.
     if (this.hasActiveOverlayScene()) return;
-    // Mientras el panel del banquero está en pantalla ENTER significa
-    // TRATO — se intercepta ANTES del guard de swap/locked porque durante
-    // la oferta areCardsLocked es true (lockAllCards de BankerOfferMade) y
-    // ENTER caería siendo inerte. Durante el delay de 1800 ms previo al
-    // panel el panel todavía no existe (isBankerOfferOpen false) → cae al
+    // Mientras el panel del banquero está en pantalla ENTER activa el
+    // botón ENFOCADO (Fase 7g: foco inicial NO TRATO, flechas para
+    // reposicionar; ENTER sin mover las flechas rechaza, que es la
+    // acción segura) — se intercepta ANTES del guard de swap/locked
+    // porque durante la oferta areCardsLocked es true y ENTER caería
+    // siendo inerte. Durante el delay de 1800 ms previo al panel el
+    // panel todavía no existe (isBankerOfferOpen false) → cae al
     // guard normal de locked → inerte, que es el comportamiento correcto.
     if (this.controller?.isBankerOfferOpen()) {
-      this.controller.keyboardAcceptOffer();
+      this.controller.activateBankerOfferFocus();
       return;
     }
     if (this.controller && (this.controller.isSwapModalOpen() || this.controller.areCardsLocked())) return;

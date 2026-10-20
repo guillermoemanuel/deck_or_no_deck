@@ -4,6 +4,7 @@ import { LocalizedText } from './LocalizedText';
 import { TranslationKey } from '../../shared/i18n/LanguageData';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { SFX } from '../../shared/audio/AudioData';
+import { FocusDirection } from '../input/KeyboardNavigation';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / DeckSelectionScene.ts —
  * mismos valores hex, para que el modal del banquero se sienta parte del
@@ -28,6 +29,10 @@ const FONT_FAMILY = 'Georgia, "Times New Roman", serif';
  *   continuo al terminar, para ser el foco visual del modal.
  * - Botones DEAL / NO DEAL con la misma construcción (panel + halo + hover)
  *   que los botones del menú principal, diferenciados por colorimetría.
+ * - Navegación de teclado (Fase 7g): flechas para posicionarse entre
+ *   DEAL / NO DEAL + ENTER para activar el enfocado (ESC sigue siendo
+ *   NO TRATO directo). El foco inicial es NO TRATO: sin mover las flechas,
+ *   ENTER rechaza (acción segura); para aceptar hay que mover a DEAL con ←.
  */
 export class BankerOfferPanel extends Phaser.GameObjects.Container {
   private readonly backdrop: Phaser.GameObjects.Rectangle;
@@ -39,6 +44,15 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
   // — por ratón O teclado — para que cualquier segundo intento durante esa
   // ventana sea no-op (ver onDealAccepted/onDealRejected).
   private exitStarted = false;
+  // Fase 7g (teclado PC): índice del botón con foco de teclado — 0 = DEAL,
+  // 1 = NO DEAL. Arranca en NO TRATO (foco seguro): ENTER sin mover las
+  // flechas rechaza la oferta en vez de aceptarla por accidente.
+  private focusedButtonIndex = 1;
+  // Dueño único del efecto visual de encendido/apagado de cada botón
+  // (mismo closure que usa el hover del ratón), guardado en orden de
+  // creación: 0 = DEAL, 1 = NO DEAL. Así las flechas y el puntero
+  // comparten UN solo efecto (mismo glow, misma duración 120 ms).
+  private readonly buttonHighlights: ((on: boolean) => void)[] = [];
 
   constructor(scene: Phaser.Scene, offer: BankerOffer, audioService?: IAudioService, cappedRemainingGames: number | null = null) {
     const cx = scene.cameras.main.centerX;
@@ -129,6 +143,11 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
       0xff4d6d,
       () => this.onDealRejected()
     );
+
+    // Fase 7g: foco de teclado visible desde la apertura sobre NO TRATO
+    // (índice 1) — ENTER sin mover las flechas rechaza, que es la acción
+    // segura; para aceptar hay que mover con ← y recién ahí ENTER.
+    this.buttonHighlights[1]?.(true);
 
     // Aviso de la regla anti-farmeo (ADR-014): línea chica debajo de los
     // botones (terminan en y=189; el marco interior llega a 218) que avisa
@@ -237,6 +256,49 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
    */
   rejectFromKeyboard(): void {
     this.onDealRejected();
+  }
+
+  /**
+   * Fase 7g (teclado PC): mueve el foco entre DEAL / NO DEAL con las
+   * flechas. Posicionamiento absoluto sin wrap en ←/→ (left = DEAL 0,
+   * right = NO DEAL 1: en el borde no hace nada) y alternancia en ↑/↓
+   * (eje ambiguo entre dos botones, mismo precedente que el modal de
+   * salida de UIScene). Si el índice resultante no cambia es no-op: no
+   * se re-apaga/re-enciende nada. Una vez arrancada la salida
+   * (exitStarted) las flechas quedan inertes, igual que los clicks.
+   */
+  moveFocus(dir: FocusDirection): void {
+    if (this.exitStarted) return;
+    let nextIndex: number;
+    if (dir === 'left') nextIndex = 0;
+    else if (dir === 'right') nextIndex = 1;
+    else nextIndex = this.focusedButtonIndex === 0 ? 1 : 0;
+    if (nextIndex === this.focusedButtonIndex) return;
+    this.buttonHighlights[this.focusedButtonIndex]?.(false);
+    this.buttonHighlights[nextIndex]?.(true);
+    this.focusedButtonIndex = nextIndex;
+  }
+
+  /**
+   * Fase 7g (teclado PC): ENTER activa el botón enfocado delegando en la
+   * MISMA cadena que el click de ratón (índice 0 → onDealAccepted,
+   * índice 1 → onDealRejected, ambas con el guard exitStarted). Sin
+   * sonido por paridad con el ratón: los botones no tienen bindUiClick
+   * (el sfx del panel es el SFX.OFFER, ver acceptFromKeyboard).
+   */
+  activateFocused(): void {
+    if (this.exitStarted) return;
+    if (this.focusedButtonIndex === 0) this.onDealAccepted();
+    else this.onDealRejected();
+  }
+
+  /**
+   * Fase 7g (teclado PC): observabilidad del índice con foco (0 = DEAL,
+   * 1 = NO DEAL) para specs y escenas — la lógica de decisión vive en
+   * moveFocus/activateFocused, acá solo se lee el estado.
+   */
+  getFocusedButtonIndex(): number {
+    return this.focusedButtonIndex;
   }
 
   private animateExit(onComplete: () => void): void {
@@ -355,15 +417,20 @@ export class BankerOfferPanel extends Phaser.GameObjects.Container {
     const hitZone = scene.add.zone(0, 0, width, height).setOrigin(0.5).setInteractive({ useHandCursor: true });
     btnContainer.add(hitZone);
 
-    hitZone.on('pointerover', () => {
-      scene.tweens.add({ targets: btnContainer, scale: 1.05, duration: 120, ease: 'Cubic.easeOut' });
-      scene.tweens.add({ targets: glow, alpha: 1, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    // Dueño único del efecto visual de encendido/apagado (Fase 7g): el
+    // MISMO closure sirve al hover del ratón y al foco de las flechas
+    // (buttonHighlights), así no hay dos lógicas compitiendo por el glow
+    // ni escalas/duraciones distintas. `on` true = encendido (scale 1.05 +
+    // glow alpha 1), false = reposo — duración 120 ms en ambos sentidos.
+    const highlight = (on: boolean): void => {
+      scene.tweens.add({ targets: btnContainer, scale: on ? 1.05 : 1, duration: 120, ease: 'Cubic.easeOut' });
+      scene.tweens.add({ targets: glow, alpha: on ? 1 : 0, duration: 120, ease: 'Cubic.easeOut' });
+    };
+    // Orden de creación = índice de foco: 0 = DEAL (se crea primero), 1 = NO DEAL.
+    this.buttonHighlights.push(highlight);
 
-    hitZone.on('pointerout', () => {
-      scene.tweens.add({ targets: btnContainer, scale: 1, duration: 120, ease: 'Cubic.easeOut' });
-      scene.tweens.add({ targets: glow, alpha: 0, duration: 120, ease: 'Cubic.easeOut' });
-    });
+    hitZone.on('pointerover', () => highlight(true));
+    hitZone.on('pointerout', () => highlight(false));
 
     hitZone.on('pointerup', () => {
       scene.tweens.add({

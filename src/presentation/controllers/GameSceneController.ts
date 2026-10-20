@@ -19,6 +19,7 @@ import { LocalizedText } from '../components/LocalizedText';
 import { IAudioService } from '../../domain/ports/IAudioService';
 import { deactivateGameAbandonGuard, activateGameAbandonGuard } from '../GameAbandonGuard';
 import { getServices } from '../GameServices';
+import { FocusDirection } from '../input/KeyboardNavigation';
 import { CAPPED_OFFER_VALUES } from '../../domain/value-objects/BankerPolicy';
 
 /** Misma paleta "Casino de Lujo" que MainMenuScene.ts / BankerOfferPanel.ts /
@@ -693,6 +694,25 @@ export class GameSceneController {
    */
   keyboardRejectOffer(): void {
     this.activeOfferPanel?.rejectFromKeyboard();
+  }
+
+  /**
+   * Fase 7g (teclado PC): mueve el foco entre DEAL / NO DEAL del panel
+   * activo con las flechas — delega estrictamente en
+   * BankerOfferPanel.moveFocus; sin oferta en pantalla es no-op seguro.
+   */
+  moveBankerOfferFocus(dir: FocusDirection): void {
+    this.activeOfferPanel?.moveFocus(dir);
+  }
+
+  /**
+   * Fase 7g (teclado PC): ENTER activa el botón enfocado del panel
+   * activo — delega estrictamente en BankerOfferPanel.activateFocused
+   * (misma cadena que el click de ratón sobre el botón correspondiente);
+   * sin oferta en pantalla es no-op seguro.
+   */
+  activateBankerOfferFocus(): void {
+    this.activeOfferPanel?.activateFocused();
   }
 
   getCardView(cardId: string): CardView | undefined {

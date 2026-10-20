@@ -327,6 +327,95 @@ describe('BankerOfferPanel', () => {
     });
   });
 
+  describe('foco de flechas (Fase 7g) — movimiento + activación', () => {
+    it('starts with NO DEAL focused (index 1)', () => {
+      const { panel } = createPanel();
+      // safe default: Enter without moving does not accept the deal.
+      expect(panel.getFocusedButtonIndex()).toBe(1);
+    });
+
+    it("moveFocus('left') moves to DEAL (0) and moveFocus('right') returns to NO DEAL (1)", () => {
+      const { panel } = createPanel();
+
+      panel.moveFocus('left');
+      expect(panel.getFocusedButtonIndex()).toBe(0);
+
+      panel.moveFocus('right');
+      expect(panel.getFocusedButtonIndex()).toBe(1);
+    });
+
+    it('edges do not wrap: right stays at 1, left stays at 0', () => {
+      const { panel } = createPanel();
+
+      panel.moveFocus('right');
+      expect(panel.getFocusedButtonIndex()).toBe(1);
+
+      panel.moveFocus('left');
+      expect(panel.getFocusedButtonIndex()).toBe(0);
+
+      panel.moveFocus('left');
+      expect(panel.getFocusedButtonIndex()).toBe(0);
+    });
+
+    it("moveFocus('up')/'down' toggle between the two buttons", () => {
+      const { panel } = createPanel();
+
+      // Foco inicial 1 → up → 0.
+      panel.moveFocus('up');
+      expect(panel.getFocusedButtonIndex()).toBe(0);
+
+      // 0 → down → 1 (eje ambiguo: alterna, sin wrap).
+      panel.moveFocus('down');
+      expect(panel.getFocusedButtonIndex()).toBe(1);
+    });
+
+    it('activateFocused() with the initial focus emits deal-rejected (never deal-accepted)', () => {
+      const { panel, scene } = createPanel();
+      const emit = emitSpy(panel);
+
+      panel.activateFocused();
+      completePendingTweens(scene);
+
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith('deal-rejected');
+      expect(emit).not.toHaveBeenCalledWith('deal-accepted');
+    });
+
+    it("moveFocus('left') + activateFocused() emits exactly one deal-accepted", () => {
+      const { panel, scene } = createPanel();
+      const emit = emitSpy(panel);
+
+      panel.moveFocus('left');
+      panel.activateFocused();
+      completePendingTweens(scene);
+
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith('deal-accepted');
+      expect(emit).not.toHaveBeenCalledWith('deal-rejected');
+    });
+
+    it('activateFocused() twice during the exit tween emits only once (exitStarted guard)', () => {
+      const { panel, scene } = createPanel();
+      const emit = emitSpy(panel);
+
+      panel.activateFocused();
+      panel.activateFocused();
+      completePendingTweens(scene);
+
+      expect(emit).toHaveBeenCalledTimes(1);
+      expect(emit).toHaveBeenCalledWith('deal-rejected');
+    });
+
+    it('moveFocus() is a no-op after rejectFromKeyboard() (focus stays at 1)', () => {
+      const { panel } = createPanel();
+
+      panel.rejectFromKeyboard();
+      panel.moveFocus('left');
+
+      expect(panel.getFocusedButtonIndex()).toBe(1);
+    });
+  });
+
   describe('ratón — comparte el mismo guard exitStarted', () => {
     // Este es el bug original que el fix corrige: durante los 150 ms del
     // tween de salida el panel sigue interactivo, así que un doble click
